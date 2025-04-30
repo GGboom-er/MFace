@@ -1,0 +1,3 @@
+Y:/GGbommer/scripts/MFace/plug-ins/build/CMakeFiles/bs_api.dir
+Y:/GGbommer/scripts/MFace/plug-ins/build/CMakeFiles/ALL_BUILD.dir
+Y:/GGbommer/scripts/MFace/plug-ins/build/CMakeFiles/ZERO_CHECK.dir
