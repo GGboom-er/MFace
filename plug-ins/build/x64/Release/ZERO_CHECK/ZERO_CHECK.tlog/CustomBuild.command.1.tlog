@@ -1,0 +1,10 @@
+^Y:\GGBOMMER\SCRIPTS\MFACE\PLUG-INS\BUILD\CMAKEFILES\0B1F89B26629D55ACFE5CA0BC853A27B\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SY:/GGbommer/scripts/MFace/plug-ins -BY:/GGbommer/scripts/MFace/plug-ins/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file Y:/GGbommer/scripts/MFace/plug-ins/build/bs_api.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

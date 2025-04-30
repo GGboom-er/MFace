@@ -1,0 +1,10 @@
+^Y:\GGBOMMER\SCRIPTS\MFACE\PLUG-INS\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SY:/GGbommer/scripts/MFace/plug-ins -BY:/GGbommer/scripts/MFace/plug-ins/build --check-stamp-file Y:/GGbommer/scripts/MFace/plug-ins/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
