@@ -3,10 +3,16 @@ try:
     from PySide2.QtGui import *
     from PySide2.QtWidgets import *
     from PySide2.QtCore import *
+<<<<<<< HEAD
 except: # newer DCC versions
     from PySide6.QtGui import *
     from PySide6.QtWidgets import *
     from PySide6.QtCore import *
+=======
+except ImportError:
+    from PySide.QtGui import *
+    from PySide.QtCore import *
+>>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
 import re
 from .. import tools
 
@@ -81,7 +87,11 @@ class List(QListWidget):
 
     def __init__(self, parent=None):
         QListWidget.__init__(self, parent)
+<<<<<<< HEAD
         self.setSelectionMode(QAbstractItemView.ExtendedSelection )
+=======
+        self.setSelectionMode(self.ExtendedSelection)
+>>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
         self.menu = QMenu(self)
         self.text = ""
 
