@@ -88,9 +88,15 @@ class FitCreateTool(QDialog):
         pre = config["pre"]
         names = [pre+name for name in config["names"]]
         comp = QCompleter(names)
+<<<<<<< HEAD
         comp.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
         self.name.setCompleter(comp)
         self.name.setValidator(QRegularExpressionValidator(QRegularExpression("^{pre}.+$".format(pre=pre))))
+=======
+        comp.setCompletionMode(comp.UnfilteredPopupCompletion)
+        self.name.setCompleter(comp)
+        self.name.setValidator(QRegExpValidator(QRegExp("^{pre}.+$".format(pre=pre))))
+>>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
         self.name.setPlaceholderText(pre)
         self.name.setText(names[0])
         if old_pre and old_name.startswith(old_pre):

@@ -5,14 +5,7 @@
       <FullPath>Y:\GGbommer\scripts\MFace\plug-ins\build\x64\Release\ZERO_CHECK</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-<<<<<<< HEAD
       <FullPath>Y:\GGbommer\scripts\MFace\plug-ins\build\Release\bs_api.mll</FullPath>
-=======
-      <FullPath>Y:\GGbommer\scripts\MFace\plug-ins\build\Release\bs_api.pyd</FullPath>
->>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
-    </ProjectOutput>
-    <ProjectOutput>
-      <FullPath>Y:\GGbommer\scripts\MFace\plug-ins\build\x64\Release\ALL_BUILD</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

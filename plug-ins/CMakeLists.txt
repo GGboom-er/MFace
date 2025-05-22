@@ -54,7 +54,11 @@ target_link_libraries(bs_api PRIVATE
 # 去掉默认 lib 前缀，后缀设为 .pyd 以便 Python import
 set_target_properties(bs_api PROPERTIES
     PREFIX ""
+<<<<<<< HEAD
     SUFFIX ".mll"
+=======
+    SUFFIX ".pyd"
+>>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
 )
 
 # -------------------- 7. 预处理宏 --------------------
