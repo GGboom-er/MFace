@@ -81,11 +81,7 @@ class List(QListWidget):
 
     def __init__(self, parent=None):
         QListWidget.__init__(self, parent)
-<<<<<<< HEAD
         self.setSelectionMode(QAbstractItemView.ExtendedSelection )
-=======
-        self.setSelectionMode(self.ExtendedSelection)
->>>>>>> f1a90b00175948034d888b3882484c54f2322cb3
         self.menu = QMenu(self)
         self.text = ""
 
