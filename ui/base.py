@@ -92,9 +92,9 @@ class List(QListWidget):
         fields = [field.replace("*", ".+") for field in text.split(",") if field]
         for i in range(self.count()):
             if not any([bool(re.findall(field, self.item(i).text())) for field in fields]+[not bool(fields)]):
-                self.setItemHidden(self.item(i), True)
+                self.setRowHidden(self.row(self.item(i)), True)
             else:
-                self.setItemHidden(self.item(i), False)
+                self.setRowHidden(self.row(self.item(i)), False)
             if text == self.item(i).text():
                 self.setItemSelected(self.item(i), True)
 
