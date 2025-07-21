@@ -68,10 +68,11 @@ def get_orig(polygon):
 
 
 def get_index(node, alias_name):
+    print (node, alias_name)
     if node is None:
         return
     parent_attr = cmds.attributeQuery(alias_name, node=node, ln=1)
-    parent_name = "{node}.{parent_attr}".format(**locals())
+    parent_name = "{node}{parent_attr}".format(**locals())
     elem_names = cmds.listAttr(parent_name, m=1)
     elem_indexes = cmds.getAttr(parent_name, mi=1)
     if alias_name in elem_names:
