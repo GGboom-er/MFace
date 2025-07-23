@@ -6,9 +6,6 @@ from . import fit
 from . import preset
 
 
-window = None
-
-
 class MFaceMain(QDialog):
 
     def __init__(self):
@@ -45,7 +42,7 @@ class MFaceMain(QDialog):
             self.resize(base_size)
             self.facePose.load()
         else:
-            self.resize(480, 640+24)
+            self.resize(480, 640 + 24)
 
     def update_presets(self):
         for i in range(3, self.tab.count()):
@@ -67,8 +64,10 @@ class MFaceMain(QDialog):
 
 
 def show():
-    global window
-    if window is None:
-        window = MFaceMain()
+    from maya import cmds
+    window_name = 'MFaceWindow'
+    if cmds.window(window_name, ex=True):
+        cmds.deleteUI(window_name)
+    window = MFaceMain()
+    window.setObjectName(window_name)
     window.showNormal()
-

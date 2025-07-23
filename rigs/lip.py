@@ -26,17 +26,19 @@ class Lip(RigSystem):
         up_lip, dn_lip = rig_lip(up, dn, aim)
         # main
         rig_main(Fmt(**up).name(), get_fit_node_matrix(**aim),
-                 up_lip["joints"]+dn_lip["joints"],
-                 up_lip["clusters"]+dn_lip["clusters"])
+                 up_lip["joints"] + dn_lip["joints"],
+                 up_lip["clusters"] + dn_lip["clusters"])
         # jaw
         jaw = rig_jaw(self.root, aim, roll, up_lip["joints"], dn_lip["joints"], up_lip["us"], dn_lip["us"])
         # zip
         rig_zip(aim, self.root, jaw["ctrl"], up_lip["joints"], dn_lip["joints"], up_lip["us"], dn_lip["us"])
         # tongue
         self.rig_tongue(fits, jaw["dn_cluster"])
+        tongue_rig_fix()
         # # tooth
         rig_tooth(fits.find(pre="ToothUp"), jaw["up_cluster"])
         rig_tooth(fits.find(pre="ToothDn"), jaw["dn_cluster"])
+        tooth_rig_fix()
 
     def rig_tongue(self, fits, cluster):
         fk_fits = fits.filter(pre="Tongue")
@@ -44,7 +46,7 @@ class Lip(RigSystem):
             return
         tongue = rig_fk(self.root, fk_fits)
         for ctrl in tongue["ctrls"]:
-            Control(ctrl.ctrl.name, c=Color.blue).edit_shape_by_copy_ctrl(lambda x: cmds.setAttr(x+".sz", 2))
+            Control(ctrl.ctrl.name, c=Color.blue).edit_shape_by_copy_ctrl(lambda x: cmds.setAttr(x + ".sz", 2))
         set_jac_weights([cluster], tongue["joints"], [[1.0] * len(tongue)])
 
 
@@ -54,6 +56,123 @@ def rig_tooth(fit, cluster):
     joint = rig_joint(True, False, False, False, **fit)
     set_jac_weights([cluster], [joint["joint"]], [[1]])
     joint["joint_ctrl"].control(r=3, o=[1, 0, 0], s="tooth", ro=[0, 90, 0], c=Color.blue)
+
+
+def tooth_rig_fix():
+    distance = -5
+    nodes = ['FollowToothUp_M_point', 'FollowToothUp_M_orient', 'DeMat01_Ctrl_ToothUp_M',
+             'FollowToothDn_M_orient', 'FollowToothDn_M_point', 'DeMat01_Ctrl_ToothDn_M']
+    for node in nodes:
+        if cmds.objExists(node):
+            cmds.delete(node)
+
+    up_teeth_offset = cmds.createNode('transform', n='OffsetToothUp_M')
+    # cmds.setAttr('%s.displayHandle' % up_teeth_offset, True)
+    cmds.delete(cmds.parentConstraint('FollowToothUp_M', up_teeth_offset, mo=False))
+    cmds.parent(up_teeth_offset, 'FollowToothUp_M')
+    cmds.parent('InverseToothUp_M', up_teeth_offset)
+    cmds.setAttr('%s.tz' % up_teeth_offset, distance)
+    # up_parent_con = cmds.parentConstraint('AdditiveToothUp_M', 'FollowToothUp_M', mo=True)
+
+    dn_teeth_offset = cmds.createNode('transform', n='OffsetToothDn_M')
+    # cmds.setAttr('%s.displayHandle' % dn_teeth_offset, True)
+    cmds.delete(cmds.parentConstraint('FollowToothDn_M', dn_teeth_offset, mo=False))
+    cmds.parent(dn_teeth_offset, 'FollowToothDn_M')
+    cmds.parent('InverseToothDn_M', dn_teeth_offset)
+    cmds.setAttr('%s.tz' % dn_teeth_offset, distance)
+    # dw_parent_con = cmds.parentConstraint('AdditiveToothDn_M', 'FollowToothDn_M', mo=True)
+
+    # cmds.parent(up_parent_con, dw_parent_con, 'MFaceConstraints')
+    # 设置牙齿控制器显示宽度,开启轴心显示
+    ctrls = ['FCtrlToothUp_M', 'FCtrlToothDn_M']
+    for ctrl in ctrls:
+        if cmds.objExists(ctrl):
+            cmds.setAttr('%s.displayRotatePivot' % ctrl, True)
+            for shape in cmds.listRelatives(ctrl, s=True, typ='nurbsCurve') or []:
+                cmds.setAttr('%s.lineWidth' % shape, 1.5)
+    # 隐藏下颌控制器
+    ctrl = 'FollowJaw_M'
+    if cmds.objExists(ctrl):
+        cmds.setAttr('%s.v' % ctrl, 0)
+
+
+def tongue_rig_fix():
+    distance = -5
+    tongue_ctrs = cmds.ls('FCtrlTongue*_M')
+    tongue_ctrs.sort()
+    parent_node = 'MFaceCtrls'
+    for tongue_ctr in tongue_ctrs:
+        follow_node = tongue_ctr.replace('FCtrl', 'Follow')
+        point_con = '%s_point' % follow_node
+        orient_con = '%s_orient' % follow_node
+        for con in [point_con, orient_con]:
+            if cmds.objExists(con):
+                cmds.delete(con)
+        par = cmds.listRelatives(follow_node, p=True)[0]
+        if par != parent_node:
+            cmds.parent(follow_node, parent_node)
+        inverse_node = tongue_ctr.replace('FCtrl', 'Inverse')
+        if cmds.objExists(inverse_node):
+            pre_nodes = cmds.listConnections('%s.t' % inverse_node, s=True, d=False, p=False) or []
+            for pre_node in pre_nodes:
+                cmds.delete(pre_node)
+        parent_node = tongue_ctr
+    tongue_offset = cmds.createNode('transform', n='OffsetTongue01_M')
+    # cmds.setAttr('%s.displayHandle' % tongue_offset, True)
+    cmds.delete(cmds.parentConstraint('FollowTongue01_M', tongue_offset, mo=False))
+    cmds.parent(tongue_offset, 'FollowTongue01_M')
+    cmds.parent('InverseTongue01_M', tongue_offset)
+    # tongue_con = cmds.parentConstraint('LinkTongue01_M', 'FollowTongue01_M', mo=True)
+    # cmds.parent(tongue_con, 'MFaceConstraints')
+    cmds.setAttr('%s.tz' % tongue_offset, distance)
+    # 适配舌头控制器样式
+    dis_value = 0.5
+    for i in range(len(tongue_ctrs)):
+        ctr1 = 'FCtrlTongue%02d_M' % (i + 1)
+        ctr2 = 'FCtrlTongue%02d_M' % (i + 2)
+        if cmds.objExists(ctr2):
+            # 求两个控制器之间的距离
+            tongue_dis = cmds.createNode('distanceBetween')
+            cmds.connectAttr('%s.worldMatrix[0]' % ctr1, '%s.inMatrix1' % tongue_dis)
+            cmds.connectAttr('%s.worldMatrix[0]' % ctr2, '%s.inMatrix2' % tongue_dis)
+            dis_value = cmds.getAttr('%s.distance' % tongue_dis)
+
+        base_shape = cmds.listRelatives(ctr1, s=True)[0]
+        box_ctrl = create_box_ctrl()
+        cmds.setAttr('%s.r' % box_ctrl, 90, 90, 0, typ='double3')
+        if cmds.objExists(ctr2):
+            cmds.setAttr('%s.s' % box_ctrl, dis_value * 0.6, dis_value * 0.9, dis_value * 0.2, typ='double3')
+        else:
+            cmds.setAttr('%s.s' % box_ctrl, dis_value * 0.6, dis_value * 0.2, dis_value * 0.2, typ='double3')
+        cmds.makeIdentity(box_ctrl, a=True, t=True, r=True, s=True, n=False, pn=True)
+        shape = cmds.listRelatives(box_ctrl, s=True)[0]
+        cmds.setAttr('%s.overrideEnabled' % shape, 1)
+        cmds.setAttr('%s.overrideColor' % shape, 6)
+        cmds.parent(shape, ctr1, s=True, r=True)
+        cmds.delete(base_shape,box_ctrl)
+        cmds.rename(shape, base_shape)
+
+
+def create_box_ctrl(name='test_curve'):
+    points = [[-0.5, 0.0, 0.5],
+              [0.5, 0.0, 0.5],
+              [0.5, 0.0, -0.5],
+              [-0.5, 0.0, -0.5],
+              [-0.5, 0.0, 0.5],
+              [-0.5, 1.0, 0.5],
+              [0.5, 1.0, 0.5],
+              [0.5, 0.0, 0.5],
+              [0.5, 1.0, 0.5],
+              [0.5, 1.0, -0.5],
+              [0.5, 0.0, -0.5],
+              [0.5, 1.0, -0.5],
+              [-0.5, 1.0, -0.5],
+              [-0.5, 0.0, -0.5],
+              [-0.5, 1.0, -0.5],
+              [-0.5, 1.0, 0.5],
+              [-0.5, 0.0, 0.5]]
+    curve = cmds.curve(d=1, p=points, n=name)
+    return curve
 
 
 def get_ud_surface_side(up, dn):
@@ -87,7 +206,7 @@ def add_zip(weight, src_joint, dst_ws):
     dst_names = [dst.name for dst, _ in dst_ws]
     if src_joint.name == dst_names:
         return
-    exp = Exp("Zip"+src_joint.name)
+    exp = Exp("Zip" + src_joint.name)
     src_matrix = MMatrix(src_joint.additive["bindPreMatrix"].get())
     zip_ts = []
     for dst_joint, w in dst_ws:
@@ -113,12 +232,12 @@ def rig_zip(aim, root, jaw_ctrl, up_joints, dn_joints, up_us, dn_us):
 
 
 def rig_ud_zip(pre, aim, root, jaw_ctrl, src_joints, dst_joints, src_us, dst_us):
-    name = Fmt(**aim).typ(pre+"Zip")
-    node = Node("Weights"+name, root.name).reload()
+    name = Fmt(**aim).typ(pre + "Zip")
+    node = Node("Weights" + name, root.name).reload()
     wts = get_follow_weights(src_us, dst_us)
     weights = []
     for i, src_joint in enumerate(src_joints):
-        weights.append(node[pre+"Zip%02dWeight" % i].add(min=0, max=0.5, at="double", k=1, dv=0.5))
+        weights.append(node[pre + "Zip%02dWeight" % i].add(min=0, max=0.5, at="double", k=1, dv=0.5))
         dst_ws = [[dst, w] for w, dst in zip(wts[i], dst_joints) if w > 0.00001]
         add_zip(weights[-1], src_joint, dst_ws)
     count = len(src_joints)
@@ -130,8 +249,8 @@ def rig_ud_zip(pre, aim, root, jaw_ctrl, src_joints, dst_joints, src_us, dst_us)
     sub = exp.sub(10, wide)
     div2 = exp.div(sub, wide)
     for u, weight in zip(src_us, weights):
-        dot_r = exp.dot([div1, div2], [zip_r, -10*u])
-        dot_l = exp.dot([div1, div2], [zip_l, -10*(1-u)])
+        dot_r = exp.dot([div1, div2], [zip_r, -10 * u])
+        dot_l = exp.dot([div1, div2], [zip_l, -10 * (1 - u)])
         cd = exp.max(dot_r, dot_l).name
         cmds.setDrivenKeyframe(weight.name, cd=cd, dv=0, v=0)
         cmds.setDrivenKeyframe(weight.name, cd=cd, dv=10, v=0.5)
@@ -139,7 +258,7 @@ def rig_ud_zip(pre, aim, root, jaw_ctrl, src_joints, dst_joints, src_us, dst_us)
         return
     # 同时拉通zip_L与zip_R时，修复对中间骨骼进行平滑
     i = count // 2
-    r_attr, m_attr, l_attr = weights[i-1:i+2]
+    r_attr, m_attr, l_attr = weights[i - 1:i + 2]
     m_orig = m_attr.input()
     min_rl = exp.min(r_attr.input(), l_attr.input())
     smooth = exp.dot([0.7, 0.3], [min_rl, m_orig])
@@ -228,7 +347,7 @@ def rig_up_dn_lip(us, **kwargs):
     for ctrl in list(ud_surface["ctrls1"][1: -1]) + list(ud_surface["ctrls2"][1:-1]):
         ctrl.control(o=[0, 1, 0])
     rig_lip_roll(ud_surface["ctrls1"][2], joints, ud_surface["ctrls"], weights[2], ud=kwargs["ud"])
-    clusters = list(ud_surface["clusters1"])+list(ud_surface["clusters2"])
+    clusters = list(ud_surface["clusters1"]) + list(ud_surface["clusters2"])
     return dict(joints=joints, clusters=clusters, us=us)
 
 
@@ -241,6 +360,6 @@ def rig_lip_roll(ctrl, joints, ctrls, weights, ud):
         joint.port["r"].disconnect()
         ctrl.output["rx"].cnt(joint.port["rx"])
         ctrl.output["ry"].cnt(joint.port["ry"])
-        exp = Exp("Roll"+joint.name)
+        exp = Exp("Roll" + joint.name)
         direction = -1 if is_mirror(joint.name) else 1
-        joint.port["rz"] = exp.dot([attr, ctrl.output["rz"]], [w*direction*ud, 1.0])
+        joint.port["rz"] = exp.dot([attr, ctrl.output["rz"]], [w * direction * ud, 1.0])

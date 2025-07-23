@@ -145,7 +145,7 @@ class Face(Hierarchy):
         if self["Fit"]["joint_fmt"]:
             return
         self["Fit"]["joint_fmt"].add(dt="string")
-        self["Fit"]["joint_fmt"].set("Joint{core}_{rml}", type="string")
+        self["Fit"]["joint_fmt"].set("{core}Jnt_{rml}", type="string")
 
     def add_ctrl_fmt(self):
         if self["Fit"]["ctrl_fmt"]:
@@ -276,6 +276,7 @@ class Ctrl(Hierarchy):
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
+        print(self.name,'*'*50)
         pin = Node(name="Pin"+self.name, parent="MFacePins").get()
         pin.xform(ws=1, m=self.follow["bindPreMatrix"].get())
         Cons.point(pin, self.follow, mo=0)
@@ -296,6 +297,8 @@ class Ctrl(Hierarchy):
 
         def is_follow(_ctrl):
             if _ctrl.name in unfollows:
+                return False
+            if _ctrl.name.startswith('Tongue') or _ctrl.name.startswith('Tooth'):
                 return False
             if not _ctrl["Inverse"]:
                 return False
@@ -775,3 +778,26 @@ class Cluster(Hierarchy):
             cluster = cls(name)
             if cluster:
                 cluster.set_weight_data(row)
+
+
+def create_uv_pin(mesh,obj):
+    pin_node = None
+    cmds.select(mesh,r=True)
+    cmds.select(obj,add=True)
+    base_nodes = cmds.ls(typ='uvPin')
+    cmds.UVPin()
+    new_nodes = cmds.ls(typ='uvPin')
+    nodes = [x for x in new_nodes if x not in base_nodes]
+    if nodes:
+        pin_node = nodes[0]
+        pin_node = cmds.rename(pin_node,f"{mesh}_UVPin_{obj}")
+    return pin_node
+
+
+def create_uv_pins(mesh,pins):
+    pin_nodes = []
+    for pin in pins:
+        pin_nodes.append(create_uv_pin(mesh,pin))
+    return pin_nodes
+
+
