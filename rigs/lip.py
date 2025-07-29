@@ -1,12 +1,12 @@
 # coding:utf-8
 import struct
+from importlib import reload
 
 from .rig import *
 from .roll import rig_roll
 from .fk import rig_fk
 from .joint import rig_joint
 from .surface import update_fit_surface_curve_data
-
 
 class Lip(RigSystem):
     fit_configs = dict(Lip=dict(pre="Lip", fit="loop_curve", names=["", "A", "B", "C"], rml="MRL"),

@@ -276,8 +276,8 @@ class Ctrl(Hierarchy):
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
-        print(self.name, '*' * 50)
-        pin = Node(name="Pin" + self.name, parent="MFacePins").get()
+        print(self.name,'*'*50)
+        pin = Node(name="Pin"+self.name, parent="MFacePins").get()
         pin.xform(ws=1, m=self.follow["bindPreMatrix"].get())
         Cons.point(pin, self.follow, mo=0)
         pin["inheritsTransform"] = False
@@ -782,34 +782,25 @@ class Cluster(Hierarchy):
                 cluster.set_weight_data(row)
 
 
-def create_uv_pin(mesh, obj):
-    pin_node = f"{mesh}_UVPin"
-    cmds.select(mesh, r=True)
-    cmds.select(obj, add=True)
+
+def create_uv_pin(mesh,obj):
+    pin_node = None
+    cmds.select(mesh,r=True)
+    cmds.select(obj,add=True)
     base_nodes = cmds.ls(typ='uvPin')
     cmds.UVPin()
     new_nodes = cmds.ls(typ='uvPin')
     nodes = [x for x in new_nodes if x not in base_nodes]
     if nodes:
-        if not cmds.objExists(pin_node):
-            cmds.rename(nodes[0], pin_node)
-        else:
-            u_value = cmds.getAttr(f'{nodes[0]}.coordinate[0].coordinateU')
-            v_value = cmds.getAttr(f'{nodes[0]}.coordinate[0].coordinateV')
-            values = cmds.ls(f'{pin_node}.coordinate[*]')
-            index = 0
-            if values:
-                index = int(values[-1].split('[')[-1].split(']')[0]) + 1
-            cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateU', u_value)
-            cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateV', v_value)
-            cmds.connectAttr(f'{pin_node}.outputMatrix[{index}]', f'{obj}.offsetParentMatrix', f=True)
-            cmds.delete(nodes[0])
+        pin_node = nodes[0]
+        pin_node = cmds.rename(pin_node,f"{mesh}_UVPin_{obj}")
     return pin_node
 
 
-def create_uv_pins(mesh, pins):
+def create_uv_pins(mesh,pins):
     pin_nodes = []
     for pin in pins:
-        pin_nodes.append(create_uv_pin(mesh, pin))
-    pin_nodes = list(set(pin_nodes))
+        pin_nodes.append(create_uv_pin(mesh,pin))
     return pin_nodes
+
+
