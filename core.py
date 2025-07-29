@@ -7,7 +7,7 @@ from maya.api.OpenMaya import *
 
 
 def filter_pres(names, pres):
-    names = [name for name in names if all([cmds.objExists(pre+name) for pre in pres])]
+    names = [name for name in names if all([cmds.objExists(pre + name) for pre in pres])]
     return sorted(set(names), key=names.index)
 
 
@@ -30,7 +30,7 @@ class Fmt(object):
     @staticmethod
     def restore_core_rml(fmt, name):
         # 将自定义的命名规范 转化成 默认命名规范{core}_{rml}
-        regx = "^"+fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)")+"$"
+        regx = "^" + fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)") + "$"
         match = re.match(regx, name)
         if not match:
             return
@@ -89,7 +89,7 @@ class Fmt(object):
         return m_rml
 
     def update_ud(self):
-        uds = [self.data["ud"]]*self.data["count"]
+        uds = [self.data["ud"]] * self.data["count"]
         if not uds:
             return uds
         if self.data["merge_ud"]:
@@ -272,7 +272,7 @@ class Ctrl(Hierarchy):
             now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
             old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
+            new_offset = [o + b - n for n, b, o in zip(now_point, bind_point, old_offset)]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
@@ -289,7 +289,7 @@ class Ctrl(Hierarchy):
         unfollows = set()
         for rig in cmds.ls("MFaceRigs|RigFk*") or []:
             for attr in cmds.listAttr(rig, ud=1):
-                if not cmds.getAttr(rig+"."+attr, type=1) == "bool":
+                if not cmds.getAttr(rig + "." + attr, type=1) == "bool":
                     continue
                 if not attr.startswith("Ctrl"):
                     continue
@@ -303,6 +303,7 @@ class Ctrl(Hierarchy):
             if not _ctrl["Inverse"]:
                 return False
             return True
+
         return [ctrl.add_pin() for ctrl in filter(is_follow, cls.all())]
 
     @classmethod
@@ -453,7 +454,8 @@ class Joint(Hierarchy):
         Hierarchy.__init__(self, name, Face()["Additive"])
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
+        self.bws = [BlendWeighted(pxy + xyz + self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in
+                    "XYZ"]
 
     def get(self):
         Face.build_callable(self)
@@ -508,7 +510,7 @@ class Joint(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = "_W_"+self.name
+        pre = "_W_" + self.name
         for attr in Cluster.weight_names():
             if not attr.endswith(pre):
                 continue
@@ -541,7 +543,7 @@ class Joint(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         joint_names = Fmt.selected_restore_names(Face().joint_fmt(), "joint")
-        names = filter_pres(ctrl_names+joint_names, ["Additive", "Port"])
+        names = filter_pres(ctrl_names + joint_names, ["Additive", "Port"])
         return [cls(name) for name in names]
 
     @classmethod
@@ -613,7 +615,7 @@ class Weight(Hierarchy):
     def get(self):
         exp = self.exp()
         self.weight.add(min=0, max=1, at="double", k=1)
-        defaults = [[self.joint.bws[i+j].default for j in range(3)] for i in range(0, 9, 3)]
+        defaults = [[self.joint.bws[i + j].default for j in range(3)] for i in range(0, 9, 3)]
         pxy = [exp.p_mul_mat(defaults[0], self.cluster.transform),
                exp.v_mul_mat(defaults[1], self.cluster.transform),
                exp.v_mul_mat(defaults[2], self.cluster.transform)]
@@ -671,7 +673,7 @@ class Cluster(Hierarchy):
         return self
 
     def parent_to(self, other):
-        exp = Exp(self.name+"ParentLink")
+        exp = Exp(self.name + "ParentLink")
         t, r = exp.de_mat(exp.mul_mat(self.pre["bindPreMatrix"], other.transform))
         self.pre["t"] = t
         self.pre["r"] = r
@@ -685,7 +687,7 @@ class Cluster(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = self.name+"_W_"
+        pre = self.name + "_W_"
         for attr in Cluster.weight_names():
             if not attr.startswith(pre):
                 continue
@@ -759,7 +761,7 @@ class Cluster(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         cluster_names = [name[7:] for name in cmds.ls("Cluster*", sl=1, type="transform")]
-        names = filter_pres(cluster_names+ctrl_names, ["Pre"])
+        names = filter_pres(cluster_names + ctrl_names, ["Pre"])
         return [cls(name) for name in names]
 
     def cache_distances(self):
@@ -778,6 +780,7 @@ class Cluster(Hierarchy):
             cluster = cls(name)
             if cluster:
                 cluster.set_weight_data(row)
+
 
 
 def create_uv_pin(mesh,obj):
