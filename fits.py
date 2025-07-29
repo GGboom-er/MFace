@@ -32,6 +32,7 @@ def joint_as_local(joint):
     cmds.connectAttr(joint+'.radius', locator+".localScaleZ")
     cmds.setAttr(joint+".overrideEnabled", True)
     cmds.setAttr(joint+".overrideColor", 13)
+    cmds.setAttr('%s.displayLocalAxis' % joint, True)
     if cmds.objExists(ROOT+".radius"):
         cmds.connectAttr(ROOT+".radius", joint + ".radius")
     cmds.dgdirty(joint)
@@ -317,6 +318,8 @@ def fit_roll(name="Jaw"):
     cmds.connectAttr(distance+'.distance', sphere+".sy")
     cmds.connectAttr(distance+'.distance', sphere+".sz")
     cmds.toggle(roll, la=1)
+    cmds.aimConstraint(roll, aim, o=[0, 0, 0], w=1, aimVector=[-1, 0, 0], upVector=[0, 1, 0], worldUpType='vector',
+                       worldUpVector=[0, 1, 0])
     cmds.select(roll)
     return aim, roll
 

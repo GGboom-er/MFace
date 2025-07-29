@@ -7,7 +7,7 @@ from maya.api.OpenMaya import *
 
 
 def filter_pres(names, pres):
-    names = [name for name in names if all([cmds.objExists(pre+name) for pre in pres])]
+    names = [name for name in names if all([cmds.objExists(pre + name) for pre in pres])]
     return sorted(set(names), key=names.index)
 
 
@@ -30,7 +30,7 @@ class Fmt(object):
     @staticmethod
     def restore_core_rml(fmt, name):
         # 将自定义的命名规范 转化成 默认命名规范{core}_{rml}
-        regx = "^"+fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)")+"$"
+        regx = "^" + fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)") + "$"
         match = re.match(regx, name)
         if not match:
             return
@@ -89,7 +89,7 @@ class Fmt(object):
         return m_rml
 
     def update_ud(self):
-        uds = [self.data["ud"]]*self.data["count"]
+        uds = [self.data["ud"]] * self.data["count"]
         if not uds:
             return uds
         if self.data["merge_ud"]:
@@ -145,7 +145,7 @@ class Face(Hierarchy):
         if self["Fit"]["joint_fmt"]:
             return
         self["Fit"]["joint_fmt"].add(dt="string")
-        self["Fit"]["joint_fmt"].set("Joint{core}_{rml}", type="string")
+        self["Fit"]["joint_fmt"].set("{core}Jnt_{rml}", type="string")
 
     def add_ctrl_fmt(self):
         if self["Fit"]["ctrl_fmt"]:
@@ -272,11 +272,12 @@ class Ctrl(Hierarchy):
             now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
             old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
+            new_offset = [o + b - n for n, b, o in zip(now_point, bind_point, old_offset)]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
-        pin = Node(name="Pin"+self.name, parent="MFacePins").get()
+        print(self.name, '*' * 50)
+        pin = Node(name="Pin" + self.name, parent="MFacePins").get()
         pin.xform(ws=1, m=self.follow["bindPreMatrix"].get())
         Cons.point(pin, self.follow, mo=0)
         pin["inheritsTransform"] = False
@@ -288,7 +289,7 @@ class Ctrl(Hierarchy):
         unfollows = set()
         for rig in cmds.ls("MFaceRigs|RigFk*") or []:
             for attr in cmds.listAttr(rig, ud=1):
-                if not cmds.getAttr(rig+"."+attr, type=1) == "bool":
+                if not cmds.getAttr(rig + "." + attr, type=1) == "bool":
                     continue
                 if not attr.startswith("Ctrl"):
                     continue
@@ -297,9 +298,12 @@ class Ctrl(Hierarchy):
         def is_follow(_ctrl):
             if _ctrl.name in unfollows:
                 return False
+            if _ctrl.name.startswith('Tongue') or _ctrl.name.startswith('Tooth'):
+                return False
             if not _ctrl["Inverse"]:
                 return False
             return True
+
         return [ctrl.add_pin() for ctrl in filter(is_follow, cls.all())]
 
     @classmethod
@@ -450,7 +454,8 @@ class Joint(Hierarchy):
         Hierarchy.__init__(self, name, Face()["Additive"])
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
+        self.bws = [BlendWeighted(pxy + xyz + self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in
+                    "XYZ"]
 
     def get(self):
         Face.build_callable(self)
@@ -505,7 +510,7 @@ class Joint(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = "_W_"+self.name
+        pre = "_W_" + self.name
         for attr in Cluster.weight_names():
             if not attr.endswith(pre):
                 continue
@@ -538,7 +543,7 @@ class Joint(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         joint_names = Fmt.selected_restore_names(Face().joint_fmt(), "joint")
-        names = filter_pres(ctrl_names+joint_names, ["Additive", "Port"])
+        names = filter_pres(ctrl_names + joint_names, ["Additive", "Port"])
         return [cls(name) for name in names]
 
     @classmethod
@@ -610,7 +615,7 @@ class Weight(Hierarchy):
     def get(self):
         exp = self.exp()
         self.weight.add(min=0, max=1, at="double", k=1)
-        defaults = [[self.joint.bws[i+j].default for j in range(3)] for i in range(0, 9, 3)]
+        defaults = [[self.joint.bws[i + j].default for j in range(3)] for i in range(0, 9, 3)]
         pxy = [exp.p_mul_mat(defaults[0], self.cluster.transform),
                exp.v_mul_mat(defaults[1], self.cluster.transform),
                exp.v_mul_mat(defaults[2], self.cluster.transform)]
@@ -668,7 +673,7 @@ class Cluster(Hierarchy):
         return self
 
     def parent_to(self, other):
-        exp = Exp(self.name+"ParentLink")
+        exp = Exp(self.name + "ParentLink")
         t, r = exp.de_mat(exp.mul_mat(self.pre["bindPreMatrix"], other.transform))
         self.pre["t"] = t
         self.pre["r"] = r
@@ -682,7 +687,7 @@ class Cluster(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = self.name+"_W_"
+        pre = self.name + "_W_"
         for attr in Cluster.weight_names():
             if not attr.startswith(pre):
                 continue
@@ -756,7 +761,7 @@ class Cluster(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         cluster_names = [name[7:] for name in cmds.ls("Cluster*", sl=1, type="transform")]
-        names = filter_pres(cluster_names+ctrl_names, ["Pre"])
+        names = filter_pres(cluster_names + ctrl_names, ["Pre"])
         return [cls(name) for name in names]
 
     def cache_distances(self):
@@ -775,3 +780,36 @@ class Cluster(Hierarchy):
             cluster = cls(name)
             if cluster:
                 cluster.set_weight_data(row)
+
+
+def create_uv_pin(mesh, obj):
+    pin_node = f"{mesh}_UVPin"
+    cmds.select(mesh, r=True)
+    cmds.select(obj, add=True)
+    base_nodes = cmds.ls(typ='uvPin')
+    cmds.UVPin()
+    new_nodes = cmds.ls(typ='uvPin')
+    nodes = [x for x in new_nodes if x not in base_nodes]
+    if nodes:
+        if not cmds.objExists(pin_node):
+            cmds.rename(nodes[0], pin_node)
+        else:
+            u_value = cmds.getAttr(f'{nodes[0]}.coordinate[0].coordinateU')
+            v_value = cmds.getAttr(f'{nodes[0]}.coordinate[0].coordinateV')
+            values = cmds.ls(f'{pin_node}.coordinate[*]')
+            index = 0
+            if values:
+                index = int(values[-1].split('[')[-1].split(']')[0]) + 1
+            cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateU', u_value)
+            cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateV', v_value)
+            cmds.connectAttr(f'{pin_node}.outputMatrix[{index}]', f'{obj}.offsetParentMatrix', f=True)
+            cmds.delete(nodes[0])
+    return pin_node
+
+
+def create_uv_pins(mesh, pins):
+    pin_nodes = []
+    for pin in pins:
+        pin_nodes.append(create_uv_pin(mesh, pin))
+    pin_nodes = list(set(pin_nodes))
+    return pin_nodes
