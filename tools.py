@@ -1,9 +1,10 @@
 import json
 from .rigs import rig
-from .core import *
+from . import core
 from . import facs
 from . import preset
 from . import fastPin
+from maya import cmds
 
 
 def undo(fun):
@@ -11,6 +12,7 @@ def undo(fun):
         cmds.undoInfo(openChunk=1)
         fun(*args, **kwargs)
         cmds.undoInfo(closeChunk=1)
+
     return undo_fun
 
 
@@ -23,33 +25,33 @@ delete_selected = undo(rig.delete_selected)
 
 # cluster
 def get_cluster_names():
-    return [cluster.name for cluster in Cluster.all()]
+    return [cluster.name for cluster in core.Cluster.all()]
 
 
 def load_cluster_filter():
-    return ",".join([cluster.name for cluster in Cluster.selected()])
+    return ",".join([cluster.name for cluster in core.Cluster.selected()])
 
 
 @undo
 def selected_cluster(names):
     cmds.select(cl=1)
     for name in names:
-        for node in [Ctrl(name).ctrl.name, "Cluster"+name]:
+        for node in [core.Ctrl(name).ctrl.name, "Cluster" + name]:
             if cmds.objExists(node):
                 cmds.select(node, add=1)
                 break
 
 
 def is_edit_cluster_weights():
-    return any([bool(joint.joint["weight"]) for joint in Joint.all()])
+    return any([bool(joint.joint["weight"]) for joint in core.Joint.all()])
 
 
 @undo
 def cluster_weight_apply():
     if is_edit_cluster_weights():
-        Cluster.finsh_edit_weights()
+        core.Cluster.finsh_edit_weights()
     else:
-        clusters = Cluster.selected()
+        clusters = core.Cluster.selected()
         if len(clusters) != 1:
             return
         cluster = clusters[0]
@@ -58,24 +60,24 @@ def cluster_weight_apply():
 
 @undo
 def mirror_cluster_weights():
-    for cluster in Cluster.selected():
+    for cluster in core.Cluster.selected():
         cluster.mirror_weights()
 
 
 def save_cluster_weights(path):
     with open(path, "w") as fp:
-        json.dump({cluster.name: cluster.get_weight_data() for cluster in Cluster.selected()}, fp)
+        json.dump({cluster.name: cluster.get_weight_data() for cluster in core.Cluster.selected()}, fp)
 
 
 @undo
 def load_cluster_weights(path):
     with open(path, "r") as fp:
-        Cluster.load_weight_data(json.load(fp))
+        core.Cluster.load_weight_data(json.load(fp))
 
 
-ctrl_mirror_selected_matrix = undo(Ctrl.mirror_selected_matrix)
-ctrl_edit_selected_matrix = undo(Ctrl.edit_selected_matrix)
-ctrl_delete_selected = undo(Ctrl.delete_selected)
+ctrl_mirror_selected_matrix = undo(core.Ctrl.mirror_selected_matrix)
+ctrl_edit_selected_matrix = undo(core.Ctrl.edit_selected_matrix)
+ctrl_delete_selected = undo(core.Ctrl.delete_selected)
 
 
 def default_scene_json():
@@ -147,5 +149,7 @@ delete_preset_skin_weights = undo(preset.delete_preset_skin_weights)
 @undo
 def ctrl_follow_to_selected_polygon():
     polygon = fastPin.get_selected_polygon()
-    pins = Ctrl.add_pins()
-    fastPin.create_pins(polygon, pins)
+    pins = core.Ctrl.add_pins()
+    # fastPin.create_pins(polygon, pins)
+    pin_nodes = core.create_uv_pins(polygon, pins)
+    return pin_nodes
