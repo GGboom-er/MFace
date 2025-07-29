@@ -453,7 +453,8 @@ class Joint(Hierarchy):
         Hierarchy.__init__(self, name, Face()["Additive"])
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
+        self.bws = [BlendWeighted(pxy + xyz + self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in
+                    "XYZ"]
 
     def get(self):
         Face.build_callable(self)

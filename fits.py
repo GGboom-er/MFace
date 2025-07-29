@@ -317,6 +317,8 @@ def fit_roll(name="Jaw"):
     cmds.connectAttr(distance+'.distance', sphere+".sy")
     cmds.connectAttr(distance+'.distance', sphere+".sz")
     cmds.toggle(roll, la=1)
+    cmds.aimConstraint(roll, aim, o=[0, 0, 0], w=1, aimVector=[-1, 0, 0], upVector=[0, 1, 0], worldUpType='vector',
+                       worldUpVector=[0, 1, 0])
     cmds.select(roll)
     return aim, roll
 
