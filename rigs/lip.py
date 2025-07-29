@@ -6,7 +6,7 @@ from .roll import rig_roll
 from .fk import rig_fk
 from .joint import rig_joint
 from .surface import update_fit_surface_curve_data
-
+print ('aa')
 
 class Lip(RigSystem):
     fit_configs = dict(Lip=dict(pre="Lip", fit="loop_curve", names=["", "A", "B", "C"], rml="MRL"),
