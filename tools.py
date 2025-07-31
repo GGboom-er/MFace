@@ -153,3 +153,44 @@ def ctrl_follow_to_selected_polygon():
     # fastPin.create_pins(polygon, pins)
     pin_nodes = core.create_uv_pins(polygon, pins)
     return pin_nodes
+
+@undo
+def ctrl_follow_to_selected_point():
+    judge = False
+    sels = cmds.ls(sl=True)
+    vtx = ''
+    pin_node = ''
+    follow_node = ''
+    pin_con = ''
+    if len(sels) == 2:
+        ctrs = [x for x in cmds.ls(sl=True, typ='transform') if x.startswith('FCtrl')]
+        if len(ctrs) == 1:
+            ctrl = ctrs[0]
+            pin_node = ctrl.replace('FCtrl', 'Pin')
+            follow_node = ctrl.replace('FCtrl', 'Follow')
+            pin_con = '%s_point'%follow_node
+            if cmds.objExists(pin_node) and cmds.objExists(pin_con) and cmds.objExists(follow_node):
+                points = [x for x in sels if x not in ctrs and '.vtx[' in x]
+                if len(points) == 1:
+                    judge = True
+                    vtx = points[0]
+                else:
+                    print(u'请选择一个控制器和一个模型点再执行此命令！')
+            else:
+                print(u'请先执行”跟随模型“操作，并确保你选中的控制器属于可跟随模型的控制！')
+        else:
+            print(u'请选择一个控制器和一个模型点再执行此命令！')
+    else:
+        print(u'请选择一个控制器和一个模型点再执行此命令！')
+    if judge:
+        loc = cmds.spaceLocator()[0]
+        pos = cmds.xform(vtx,q=True,ws=True, t=True)
+        cmds.xform(loc,ws=True, t=pos)
+        mesh = vtx.split('.')[0]
+        cmds.delete(pin_con)
+        core.create_uv_pin(mesh,pin_node,loc)
+        pin_con = cmds.pointConstraint(pin_node,follow_node,mo=True,n=pin_con)
+        cmds.parent(pin_con,'MFacePins')
+        cmds.delete(loc)
+
+
