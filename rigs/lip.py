@@ -35,6 +35,7 @@ class Lip(RigSystem):
         rig_zip(aim, self.root, jaw["ctrl"], up_lip["joints"], dn_lip["joints"], up_lip["us"], dn_lip["us"])
         # tongue
         self.rig_tongue(fits, jaw["dn_cluster"])
+        tongue_rig_fix()
         # # tooth
         self.rig_tooth(fits, jaw)
 
