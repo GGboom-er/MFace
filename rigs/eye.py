@@ -3,6 +3,7 @@ from .rig import *
 from .roll import rig_roll
 from .lip import update_aim_curve, rig_ud_surface
 from .. import facs
+from maya import cmds
 
 
 class Eye(RigSystem):
@@ -16,15 +17,15 @@ class Eye(RigSystem):
         if len(aims) < 2:
             return
         points = [aim.ctrl.xform(q=1, t=1, ws=1) for aim in aims]
-        center = [sum(vs)/len(vs) for vs in zip(*points)]
+        center = [sum(vs) / len(vs) for vs in zip(*points)]
         matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, center[0], center[1], center[2], 1]
         name = "{rig}{classify}".format(**self.fits.data[0])
         ctrl = Ctrl.add("Aim" + name, matrix, "aim")
         distance = get_distance(center, points[0])
         for aim in aims:
             Cons.parent(ctrl.ctrl, aim.follow, mo=1)
-            aim.control(radius=0.4*distance)
-        ctrl.control(radius=0.6*distance)
+            aim.control(radius=0.4 * distance)
+        ctrl.control(radius=0.6 * distance)
         hry = Hierarchy(name, self.root)
         hry.build("FollowRoot", "FollowHead")
         hry["FollowRoot"].xform(ws=1, t=center)
@@ -46,7 +47,24 @@ class Eye(RigSystem):
         Cons.blend(Cons.parent, dn_result["ctrl"]["Follow"], dst=dn_result["cluster"], **kwargs)
         rig_close_driver(up_result["ctrl"], dn_result["ctrl"], up_result["joints"], dn_result["joints"],
                          up_us=up_result["us"], dn_us=dn_result["us"])
+        eye_rig_fix()
         return look_ctrl
+
+
+def eye_rig_fix():
+    for lr in 'LR':
+        fol_node = f'FollowEye_{lr}'
+        inv_node = f'InverseEye_{lr}'
+        if cmds.objExists(fol_node):
+            cons = cmds.listConnections(fol_node, s=True, d=True, type='orientConstraint', p=False) or []
+            cons = list(set(cons))
+            if cons:
+                cmds.delete(cons)
+        if cmds.objExists(inv_node):
+            cons = cmds.listConnections(inv_node, s=True, d=False, p=False) or []
+            cons = list(set(cons))
+            if cons:
+                cmds.delete(cons)
 
 
 def rig_look(root, name, aim_matrix, roll_matrix):
@@ -60,7 +78,7 @@ def rig_look(root, name, aim_matrix, roll_matrix):
     hry.build(("Point", "Look", "Offset", "Link"))
     hry["Point"].xform(ws=1, t=roll_matrix[12:15])
     look_matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, roll_matrix[12], roll_matrix[13], distance * 7, 1]
-    aim_ctrl = Ctrl.add("Aim"+name, look_matrix, "aim")
+    aim_ctrl = Ctrl.add("Aim" + name, look_matrix, "aim")
     aim_ctrl.control(l=["r", "s", "v"])
     axis = -1 if is_mirror(name) else 1
     Cons.aim(aim_ctrl.output, hry["Look"], aim=[axis, 0, 0], wuo=hry["Point"].name, wut="objectrotation")
@@ -83,7 +101,7 @@ def get_lid_weights(joint):
 
 def get_lid_side(roll_matrix, points):
     x_vector = roll_matrix[:3]
-    y_vector = v_normal([v1-v2 for v1, v2 in zip(points[0], points[-1])])
+    y_vector = v_normal([v1 - v2 for v1, v2 in zip(points[0], points[-1])])
     z_vector = v_normal(v_cross(x_vector, y_vector))
     y_vector = v_cross(z_vector, x_vector)
     matrix1 = m3x3_to_m16([x_vector, y_vector, z_vector])
@@ -114,7 +132,7 @@ def rig_up_dn_lip(us, root, roll_matrix, roll, **kwargs):
 def snap_us(src_us, dst_us):
     src_dst_us = []
     for src_i, src_u in enumerate(src_us):
-        distance_ids = [(abs(src_u-dst_u), i) for i, dst_u in enumerate(dst_us)]
+        distance_ids = [(abs(src_u - dst_u), i) for i, dst_u in enumerate(dst_us)]
         distance_ids.sort(key=lambda x: x[0])
         _, dst_i = distance_ids[0]
         dst_u = dst_us[dst_i]
@@ -123,19 +141,19 @@ def snap_us(src_us, dst_us):
         for us, i in [[src_us, src_i], [dst_us, dst_i]]:
             offset = abs(us[i] - snap_u)
             for j in [-1, 1]:
-                k = min(max(0, i-j), len(us)-1)
-                limits.append(abs(us[k] - us[i])*0.2 <= offset)
+                k = min(max(0, i - j), len(us) - 1)
+                limits.append(abs(us[k] - us[i]) * 0.2 <= offset)
         if any(limits):
             continue
         src_dst_us.append([src_i, dst_i, snap_u])
     src_ids, dst_ids, snaps = zip(*src_dst_us)
     for us, ids in [[src_us, src_ids], [dst_us, dst_ids]]:
-        snap_ids = set(list(ids)+[0, len(us)-1])
+        snap_ids = set(list(ids) + [0, len(us) - 1])
         for j, u in zip(ids, snaps):
             o = (u - us[j]) * 0.5
             us[j] = u
             for k in [-1, 1]:
-                m = j+k
+                m = j + k
                 if m in snap_ids:
                     continue
                 us[m] += o
@@ -145,7 +163,7 @@ def rig_close_driver(up_ctrl, dn_ctrl, up_joints, dn_joints, up_us, dn_us):
     snap_us(up_us, dn_us)
     up_point = up_ctrl.xform(q=1, ws=1, t=1)
     dn_point = dn_ctrl.xform(q=1, ws=1, t=1)
-    target_name = up_ctrl.name+"_ty_min"
+    target_name = up_ctrl.name + "_ty_min"
     if not facs.exist_target(target_name):
         Ctrl.reset_all()
         distance = get_distance(up_point, dn_point)
@@ -167,9 +185,11 @@ def rig_close_driver(up_ctrl, dn_ctrl, up_joints, dn_joints, up_us, dn_us):
                 for i in range(3):
                     new_points[-1][i] += w * p[i]
         points = new_points
-
-    facs.to_pose(target_name)
+    print('target name:',target_name)
+    if cmds.objExists(target_name):
+        facs.to_pose(target_name)
     for up_joint, point in zip(up_joints, points):
         up_joint.joint.xform(ws=1, t=point)
-    facs.edit_target(up_ctrl.name+"_ty_min")
+    if cmds.objExists(target_name):
+        facs.edit_target(up_ctrl.name + "_ty_min")
     Ctrl.reset_all()

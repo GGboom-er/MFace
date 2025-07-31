@@ -71,3 +71,4 @@ def show():
     window = MFaceMain()
     window.setObjectName(window_name)
     window.showNormal()
+    return window

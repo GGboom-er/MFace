@@ -8,6 +8,7 @@ from .fk import rig_fk
 from .joint import rig_joint
 from .surface import update_fit_surface_curve_data
 
+
 class Lip(RigSystem):
     fit_configs = dict(Lip=dict(pre="Lip", fit="loop_curve", names=["", "A", "B", "C"], rml="MRL"),
                        Jaw=dict(pre="Jaw", fit="roll", names=["", "A", "B", "C"], rml="MRL"),
@@ -34,11 +35,8 @@ class Lip(RigSystem):
         rig_zip(aim, self.root, jaw["ctrl"], up_lip["joints"], dn_lip["joints"], up_lip["us"], dn_lip["us"])
         # tongue
         self.rig_tongue(fits, jaw["dn_cluster"])
-        tongue_rig_fix()
         # # tooth
-        rig_tooth(fits.find(pre="ToothUp"), jaw["up_cluster"])
-        rig_tooth(fits.find(pre="ToothDn"), jaw["dn_cluster"])
-        tooth_rig_fix()
+        self.rig_tooth(fits, jaw)
 
     def rig_tongue(self, fits, cluster):
         fk_fits = fits.filter(pre="Tongue")
@@ -48,6 +46,12 @@ class Lip(RigSystem):
         for ctrl in tongue["ctrls"]:
             Control(ctrl.ctrl.name, c=Color.blue).edit_shape_by_copy_ctrl(lambda x: cmds.setAttr(x + ".sz", 2))
         set_jac_weights([cluster], tongue["joints"], [[1.0] * len(tongue)])
+        tongue_rig_fix()
+
+    def rig_tooth(self, fits, jaw):
+        rig_tooth(fits.find(pre="ToothUp"), jaw["up_cluster"])
+        rig_tooth(fits.find(pre="ToothDn"), jaw["dn_cluster"])
+        tooth_rig_fix()
 
 
 def rig_tooth(fit, cluster):
@@ -58,31 +62,45 @@ def rig_tooth(fit, cluster):
     joint["joint_ctrl"].control(r=3, o=[1, 0, 0], s="tooth", ro=[0, 90, 0], c=Color.blue)
 
 
+def fit_parent(obj, parent, **kwargs):
+    judge = True
+    par_node = cmds.listRelatives(obj, parent=True)
+    if par_node:
+        if par_node[0] == parent:
+            judge = False
+    if judge:
+        cmds.parent(obj, parent, **kwargs)
+
+
 def tooth_rig_fix():
-    distance = -5
+    radius = cmds.getAttr('MFaceFits.radius')
+    distance = -20 * radius
     nodes = ['FollowToothUp_M_point', 'FollowToothUp_M_orient', 'DeMat01_Ctrl_ToothUp_M',
              'FollowToothDn_M_orient', 'FollowToothDn_M_point', 'DeMat01_Ctrl_ToothDn_M']
     for node in nodes:
         if cmds.objExists(node):
             cmds.delete(node)
-
-    up_teeth_offset = cmds.createNode('transform', n='OffsetToothUp_M')
+    up_teeth_offset = 'OffsetToothUp_M'
+    if not cmds.objExists(up_teeth_offset):
+        cmds.createNode('transform', n='OffsetToothUp_M')
     # cmds.setAttr('%s.displayHandle' % up_teeth_offset, True)
     cmds.delete(cmds.parentConstraint('FollowToothUp_M', up_teeth_offset, mo=False))
-    cmds.parent(up_teeth_offset, 'FollowToothUp_M')
-    cmds.parent('InverseToothUp_M', up_teeth_offset)
+    fit_parent(up_teeth_offset, 'FollowToothUp_M')
+    fit_parent('InverseToothUp_M', up_teeth_offset)
     cmds.setAttr('%s.tz' % up_teeth_offset, distance)
     # up_parent_con = cmds.parentConstraint('AdditiveToothUp_M', 'FollowToothUp_M', mo=True)
 
-    dn_teeth_offset = cmds.createNode('transform', n='OffsetToothDn_M')
+    dn_teeth_offset = 'OffsetToothDn_M'
+    if not cmds.objExists(dn_teeth_offset):
+        cmds.createNode('transform', n='OffsetToothDn_M')
     # cmds.setAttr('%s.displayHandle' % dn_teeth_offset, True)
     cmds.delete(cmds.parentConstraint('FollowToothDn_M', dn_teeth_offset, mo=False))
-    cmds.parent(dn_teeth_offset, 'FollowToothDn_M')
-    cmds.parent('InverseToothDn_M', dn_teeth_offset)
+    fit_parent(dn_teeth_offset, 'FollowToothDn_M')
+    fit_parent('InverseToothDn_M', dn_teeth_offset)
     cmds.setAttr('%s.tz' % dn_teeth_offset, distance)
     # dw_parent_con = cmds.parentConstraint('AdditiveToothDn_M', 'FollowToothDn_M', mo=True)
 
-    # cmds.parent(up_parent_con, dw_parent_con, 'MFaceConstraints')
+    # fit_parent(up_parent_con, dw_parent_con, 'MFaceConstraints')
     # 设置牙齿控制器显示宽度,开启轴心显示
     ctrls = ['FCtrlToothUp_M', 'FCtrlToothDn_M']
     for ctrl in ctrls:
@@ -97,7 +115,8 @@ def tooth_rig_fix():
 
 
 def tongue_rig_fix():
-    distance = -5
+    radius = cmds.getAttr('MFaceFits.radius')
+    distance = -20 * radius
     tongue_ctrs = cmds.ls('FCtrlTongue*_M')
     tongue_ctrs.sort()
     parent_node = 'MFaceCtrls'
@@ -110,20 +129,22 @@ def tongue_rig_fix():
                 cmds.delete(con)
         par = cmds.listRelatives(follow_node, p=True)[0]
         if par != parent_node:
-            cmds.parent(follow_node, parent_node)
+            fit_parent(follow_node, parent_node)
         inverse_node = tongue_ctr.replace('FCtrl', 'Inverse')
         if cmds.objExists(inverse_node):
             pre_nodes = cmds.listConnections('%s.t' % inverse_node, s=True, d=False, p=False) or []
             for pre_node in pre_nodes:
                 cmds.delete(pre_node)
         parent_node = tongue_ctr
-    tongue_offset = cmds.createNode('transform', n='OffsetTongue01_M')
+    tongue_offset = 'OffsetTongue01_M'
+    if not cmds.objExists(tongue_offset):
+        cmds.createNode('transform', n='OffsetTongue01_M')
     # cmds.setAttr('%s.displayHandle' % tongue_offset, True)
     cmds.delete(cmds.parentConstraint('FollowTongue01_M', tongue_offset, mo=False))
-    cmds.parent(tongue_offset, 'FollowTongue01_M')
-    cmds.parent('InverseTongue01_M', tongue_offset)
-    # tongue_con = cmds.parentConstraint('LinkTongue01_M', 'FollowTongue01_M', mo=True)
-    # cmds.parent(tongue_con, 'MFaceConstraints')
+    fit_parent(tongue_offset, 'FollowTongue01_M')
+    fit_parent('InverseTongue01_M', tongue_offset)
+    cmds.parentConstraint('LinkTongue01_M', 'FollowTongue01_M', mo=True)
+    # fit_parent(tongue_con, 'MFaceConstraints')
     cmds.setAttr('%s.tz' % tongue_offset, distance)
     # 适配舌头控制器样式
     dis_value = 0.5
@@ -136,6 +157,7 @@ def tongue_rig_fix():
             cmds.connectAttr('%s.worldMatrix[0]' % ctr1, '%s.inMatrix1' % tongue_dis)
             cmds.connectAttr('%s.worldMatrix[0]' % ctr2, '%s.inMatrix2' % tongue_dis)
             dis_value = cmds.getAttr('%s.distance' % tongue_dis)
+            cmds.delete(tongue_dis)
 
         base_shape = cmds.listRelatives(ctr1, s=True)[0]
         box_ctrl = create_box_ctrl()
@@ -148,8 +170,8 @@ def tongue_rig_fix():
         shape = cmds.listRelatives(box_ctrl, s=True)[0]
         cmds.setAttr('%s.overrideEnabled' % shape, 1)
         cmds.setAttr('%s.overrideColor' % shape, 6)
-        cmds.parent(shape, ctr1, s=True, r=True)
-        cmds.delete(base_shape,box_ctrl)
+        fit_parent(shape, ctr1, s=True, r=True)
+        cmds.delete(base_shape, box_ctrl)
         cmds.rename(shape, base_shape)
 
 
