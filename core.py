@@ -527,7 +527,7 @@ class Joint(Hierarchy):
         delete_nodes([bw.name for bw in self.bws])
         matrix = self.additive["bindPreMatrix"].get()
         Hierarchy.delete(self)
-        if self.joint:
+        if self.joint and matrix:
             self.joint.xform(ws=1, m=matrix)
             self.joint["v"] = 0
             cons = cmds.listConnections(self.joint.name, s=0, d=1) or []
