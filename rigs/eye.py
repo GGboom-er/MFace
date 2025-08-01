@@ -47,7 +47,7 @@ class Eye(RigSystem):
         Cons.blend(Cons.parent, dn_result["ctrl"]["Follow"], dst=dn_result["cluster"], **kwargs)
         rig_close_driver(up_result["ctrl"], dn_result["ctrl"], up_result["joints"], dn_result["joints"],
                          up_us=up_result["us"], dn_us=dn_result["us"])
-        eye_rig_fix()
+        # eye_rig_fix()
         return look_ctrl
 
 

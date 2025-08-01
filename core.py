@@ -786,7 +786,6 @@ class Cluster(Hierarchy):
                 cluster.set_weight_data(row)
 
 
-
 def correct_tongue_joint_axis(root):
     children = cmds.listRelatives(root, c=True, typ='transform')
     if children:
@@ -800,7 +799,6 @@ def correct_tongue_joint_axis(root):
     else:
         par_node = cmds.listRelatives(root, p=True)[0]
         cmds.delete(cmds.orientConstraint(par_node, root, o=[0, 0, 0]))
-
 
 
 def get_uv_parameter(mesh, obj):
@@ -849,7 +847,7 @@ def check_uv_pin(mesh):
 def create_uv_pin(mesh, obj, loc=None):
     loc = loc or obj
     pin_node = check_uv_pin(mesh)
-    offset = [0,0,0]
+    offset = [0, 0, 0]
     # if obj!=loc:
     #     base_pos = cmds.xform(loc, q=True, ws=True, t=True)
     #     target_pos = cmds.xform(obj, q=True, ws=True, t=True)
@@ -857,7 +855,7 @@ def create_uv_pin(mesh, obj, loc=None):
     if pin_node:
         u, v = get_uv_parameter(mesh, loc)
 
-        pre_cons = cmds.listConnections(f'{obj}.offsetParentMatrix', s=True, d=False, type='uvPin',p=True)
+        pre_cons = cmds.listConnections(f'{obj}.offsetParentMatrix', s=True, d=False, type='uvPin', p=True)
         judge = False
         index = 0
         if pre_cons:
@@ -872,14 +870,16 @@ def create_uv_pin(mesh, obj, loc=None):
         cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateV', v)
         if not judge:
             cmds.connectAttr(f'{pin_node}.outputMatrix[{index}]', f'{obj}.offsetParentMatrix', f=True)
-        cmds.setAttr(f'{obj}.t',*offset,typ='double3')
-        cmds.setAttr(f'{obj}.r',0,0,0,typ='double3')
+        cmds.setAttr(f'{obj}.t', *offset, typ='double3')
+        cmds.setAttr(f'{obj}.r', 0, 0, 0, typ='double3')
     return pin_node
 
 
 def create_uv_pins(mesh, pins):
     pin_nodes = []
     for pin in pins:
-        if pin not in ['PinEye_L','PinEye_R']:
+        if pin not in ['PinEye_L', 'PinEye_R']:
             pin_nodes.append(create_uv_pin(mesh, pin))
+        else:
+            cmds.setAttr(f'{pin}.inheritsTransform', True)
     return pin_nodes
