@@ -880,5 +880,6 @@ def create_uv_pin(mesh, obj, loc=None):
 def create_uv_pins(mesh, pins):
     pin_nodes = []
     for pin in pins:
-        pin_nodes.append(create_uv_pin(mesh, pin))
+        if pin not in ['PinEye_L','PinEye_R']:
+            pin_nodes.append(create_uv_pin(mesh, pin))
     return pin_nodes
