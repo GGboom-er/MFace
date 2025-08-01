@@ -423,6 +423,7 @@ class Fits(object):
             cmds.delete(group)
         classify = name[len(pre):]
         cmds.createNode("transform", n=group, p=ROOT, ss=1)
+        cmds.setAttr(f'{ROOT}.inheritsTransform', False)
         nodes = globals()["fit_" + fit](group)
         nodes = nodes if isinstance(nodes, tuple) else [nodes]
         for node in nodes:
