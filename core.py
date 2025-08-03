@@ -791,7 +791,7 @@ def correct_tongue_joint_axis(root):
     if children:
         cmds.parent(children, w=True)
         cmds.delete(cmds.aimConstraint(children[0], root, offset=[0, 0, 0], aimVector=[1, 0, 0], upVector=[0, 1, 0],
-                                       worldUpType='scene', skip=['y', 'z']))
+                                       worldUpType='scene'))
         cmds.makeIdentity(root, r=True, a=True)
         cmds.parent(children, root)
         for child in children:
