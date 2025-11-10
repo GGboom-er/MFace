@@ -26,7 +26,10 @@ class IconButton(Image):
     def __init__(self, parent, path):
         Image.__init__(self, parent, path)
         self.icon = QIcon(path)
-        self.setMask(QPixmap(path).mask().scaled(QImage(path).size()))
+        pixmap = QPixmap(path).scaled(QImage(path).size())
+        mask = pixmap.createMaskFromColor(Qt.transparent, Qt.MaskInColor)
+        self.setMask(mask)
+        # self.setMask(QPixmap(path).mask().scaled(QImage(path).size()))
         self.setMouseTracking(True)
 
     def update_mode(self):
@@ -101,7 +104,11 @@ class Preset(QDialog):
         build_path = os.path.abspath("{}/../../data/presets/build.png".format(__file__)).replace("\\", "/")
         build_button = IconButton(self, build_path)
         build_button.setFixedSize(32, 32)
-        build_button.setMask(QPixmap(build_path).mask().scaled(32, 32))
+
+        pixmap = QPixmap(build_path).scaled(QImage(build_path).size())
+        mask = pixmap.createMaskFromColor(Qt.transparent, Qt.MaskInColor)
+        build_button.setMask(mask)
+        # build_button.setMask(QPixmap(build_path).mask().scaled(32, 32))
         build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
         build_button.clicked.connect(self.build)
 
