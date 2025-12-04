@@ -145,6 +145,10 @@ def build_all():
     rig_cls = get_rig_name_cls()
     for fits in Fits().all().group("rig", "classify"):
         rig_cls[fits["rig"]](fits).rebuild()
+    fit_grp = 'MFaceFits'
+    if cmds.objExists(fit_grp):
+        cmds.setAttr(f'{fit_grp}.v', 0)
+
 
 
 def build_selected():

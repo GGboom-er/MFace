@@ -12,7 +12,7 @@ class MFaceMain(QDialog):
         QDialog.__init__(self, get_app())
         self.tab = QTabWidget(self)
         self.setLayout(q_add(QVBoxLayout(), self.tab))
-        self.setWindowTitle(u"MFace2.0.2")
+        self.setWindowTitle(u"MFace2.1.0")
         self.fit = fit.FitCreateTool()
         self.cluster = cluster.ClusterTool()
         self.facePose = facs.FacePoseTool()
@@ -145,4 +145,4 @@ def show():
 
 
 def show_in_maya():
-    show()
+    return show()

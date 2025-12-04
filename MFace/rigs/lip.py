@@ -101,10 +101,14 @@ def tooth_rig_fix():
     # dw_parent_con = cmds.parentConstraint('AdditiveToothDn_M', 'FollowToothDn_M', mo=True)
 
     # fit_parent(up_parent_con, dw_parent_con, 'MFaceConstraints')
-    # 设置牙齿控制器显示宽度,开启轴心显示
     ctrls = ['FCtrlToothUp_M', 'FCtrlToothDn_M']
+    # 设置牙齿控制器显示宽度,开启轴心显示,修正牙齿控制器形态，使其横平竖直
     for ctrl in ctrls:
         if cmds.objExists(ctrl):
+            follow_grp = ctrl.replace('FCtrl', 'Follow')
+            attr = cmds.getAttr(f'{follow_grp}.ry')
+            cmds.setAttr(f'{ctrl}.rz', -90-attr)
+            cmds.makeIdentity(ctrl, apply=True, t=True, r=True, s=True, n=0)
             cmds.setAttr('%s.displayRotatePivot' % ctrl, True)
             for shape in cmds.listRelatives(ctrl, s=True, typ='nurbsCurve') or []:
                 cmds.setAttr('%s.lineWidth' % shape, 1.5)

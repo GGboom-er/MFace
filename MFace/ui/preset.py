@@ -29,7 +29,6 @@ class IconButton(Image):
         pixmap = QPixmap(path).scaled(QImage(path).size())
         mask = pixmap.createMaskFromColor(Qt.transparent, Qt.MaskInColor)
         self.setMask(mask)
-        # self.setMask(QPixmap(path).mask().scaled(QImage(path).size()))
         self.setMouseTracking(True)
 
     def update_mode(self):
@@ -58,7 +57,7 @@ class IconButton(Image):
 
 
 class FitButton(IconButton):
-
+    update_build_button = Signal()
     def __init__(self, parent, path):
         IconButton.__init__(self, parent, path)
         self.path = path
@@ -67,18 +66,22 @@ class FitButton(IconButton):
 
     def is_fit_exist(self):
         name = os.path.basename(self.path).split(".")[0]
-        return cmds.objExists(name)
+        obj_name = name.replace('Button','Fit')
+        return cmds.objExists(obj_name)
 
     def update_mode(self):
         if self.mode in [QIcon.Disabled, QIcon.Normal]:
             if self.is_fit_exist():
                 self.mode = QIcon.Disabled
+                self.setWindowOpacity(1.0)
             else:
                 self.mode = QIcon.Normal
+                self.setWindowOpacity(0.4)
         self.update()
 
     def create_fit(self):
         tools.create_fit_by_png(self.path)
+        self.update_build_button.emit()
 
 
 class Preset(QDialog):
@@ -87,7 +90,19 @@ class Preset(QDialog):
     def __init__(self, preset="default"):
         QDialog.__init__(self, get_app())
         self.preset = preset
+        self.__fit_buttons = {}
+        self.__build_button = None
         self.build_children()
+
+
+    @property
+    def fit_buttons(self):
+        return self.__fit_buttons
+
+    @property
+    def build_button(self):
+        return self.__build_button
+
 
     def build_children(self):
         root = os.path.abspath("{}/../../data/presets/{}".format(__file__, self.preset)).replace("\\", "/")
@@ -99,18 +114,23 @@ class Preset(QDialog):
             if not name.endswith("png"):
                 continue
             button_path = os.path.join(root, name).replace("\\", "/")
-            FitButton(self, button_path)
+            fit_button = FitButton(self, button_path)
+            fit_button.update_build_button.connect(self.update_build_button)
+            self.__fit_buttons[name] = fit_button
 
         build_path = os.path.abspath("{}/../../data/presets/build.png".format(__file__)).replace("\\", "/")
-        build_button = IconButton(self, build_path)
-        build_button.setFixedSize(32, 32)
+        self.__build_button = IconButton(self, build_path)
+        self.build_button.setFixedSize(32, 32)
 
-        pixmap = QPixmap(build_path).scaled(QImage(build_path).size())
-        mask = pixmap.createMaskFromColor(Qt.transparent, Qt.MaskInColor)
-        build_button.setMask(mask)
-        # build_button.setMask(QPixmap(build_path).mask().scaled(32, 32))
-        build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
-        build_button.clicked.connect(self.build)
+        # 使用 PNG 自带的 Alpha Mask，而不是透明色
+        pix = QPixmap(build_path).scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.build_button.setMask(pix.mask())
+
+        # 放到最前层
+        self.build_button.raise_()
+        self.build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
+        self.build_button.clicked.connect(self.build)
+        self.update_build_button()
 
     def show_menu(self):
         menu = QMenu(self)
@@ -154,6 +174,15 @@ class Preset(QDialog):
         tools.preset.delete_preset(self.preset)
         self.presetDeleted.emit()
 
+    def update_build_button(self):
+        judge = False
+        for button in self.fit_buttons.values():
+            if not button.is_fit_exist():
+                judge = True
+                break
+        self.build_button.setHidden(judge)
+
+
 
 class CreatePreset(QDialog):
     presetCreated = Signal(str)
@@ -183,8 +212,9 @@ window = None
 
 def show():
     global window
-    window = Preset()
+    window = Preset('Face')
     window.showNormal()
+    return window
 
 
 

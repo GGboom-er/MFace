@@ -320,6 +320,9 @@ def fit_roll(name="Jaw"):
     cmds.toggle(roll, la=1)
     cmds.aimConstraint(roll, aim, o=[0, 0, 0], w=1, aimVector=[-1, 0, 0], upVector=[0, 1, 0], worldUpType='vector',
                        worldUpVector=[0, 1, 0])
+    for obj in [aim,roll]:
+        cmds.setAttr(f'{obj}.ove', True)
+        cmds.setAttr( f'{obj}.ovc', 17)
     cmds.select(roll)
     return aim, roll
 
@@ -424,6 +427,9 @@ class Fits(object):
         classify = name[len(pre):]
         cmds.createNode("transform", n=group, p=ROOT, ss=1)
         cmds.setAttr(f'{ROOT}.inheritsTransform', False)
+        base_joints = cmds.ls(sl=True, o=1, type="joint")
+        cls = globals()["fit_" + fit]
+        print(cls)
         nodes = globals()["fit_" + fit](group)
         nodes = nodes if isinstance(nodes, tuple) else [nodes]
         for node in nodes:
@@ -436,6 +442,11 @@ class Fits(object):
             fit_loc = cmds.listRelatives(group, c=True)
             if fit_loc:
                 core.correct_tongue_joint_axis(fit_loc[0])
+            if base_joints:
+                cmds.delete(base_joints)
+        if name == 'Brow' and rml == 'M':
+            for node in nodes:
+                cmds.setAttr(f'{node}.overrideColor', 17)
 
     def __getitem__(self, item):
         for row in self.data:
