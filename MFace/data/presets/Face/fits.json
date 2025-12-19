@@ -312,7 +312,7 @@
             ]
         ],
         "fit": "surface",
-        "rig": "surface",
+        "rig": "Surface",
         "pre": "Ear",
         "name": "Ear",
         "rml": "L"

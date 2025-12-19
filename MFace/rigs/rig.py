@@ -106,7 +106,7 @@ def set_jac_weights(clusters, joints, weights):
 
 def rig_main(name, matrix, joints, children=None):
     cluster, ctrl = add_cluster_ctrl(name, matrix, "main")
-    set_jac_weights([cluster], joints, [[1]*len(joints)])
+    set_jac_weights([cluster], joints, [[1] * len(joints)])
     if children:
         for child in children:
             child.parent_to(cluster)
@@ -148,13 +148,14 @@ def build_all():
     fit_grp = 'MFaceFits'
     if cmds.objExists(fit_grp):
         cmds.setAttr(f'{fit_grp}.v', 0)
-
+    connect_sub_ctrls_vis()
 
 
 def build_selected():
     rig_cls = get_rig_name_cls()
     for fits in Fits().selected().group("rig", "classify"):
         rig_cls[fits["rig"]](Fits().all().filter(rig=fits["rig"], classify=fits["classify"])).rebuild()
+    connect_sub_ctrls_vis()
 
 
 def delete_selected():
@@ -166,3 +167,22 @@ def delete_selected():
 def is_mirror(name):
     return name.endswith("_L")
 
+
+def connect_sub_ctrls_vis():
+    """
+    关联所有的次级控制器到指定的显隐控制属性上
+    """
+    vis_attr = 'VisibilityCtr.sub_facial_sys_vis'
+    if cmds.objExists(vis_attr):
+        ctrls = cmds.ls('FCtrl*_*', type='transform')
+        sub_ctrls = []
+        for ctrl in ctrls:
+            mat = re.match(r'FCtrl\w+\d+(\w+)?_\w', ctrl)
+            if mat:
+                sub_ctrls.append(ctrl)
+        for ctrl in ['FCtrlBrow_M', 'FCtrlNose_M', 'FCtrlToothUp_M', 'FCtrlToothDn_M']:
+            if cmds.objExists(ctrl):
+                if ctrl not in sub_ctrls:
+                    sub_ctrls.append(ctrl)
+        for ctrl in sub_ctrls:
+            cmds.connectAttr(vis_attr, f'{ctrl}.lodVisibility', f=True)

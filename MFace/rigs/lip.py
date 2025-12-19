@@ -107,13 +107,13 @@ def tooth_rig_fix():
         if cmds.objExists(ctrl):
             follow_grp = ctrl.replace('FCtrl', 'Follow')
             attr = cmds.getAttr(f'{follow_grp}.ry')
-            cmds.setAttr(f'{ctrl}.rz', -90-attr)
+            cmds.setAttr(f'{ctrl}.rz', -90 - attr)
             cmds.makeIdentity(ctrl, apply=True, t=True, r=True, s=True, n=0)
             cmds.setAttr('%s.displayRotatePivot' % ctrl, True)
             for shape in cmds.listRelatives(ctrl, s=True, typ='nurbsCurve') or []:
                 cmds.setAttr('%s.lineWidth' % shape, 1.5)
             for axis in 'xyz':
-                cmds.setAttr(f'{ctrl}.r{axis}',e=True,l=True,k=False)
+                cmds.setAttr(f'{ctrl}.r{axis}', e=True, l=True, k=False)
     # 隐藏下颌控制器
     ctrl = 'FollowJaw_M'
     if cmds.objExists(ctrl):
