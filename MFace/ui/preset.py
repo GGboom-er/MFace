@@ -89,10 +89,10 @@ class FitButton(IconButton):
         if self.mode in [QIcon.Disabled, QIcon.Normal]:
             if self.is_fit_exist():
                 self.setWindowOpacity(1.0)
-                self._fit_locked = True
+                # self._fit_locked = True
             else:
                 self.setWindowOpacity(0.4)
-                self._fit_locked = False
+                # self._fit_locked = False
         self.update()
 
     def create_fit(self):
