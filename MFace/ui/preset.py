@@ -12,17 +12,17 @@ class Image(QWidget):
         self.icon = QIcon(path)
         self.setFixedSize(QImage(path).size())
         self.mode = QIcon.Normal
-        self._fit_locked = False
+        self._fit_loaded = False
         self._auto_update = auto_update
         self.path = path
 
     def paintEvent(self, event):
         painter = QPainter(self)
         if self._auto_update:
-            if self._fit_locked:
+            if self._fit_loaded:
                 painter.setOpacity(1.0)
             else:
-                painter.setOpacity(0.6)
+                painter.setOpacity(0.4)
         painter.drawPixmap(0, 0, self.width(), self.height(), self.icon.pixmap(self.width(), self.height(), self.mode))
         painter.end()
 
@@ -42,30 +42,22 @@ class IconButton(Image):
         self.update()
 
     def mousePressEvent(self, event):
-        if self._fit_locked:
-            return
         super(IconButton, self).mousePressEvent(event)
         self.mode = QIcon.Selected
         self.update_mode()
 
     def mouseReleaseEvent(self, event):
-        if self._fit_locked:
-            return
         super(IconButton, self).mouseReleaseEvent(event)
         self.mode = QIcon.Normal
         self.clicked.emit()
         self.update_mode()
 
     def enterEvent(self, event):
-        if self._fit_locked:
-            return
         super(IconButton, self).enterEvent(event)
         self.mode = QIcon.Active
         self.update_mode()
 
     def leaveEvent(self, event):
-        if self._fit_locked:
-            return
         super(IconButton, self).leaveEvent(event)
         self.mode = QIcon.Normal
         self.update_mode()
@@ -89,10 +81,10 @@ class FitButton(IconButton):
         if self.mode in [QIcon.Disabled, QIcon.Normal]:
             if self.is_fit_exist():
                 self.setWindowOpacity(1.0)
-                # self._fit_locked = True
+                self._fit_loaded = True
             else:
                 self.setWindowOpacity(0.4)
-                # self._fit_locked = False
+                self._fit_loaded = False
         self.update()
 
     def create_fit(self):
