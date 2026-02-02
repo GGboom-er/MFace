@@ -6,20 +6,26 @@ from . import fit
 from . import preset
 
 
+window = None
+
+
 class MFaceMain(QDialog):
 
     def __init__(self):
         QDialog.__init__(self, get_app())
         self.tab = QTabWidget(self)
         self.setLayout(q_add(QVBoxLayout(), self.tab))
-        self.setWindowTitle(u"MFace2.0.2")
+        self.setWindowTitle(u"MFace2.0")
         self.fit = fit.FitCreateTool()
         self.cluster = cluster.ClusterTool()
         self.facePose = facs.FacePoseTool()
         self.tab.addTab(self.fit, u"绑定")
         self.tab.addTab(self.cluster, u"跟随")
         self.tab.addTab(self.facePose, u"姿势")
-        self.setFont(QFont(u"楷体", 12))
+        font = QFont(u"楷体", 12)
+        if not font.exactMatch():
+            font = QFont("Arial", 10)
+        self.setFont(font)
         self.update_presets()
         self.tab.currentChanged.connect(self.change_tab)
         self.change_tab(0)
@@ -29,7 +35,10 @@ class MFaceMain(QDialog):
     def save_preset(self):
         create_ui = preset.CreatePreset(self)
         create_ui.presetCreated.connect(self.update_preset)
-        create_ui.exec_()
+        if hasattr(create_ui, "exec"):
+            create_ui.exec()
+        else:
+            create_ui.exec_()
 
     def change_tab(self, index):
         base_size = QSize(320, 20)
@@ -42,7 +51,7 @@ class MFaceMain(QDialog):
             self.resize(base_size)
             self.facePose.load()
         else:
-            self.resize(480, 640 + 24)
+            self.resize(480, 640+24)
 
     def update_presets(self):
         for i in range(3, self.tab.count()):
@@ -64,11 +73,8 @@ class MFaceMain(QDialog):
 
 
 def show():
-    from maya import cmds
-    window_name = 'MFaceWindow'
-    if cmds.window(window_name, ex=True):
-        cmds.deleteUI(window_name)
-    window = MFaceMain()
-    window.setObjectName(window_name)
+    global window
+    if window is None:
+        window = MFaceMain()
     window.showNormal()
-    return window
+

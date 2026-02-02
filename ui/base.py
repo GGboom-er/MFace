@@ -1,12 +1,59 @@
 # coding:utf-8
 try:
-    from PySide2.QtGui import *
-    from PySide2.QtWidgets import *
-    from PySide2.QtCore import *
-except: # newer DCC versions
     from PySide6.QtGui import *
     from PySide6.QtWidgets import *
     from PySide6.QtCore import *
+    QRegExp = QRegularExpression
+    QRegExpValidator = QRegularExpressionValidator
+
+    # PySide6 Compatibility Patch
+    def _patch(cls, name, value):
+        if not hasattr(cls, name):
+            setattr(cls, name, value)
+
+    if hasattr(QCompleter, 'CompletionMode'):
+        _patch(QCompleter, 'UnfilteredPopupCompletion', QCompleter.CompletionMode.UnfilteredPopupCompletion)
+
+    if hasattr(Qt, 'Orientation'):
+        _patch(Qt, 'Horizontal', Qt.Orientation.Horizontal)
+        _patch(Qt, 'Vertical', Qt.Orientation.Vertical)
+    if hasattr(Qt, 'AlignmentFlag'):
+        _patch(Qt, 'AlignRight', Qt.AlignmentFlag.AlignRight)
+    if hasattr(Qt, 'ContextMenuPolicy'):
+        _patch(Qt, 'CustomContextMenu', Qt.ContextMenuPolicy.CustomContextMenu)
+    if hasattr(Qt, 'BrushStyle'):
+        _patch(Qt, 'SolidPattern', Qt.BrushStyle.SolidPattern)
+    if hasattr(Qt, 'PenStyle'):
+        _patch(Qt, 'SolidLine', Qt.PenStyle.SolidLine)
+        _patch(Qt, 'DotLine', Qt.PenStyle.DotLine)
+        _patch(Qt, 'DashLine', Qt.PenStyle.DashLine)
+    if hasattr(Qt, 'Key'):
+        _patch(Qt, 'Key_X', Qt.Key.Key_X)
+    if hasattr(Qt, 'KeyboardModifier'):
+        _patch(Qt, 'ControlModifier', Qt.KeyboardModifier.ControlModifier)
+        
+    if hasattr(QIcon, 'Mode'):
+        _patch(QIcon, 'Normal', QIcon.Mode.Normal)
+        _patch(QIcon, 'Disabled', QIcon.Mode.Disabled)
+        _patch(QIcon, 'Active', QIcon.Mode.Active)
+        _patch(QIcon, 'Selected', QIcon.Mode.Selected)
+        
+    if hasattr(QAbstractItemView, 'SelectionMode'):
+        _patch(QAbstractItemView, 'ExtendedSelection', QAbstractItemView.SelectionMode.ExtendedSelection)
+        _patch(QListWidget, 'ExtendedSelection', QAbstractItemView.SelectionMode.ExtendedSelection)
+        _patch(QListWidget, 'SingleSelection', QAbstractItemView.SelectionMode.SingleSelection)
+        _patch(QListWidget, 'MultiSelection', QAbstractItemView.SelectionMode.MultiSelection)
+        _patch(QListWidget, 'NoSelection', QAbstractItemView.SelectionMode.NoSelection)
+        _patch(QListWidget, 'ContiguousSelection', QAbstractItemView.SelectionMode.ContiguousSelection)
+
+except ImportError:
+    try:
+        from PySide2.QtGui import *
+        from PySide2.QtWidgets import *
+        from PySide2.QtCore import *
+    except ImportError:
+        from PySide.QtGui import *
+        from PySide.QtCore import *
 import re
 from .. import tools
 
@@ -81,22 +128,27 @@ class List(QListWidget):
 
     def __init__(self, parent=None):
         QListWidget.__init__(self, parent)
-        self.setSelectionMode(QAbstractItemView.ExtendedSelection )
+        mode = getattr(QAbstractItemView, 'ExtendedSelection', None)
+        if mode is None and hasattr(QAbstractItemView, 'SelectionMode'):
+             mode = QAbstractItemView.SelectionMode.ExtendedSelection
+        self.setSelectionMode(mode)
         self.menu = QMenu(self)
         self.text = ""
 
     def contextMenuEvent(self, event):
-        self.menu.exec_(event.globalPos())
+        if hasattr(self.menu, "exec"):
+            self.menu.exec(event.globalPos())
+        else:
+            self.menu.exec_(event.globalPos())
 
     def filter(self, text):
         fields = [field.replace("*", ".+") for field in text.split(",") if field]
         for i in range(self.count()):
-            if not any([bool(re.findall(field, self.item(i).text())) for field in fields]+[not bool(fields)]):
-                self.setRowHidden(self.row(self.item(i)), True)
-            else:
-                self.setRowHidden(self.row(self.item(i)), False)
-            if text == self.item(i).text():
-                self.setItemSelected(self.item(i), True)
+            item = self.item(i)
+            should_hide = not any([bool(re.findall(field, item.text())) for field in fields]+[not bool(fields)])
+            item.setHidden(should_hide)
+            if text == item.text():
+                item.setSelected(True)
 
     def current_name(self):
         names = self.selected_names()

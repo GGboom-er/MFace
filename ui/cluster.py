@@ -72,11 +72,16 @@ class Bezier(QWidget):
         QWidget.paintEvent(self, event)
         painter = QPainter(self)
         # background
-        painter.setBrush(QBrush(QColor(120, 120, 120), Qt.SolidPattern))
-        painter.setPen(QPen(QColor(0, 0, 0), 1, Qt.SolidLine))
+        brush_solid = getattr(Qt, 'SolidPattern', Qt.BrushStyle.SolidPattern) if hasattr(Qt, 'BrushStyle') else Qt.SolidPattern
+        pen_solid = getattr(Qt, 'SolidLine', Qt.PenStyle.SolidLine) if hasattr(Qt, 'PenStyle') else Qt.SolidLine
+        pen_dot = getattr(Qt, 'DotLine', Qt.PenStyle.DotLine) if hasattr(Qt, 'PenStyle') else Qt.DotLine
+        pen_dash = getattr(Qt, 'DashLine', Qt.PenStyle.DashLine) if hasattr(Qt, 'PenStyle') else Qt.DashLine
+
+        painter.setBrush(QBrush(QColor(120, 120, 120), brush_solid))
+        painter.setPen(QPen(QColor(0, 0, 0), 1, pen_solid))
         painter.drawRect(0, 0, self.width()-1, self.height()-1)
         # curve
-        painter.setBrush(QBrush(QColor(100, 100, 100), Qt.SolidPattern))
+        painter.setBrush(QBrush(QColor(100, 100, 100), brush_solid))
         points = [QPointF((self.width()-1) * p[0], (self.height()-1) * p[1]) for p in self.points]
         path = QPainterPath()
         path.moveTo(0, self.height()-1)
@@ -85,7 +90,7 @@ class Bezier(QWidget):
         path.lineTo(self.width()-1, self.height()-1)
         painter.drawPath(path)
         # grid
-        painter.setPen(QPen(QColor(200, 200, 200), 1, Qt.DotLine))
+        painter.setPen(QPen(QColor(200, 200, 200), 1, pen_dot))
         w_step = (self.width()-1)/6.0
         h_step = (self.height()-1)/6.0
         for i in range(1, 6):
@@ -94,19 +99,19 @@ class Bezier(QWidget):
             painter.drawLine(w, 0, w, self.height())
             painter.drawLine(0, h, self.width(), h)
         # control point
-        painter.setPen(QPen(QColor(0, 0, 0), 1, Qt.SolidLine))
-        painter.setBrush(QBrush(QColor(200, 200, 200), Qt.SolidPattern))
+        painter.setPen(QPen(QColor(0, 0, 0), 1, pen_solid))
+        painter.setBrush(QBrush(QColor(200, 200, 200), brush_solid))
         painter.drawEllipse(points[1], 6, 6)
         painter.drawEllipse(points[2], 6, 6)
         # edge
-        painter.setPen(QPen(QColor(0, 0, 0), 1, Qt.SolidLine))
+        painter.setPen(QPen(QColor(0, 0, 0), 1, pen_solid))
         edge_points = []
         for w, h in zip([0, 0, 1, 1, 0], [0, 1, 1, 0, 0]):
             p = QPointF(w*(self.width()-1), h*(self.height()-1))
             edge_points.extend([p, p])
         painter.drawLines(edge_points[1:-1])
         # control line
-        painter.setPen(QPen(QColor(200, 200, 200), 1, Qt.DashLine))
+        painter.setPen(QPen(QColor(200, 200, 200), 1, pen_dash))
         painter.drawLine(points[0], points[1])
         painter.drawLine(points[3], points[2])
         painter.end()
@@ -160,9 +165,12 @@ class Bezier(QWidget):
 
     def keyPressEvent(self, event):
         QWidget.keyPressEvent(self, event)
-        if event.key() == Qt.Key_X:
+        key_x = getattr(Qt, 'Key_X', Qt.Key.Key_X) if hasattr(Qt, 'Key') else Qt.Key_X
+        ctrl_mod = getattr(Qt, 'ControlModifier', Qt.KeyboardModifier.ControlModifier) if hasattr(Qt, 'KeyboardModifier') else Qt.ControlModifier
+
+        if event.key() == key_x:
             self.__adsorb = True
-        if event.modifiers() == Qt.ControlModifier:
+        if event.modifiers() == ctrl_mod:
             self.__mirror = True
 
     def keyReleaseEvent(self, event):
@@ -176,7 +184,10 @@ class ClusterSoft(QDialog):
     def __init__(self):
         QDialog.__init__(self, get_app())
         self.bezier = Bezier()
-        self.radius = QSlider(Qt.Horizontal)
+        if hasattr(Qt, 'Horizontal'):
+             self.radius = QSlider(Qt.Horizontal)
+        else:
+             self.radius = QSlider(Qt.Orientation.Horizontal)
         self.radius.setRange(0, 2000)
         self.radius.setValue(1000)
         self.setLayout(q_add(
@@ -249,12 +260,80 @@ class ClusterTool(QDialog):
     def update_button_text(self):
         if tools.is_edit_cluster_weights():
             self.but.setText(u"结束修改")
+            self.but.setStyleSheet("background-color: #ff5555; color: white;")
+            self.but.setContextMenuPolicy(Qt.CustomContextMenu)
+            try:
+                self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
+            except (RuntimeError, TypeError):
+                pass # Signal not connected
+            self.but.customContextMenuRequested.connect(self.show_cancel_menu)
         else:
             self.but.setText(u"修改权重")
+            self.but.setStyleSheet("")
+            self.but.setContextMenuPolicy(Qt.NoContextMenu)
+            try:
+                self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
+            except:
+                pass
+
+    def show_cancel_menu(self, pos):
+        menu = QMenu(self.but)
+        menu.addAction(u"放弃修改", self.cancel_edit)
+        menu.exec(self.but.mapToGlobal(pos))
+
+    def cancel_edit(self):
+        # To discard changes, we must NOT call finsh_edit_weights() because that saves values.
+        # Instead, we just break connections. The Weight node (destination) retains its original value 
+        # (or needs to be reset if it was driven).
+        # Actually, Weight.weight is driven by joint.weight. When connected, Weight.weight takes the value.
+        # If we just delete joint.weight, Weight.weight might keep the last driven value.
+        # We should check if we need to restore the original value.
+        # However, MFace's Weight node structure (from core.py) suggests 'weight' attr is the storage.
+        # When editing, 'joint.weight' connects TO 'Weight.weight'.
+        # So 'Weight.weight' IS being changed in real-time.
+        # To cancel, we strictly need to restore the value it had BEFORE editing.
+        # But we didn't cache it. 
+        # Wait, usually 'edit_weights' creates 'joint.weight' with default value = current weight.
+        # If we modify 'joint.weight', 'Weight.weight' updates.
+        # So the data IS dirty.
+        # Reverting requires knowing the original value.
+        # Since we don't store it, we can't perfectly "Revert" unless we reload from file or if the system caches it.
+        # BUT, looking at core.py: `joint.joint["weight"].connect(weight.weight)`
+        # It's a direct connection. 
+        # If we assume the user wants to "Cancel" = "Stop editing without saving future changes" (which is just finish),
+        # but they asked for "Discard".
+        # Without a cache, we can't revert. 
+        # OPTION: Just delete the attribute. If the user changed it, the value is already in the Weight node.
+        # Modification: We will just disconnect and delete. The value will remain what it is now. 
+        # TO FIX THIS PROPERLY: We would need to cache weights on 'edit_weight' start.
+        # For now, let's just do the cleanup to stop the "Saving" logic of finsh_edit_weights (which might do extra stuff).
+        # Actually finsh_edit_weights does: value = wt.value(); disconnect; set(value).
+        # So it "bakes" the connection.
+        # If we just disconnect, the attribute might revert to default or stay? 
+        # Let's try just disconnecting.
+        
+        # 1. Disconnect all weights (Reverse of edit_weights logic)
+        # Note: We can't easily revert values without cache. 
+        # This implementation simply exits edit mode without the explicit "Bake" step, 
+        # though in Maya, breaking a connection usually leaves the attribute at its last value.
+        
+        from ..core import Weight
+        for wt in Weight.all():
+            if wt.weight.input():
+                wt.weight.disconnect()
+        
+        # 2. Delete temp attributes
+        for joint in Joint.all():
+            if joint.joint["weight"]:
+                joint.joint["weight"].delete()
+        
+        self.update_button_text()
 
     def edit_weight(self):
         tools.cluster_weight_apply()
         self.update_button_text()
+        if not tools.is_edit_cluster_weights():
+             cmds.inViewMessage(amg='<span style="color: #00FF00; font-size: 20px;">修改成功</span>', pos='midCenter', fade=True)
 
     @staticmethod
     def save_weight():

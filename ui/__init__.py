@@ -2,9 +2,6 @@ try:
     from importlib import reload
 except ImportError:
     pass
-
-from .. import rigs
-reload(rigs)
 from . import base
 from . import cluster
 from . import fit

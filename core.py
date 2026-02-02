@@ -8,7 +8,11 @@ from maya import cmds
 
 
 def filter_pres(names, pres):
-    names = [name for name in names if all([cmds.objExists(pre + name) for pre in pres])]
+    if not isinstance(names, list):
+        names = [] if names is None else [names]
+    if not isinstance(pres, list):
+        pres = [] if pres is None else [pres]
+    names = [name for name in names if name and all([cmds.objExists(pre+name) for pre in pres])]
     return sorted(set(names), key=names.index)
 
 
@@ -31,7 +35,7 @@ class Fmt(object):
     @staticmethod
     def restore_core_rml(fmt, name):
         # 将自定义的命名规范 转化成 默认命名规范{core}_{rml}
-        regx = "^" + fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)") + "$"
+        regx = "^"+fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)")+"$"
         match = re.match(regx, name)
         if not match:
             return
@@ -41,7 +45,7 @@ class Fmt(object):
     def selected_restore_names(fmt, typ):
         filter_name = fmt.format(core="*", rml="*")
         names = cmds.ls(filter_name, sl=1, type=typ)
-        return [Fmt.restore_core_rml(fmt, name) for name in names]
+        return [name for name in [Fmt.restore_core_rml(fmt, name) for name in names] if name is not None]
 
     def get_name(self, fmt, **kwargs):
         # 临时更新data属性，生成
@@ -90,7 +94,7 @@ class Fmt(object):
         return m_rml
 
     def update_ud(self):
-        uds = [self.data["ud"]] * self.data["count"]
+        uds = [self.data["ud"]]*self.data["count"]
         if not uds:
             return uds
         if self.data["merge_ud"]:
@@ -143,12 +147,18 @@ class Face(Hierarchy):
         return self
 
     def add_joint_fmt(self):
+        # Ensure 'Fit' node exists
+        if not self["Fit"]:
+             return
         if self["Fit"]["joint_fmt"]:
             return
         self["Fit"]["joint_fmt"].add(dt="string")
-        self["Fit"]["joint_fmt"].set("{core}Jnt_{rml}", type="string")
+        self["Fit"]["joint_fmt"].set("{core}_{rml}", type="string")
 
     def add_ctrl_fmt(self):
+        # Ensure 'Fit' node exists
+        if not self["Fit"]:
+             return
         if self["Fit"]["ctrl_fmt"]:
             return
         self["Fit"]["ctrl_fmt"].add(dt="string")
@@ -183,9 +193,6 @@ class Ctrl(Hierarchy):
         self.ctrl = Node(Fmt.fmt_name(Face().ctrl_fmt(), name))
         self.nodes["FCtrl"] = self.ctrl
         self.output = self["NoFlip"] if self.is_flip() else self.ctrl
-
-    def get_ctrl_name(self):
-        pass
 
     def __bool__(self):
         return all([self.ctrl, self.follow])
@@ -273,12 +280,11 @@ class Ctrl(Hierarchy):
             now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
             old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o + b - n for n, b, o in zip(now_point, bind_point, old_offset)]
+            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
-        print(self.name, '*' * 50)
-        pin = Node(name="Pin" + self.name, parent="MFacePins").get()
+        pin = Node(name="Pin"+self.name, parent="MFacePins").get()
         pin.xform(ws=1, m=self.follow["bindPreMatrix"].get())
         Cons.point(pin, self.follow, mo=0)
         pin["inheritsTransform"] = False
@@ -288,23 +294,26 @@ class Ctrl(Hierarchy):
     def add_pins(cls):
         Face().build("Pin")
         unfollows = set()
-        for rig in cmds.ls("MFaceRigs|RigFk*") or []:
-            for attr in cmds.listAttr(rig, ud=1):
-                if not cmds.getAttr(rig + "." + attr, type=1) == "bool":
-                    continue
-                if not attr.startswith("Ctrl"):
-                    continue
-                unfollows.add(attr[len("Ctrl"):])
+
+        # for rig in cmds.ls("MFaceRigs|RigFk*") or []:
+        #     for attr in cmds.listAttr(rig, ud=1):
+        #         if not cmds.getAttr(rig+"."+attr, type=1) == "bool":
+        #             continue
+        #         if not attr.startswith("Ctrl"):
+        #             continue
+        #         unfollows.add(attr[len("Ctrl"):])
 
         def is_follow(_ctrl):
             if _ctrl.name in unfollows:
                 return False
-            if _ctrl.name.startswith('Tongue') or _ctrl.name.startswith('Tooth'):
-                return False
             if not _ctrl["Inverse"]:
+                return False
+            if _ctrl.get_typ() in ["fk", "eye_fk"]:
                 return False
             return True
 
+        for ctrl in filter(is_follow, cls.all()):
+            print (ctrl.name)
         return [ctrl.add_pin() for ctrl in filter(is_follow, cls.all())]
 
     @classmethod
@@ -379,12 +388,9 @@ class Ctrl(Hierarchy):
         return self
 
     def follow_joint(self, src):
-        try:
-            Cons.point(src, self.follow)
-            if self.follow_rotate:
-                Cons.orient(src, self.follow)
-        except:
-            pass
+        Cons.point(src, self.follow)
+        if self.follow_rotate:
+            Cons.orient(src, self.follow)
         return self
 
     def follow_joints(self, joints, weights):
@@ -395,6 +401,19 @@ class Ctrl(Hierarchy):
         wal = Cons.point(names, self.follow)
         for w, attr in zip(weights, wal):
             attr.set(w)
+
+    def get_typ(self):
+        self.follow["typ"].add(dt="string")
+        return self.follow["typ"].get()
+
+    def set_typ(self, typ):
+        self.follow["typ"].add(dt="string")
+        return self.follow["typ"].set(typ)
+
+    @staticmethod
+    def set_all_typ(ctrls, typ):
+        for ctrl in ctrls:
+            ctrl.set_typ(typ)
 
     @staticmethod
     def add_ctrl(name, matrix, follow_translate, follow_rotate, **kwargs):
@@ -458,8 +477,7 @@ class Joint(Hierarchy):
         Hierarchy.__init__(self, name, Face()["Additive"])
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy + xyz + self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in
-                    "XYZ"]
+        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
 
     def get(self):
         Face.build_callable(self)
@@ -514,7 +532,7 @@ class Joint(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = "_W_" + self.name
+        pre = "_W_"+self.name
         for attr in Cluster.weight_names():
             if not attr.endswith(pre):
                 continue
@@ -527,7 +545,7 @@ class Joint(Hierarchy):
         delete_nodes([bw.name for bw in self.bws])
         matrix = self.additive["bindPreMatrix"].get()
         Hierarchy.delete(self)
-        if self.joint and matrix:
+        if self.joint:
             self.joint.xform(ws=1, m=matrix)
             self.joint["v"] = 0
             cons = cmds.listConnections(self.joint.name, s=0, d=1) or []
@@ -547,7 +565,7 @@ class Joint(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         joint_names = Fmt.selected_restore_names(Face().joint_fmt(), "joint")
-        names = filter_pres(ctrl_names + joint_names, ["Additive", "Port"])
+        names = filter_pres(ctrl_names+joint_names, ["Additive", "Port"])
         return [cls(name) for name in names]
 
     @classmethod
@@ -619,7 +637,7 @@ class Weight(Hierarchy):
     def get(self):
         exp = self.exp()
         self.weight.add(min=0, max=1, at="double", k=1)
-        defaults = [[self.joint.bws[i + j].default for j in range(3)] for i in range(0, 9, 3)]
+        defaults = [[self.joint.bws[i+j].default for j in range(3)] for i in range(0, 9, 3)]
         pxy = [exp.p_mul_mat(defaults[0], self.cluster.transform),
                exp.v_mul_mat(defaults[1], self.cluster.transform),
                exp.v_mul_mat(defaults[2], self.cluster.transform)]
@@ -677,7 +695,7 @@ class Cluster(Hierarchy):
         return self
 
     def parent_to(self, other):
-        exp = Exp(self.name + "ParentLink")
+        exp = Exp(self.name+"ParentLink")
         t, r = exp.de_mat(exp.mul_mat(self.pre["bindPreMatrix"], other.transform))
         self.pre["t"] = t
         self.pre["r"] = r
@@ -691,7 +709,7 @@ class Cluster(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = self.name + "_W_"
+        pre = self.name+"_W_"
         for attr in Cluster.weight_names():
             if not attr.startswith(pre):
                 continue
@@ -765,7 +783,7 @@ class Cluster(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         cluster_names = [name[7:] for name in cmds.ls("Cluster*", sl=1, type="transform")]
-        names = filter_pres(cluster_names + ctrl_names, ["Pre"])
+        names = filter_pres(cluster_names+ctrl_names, ["Pre"])
         return [cls(name) for name in names]
 
     def cache_distances(self):
@@ -784,102 +802,3 @@ class Cluster(Hierarchy):
             cluster = cls(name)
             if cluster:
                 cluster.set_weight_data(row)
-
-
-def correct_tongue_joint_axis(root):
-    children = cmds.listRelatives(root, c=True, typ='transform')
-    if children:
-        cmds.parent(children, w=True)
-        cmds.delete(cmds.aimConstraint(children[0], root, offset=[0, 0, 0], aimVector=[1, 0, 0], upVector=[0, 1, 0],
-                                       worldUpType='scene'))
-        cmds.makeIdentity(root, r=True, a=True)
-        cmds.parent(children, root)
-        for child in children:
-            correct_tongue_joint_axis(child)
-    else:
-        par_node = cmds.listRelatives(root, p=True)[0]
-        cmds.delete(cmds.orientConstraint(par_node, root, o=[0, 0, 0]))
-
-
-def get_uv_parameter(mesh, obj):
-    u, v = 0, 0
-    meshes = cmds.listRelatives(mesh, s=True, ni=True, typ='mesh')
-    if meshes:
-        loc = cmds.spaceLocator()
-        loc_shape = cmds.listRelatives(loc, s=True)[0]
-        cmds.delete(cmds.pointConstraint(obj, loc, o=[0, 0, 0]))
-        node = cmds.createNode('closestPointOnMesh')
-        cmds.connectAttr(f'{meshes[0]}.worldMesh[0]', f'{node}.inMesh', f=True)
-        cmds.connectAttr(f'{loc_shape}.worldPosition[0]', f'{node}.inPosition', f=True)
-        u = cmds.getAttr(f'{node}.parameterU')
-        v = cmds.getAttr(f'{node}.parameterV')
-        cmds.delete(loc, node)
-    return u, v
-
-
-def check_uv_pin(mesh):
-    pin_node = f"{mesh}_UVPin"
-    if not cmds.objExists(pin_node):
-        uv_sets = cmds.polyUVSet(mesh, query=True, allUVSets=True)
-        if uv_sets:
-            meshes = cmds.listRelatives(mesh, s=True, ni=True, typ='mesh')
-            all_meshes = cmds.listRelatives(mesh, s=True, ni=False, typ='mesh')
-            pre_meshes = [x for x in all_meshes if x not in meshes]
-            if pre_meshes:
-                pre_mesh = pre_meshes[0]
-            else:
-                new_mesh = cmds.duplicate(mesh)
-                pre_mesh = cmds.listRelatives(new_mesh, s=True, ni=True, typ='mesh')[0]
-                cmds.parent(pre_mesh, mesh, s=True, r=True)
-                cmds.setAttr(f'{pre_mesh}.intermediateObject', 1)
-                pre_mesh = cmds.rename(pre_mesh, f'{meshes[0]}Orig')
-                cmds.delete(new_mesh)
-            pin_node = cmds.createNode('uvPin', n=pin_node)
-            cmds.connectAttr(f'{meshes[0]}.worldMesh[0]', f'{pin_node}.deformedGeometry', f=True)
-            cmds.connectAttr(f'{pre_mesh}.outMesh', f'{pin_node}.originalGeometry', f=True)
-            cmds.setAttr(f'{pin_node}.normalAxis', 0)
-            cmds.setAttr(f'{pin_node}.tangentAxis', 1)
-            cmds.setAttr(f'{pin_node}.uvSetName', uv_sets[0], typ='string')
-            cmds.setAttr(f'{pin_node}.normalizedIsoParms', 1)
-    return pin_node
-
-
-def create_uv_pin(mesh, obj, loc=None):
-    loc = loc or obj
-    pin_node = check_uv_pin(mesh)
-    offset = [0, 0, 0]
-    # if obj!=loc:
-    #     base_pos = cmds.xform(loc, q=True, ws=True, t=True)
-    #     target_pos = cmds.xform(obj, q=True, ws=True, t=True)
-    #     offset = [y - x for x, y in zip(target_pos, base_pos)]
-    if pin_node:
-        u, v = get_uv_parameter(mesh, loc)
-
-        pre_cons = cmds.listConnections(f'{obj}.offsetParentMatrix', s=True, d=False, type='uvPin', p=True)
-        judge = False
-        index = 0
-        if pre_cons:
-            if pre_cons[0].split('.')[0] == pin_node:
-                index = int(pre_cons[0].split('[')[-1].split(']')[0])
-                judge = True
-        if not judge:
-            values = cmds.ls(f'{pin_node}.coordinate[*]')
-            if values:
-                index = int(values[-1].split('[')[-1].split(']')[0]) + 1
-        cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateU', u)
-        cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateV', v)
-        if not judge:
-            cmds.connectAttr(f'{pin_node}.outputMatrix[{index}]', f'{obj}.offsetParentMatrix', f=True)
-        cmds.setAttr(f'{obj}.t', *offset, typ='double3')
-        cmds.setAttr(f'{obj}.r', 0, 0, 0, typ='double3')
-    return pin_node
-
-
-def create_uv_pins(mesh, pins):
-    pin_nodes = []
-    for pin in pins:
-        if pin not in ['PinEye_L', 'PinEye_R']:
-            pin_nodes.append(create_uv_pin(mesh, pin))
-        else:
-            cmds.setAttr(f'{pin}.inheritsTransform', True)
-    return pin_nodes

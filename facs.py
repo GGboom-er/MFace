@@ -204,7 +204,7 @@ def get_base_sdk_data(target_name):
         return
     uu = uu[0]
     attr = cmds.listConnections(uu, s=1, d=0, p=1)
-    if len(attr) != 1:
+    if not attr or len(attr) != 1:
         return
     attr = attr[0]
     ctrl, attr = attr.split(".")
@@ -218,29 +218,77 @@ def get_base_sdk_data(target_name):
         attr = attr[0]
         ctrl, attr = attr.split(".")
         attr = cmds.attributeQuery(attr, sn=1, n=ctrl)
-    if target_name[-4:] == "_max":
-        value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
-        default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
-    else:
-        value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
-        default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
+    
+    # Robustly find default value: Find the keyframe where the Driven Value (Target Weight) is 0.
+    # The animCurve maps Driver Value (Time) -> Driven Value (Value).
+    # We want the Time when Value is 0.
+    count = cmds.keyframe(uu, q=1, keyframeCount=1)
+    default_value = 0.0
+    value = 0.0
+    found_default = False
+    
+    for i in range(count):
+        t = cmds.keyframe(uu, index=(i,i), q=1, fc=1)[0] # Driver Value
+        v = cmds.keyframe(uu, index=(i,i), q=1, vc=1)[0] # Driven Value (Weight)
+        
+        if abs(v) < 0.001: # Weight is 0 -> Default
+            default_value = t
+            found_default = True
+        elif abs(v - 1.0) < 0.001: # Weight is 1 -> Active
+            value = t
+    
+    # Fallback for legacy/manual setups if 0/1 logic isn't clean
+    if not found_default:
+        # Revert to index based guess if we couldn't find a clear 0 weight key
+        if target_name.endswith("_min"):
+             default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
+             value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
+        else:
+             # Default assumption (like _max)
+             default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
+             value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
+
     return ctrl, attr, default_value, value
 
 
 def reset_all():
+    bridge = get_bridge()
     for base_target in get_base_targets(get_targets()):
         if not exist_target(base_target):
             continue
-        ctrl, attr, default_value, _ = get_base_sdk_data(base_target)
-        rest_ctrl(ctrl)
-        cmds.setAttr(ctrl+"."+attr, default_value)
+        data = get_base_sdk_data(base_target)
+        if not data:
+            # Safety: If controller link is broken, force reset the weight on the bridge
+            # to ensure the mesh isn't stuck in a deformed state.
+            try:
+                cmds.setAttr(bridge + "." + base_target, 0)
+            except:
+                pass
+            continue
+        ctrl, attr, default_value, _ = data
+        try:
+            rest_ctrl(ctrl)
+            # Optimization: Only force the controller to the specific default_value (from SDK)
+            # if the current reset state (0) results in a non-zero weight.
+            # This handles cases like clamped ranges (e.g. 0 to -0.85 is dead zone) 
+            # where we prefer the controller to stay at 0 rather than jumping to -0.85.
+            current_weight = cmds.getAttr(bridge + "." + base_target)
+            if abs(current_weight) > 0.001:
+                cmds.setAttr(ctrl+"."+attr, default_value)
+        except:
+            pass
 
 
 def set_pose_by_target(target_name, ib):
     _, _ib = target_to_base_ib(target_name)
     for base_target in get_base_targets([target_name]):
-        ctrl, attr, default_value, value = get_base_sdk_data(base_target)
-        cmds.setAttr(ctrl+"."+attr, value*float(_ib)/60.0*float(ib)/60.0)
+        data = get_base_sdk_data(base_target)
+        if not data:
+            continue
+        ctrl, attr, default_value, value = data
+        ratio = float(_ib)/60.0 * float(ib)/60.0
+        current_value = default_value + (value - default_value) * ratio
+        cmds.setAttr(ctrl+"."+attr, current_value)
 
 
 def set_pose_by_targets(target_names, ib=60, reset_other=True):

@@ -1,29 +1,44 @@
 import functools
 from .rig import *
-from .surface import rig_surface
+from .surface import update_fit_surface_curve_data
 
 
 class Loop(RigSystem):
     fit_configs = dict(Loop=dict(pre="", fit="loop_surface", names=["Orbita", "LipOut"], rml="RML"))
-    fit_kwargs = [(dict(), dict(cluster=4, joint=12, degree=2))]
+    fit_kwargs = [(dict(), dict(cluster=3, joint=12, degree=2))]
 
     def rig_rml(self, fits):
-        fit = fits.find(suf="Surface")
-        close = cmds.getAttr(fit["node"] + ".fu")
-        if fit["joint"] < 0:
-            up_points = get_fit_cv_points(fits.find(suf="Up")["node"], fit["mirror"])
-            up_us = get_us_by_points(up_points)
-            up_us = [u*0.5 for u in up_us]
-            dn_points = get_fit_cv_points(fits.find(suf="Dn")["node"], fit["mirror"])
-            dn_points = list(reversed(dn_points))
-            dn_us = get_us_by_points(dn_points)
-            dn_us = [u*0.5+0.5 for u in dn_us]
-            us = up_us + dn_us[1:-1]
-            points = up_points + dn_points[1:-1]
-            count = len(points)
+        surface = fits.find(suf="Surface")
+        up = self.rig_loop_ud("Up", fits.find(suf="Up")["node"], **surface)
+        dn = self.rig_loop_ud("Dn", fits.find(suf="Dn")["node"], **surface)
+        for k, v in dn.items():
+            up[k] = list(up[k]) + list(reversed(v))[1:-1]
+        wts = get_cluster_weights(len(up["clusters"]), up["us"], degree=surface["degree"], close=True)
+        set_jac_weights(up["clusters"], up["joints"], wts)
+
+    @staticmethod
+    def rig_loop_ud(ud, curve, joint, cluster, **kwargs):
+        matrices = functools.partial(get_fit_surface_curve_matrices, **kwargs)
+        if joint < 0:
+            points = get_fit_cv_points(node=curve, mirror=kwargs["mirror"])
+            joint_us = get_us_by_points(points, False)
+            joint_ud_us = update_us(ud, joint_us)
+            joint_matrices = get_fit_curve_matrices(points, joint_ud_us, **kwargs)
         else:
-            us = get_curve_parameter_list(fit["joint"], close=True)
-            count = fit["joint"]
-            points = []
-        fit.update(dict(close=close, points=points, us=us, count=count))
-        rig_surface(main=False, **fit)
+            joint_us = get_curve_parameter_list(joint, False)
+            joint_ud_us = update_us(ud, joint_us)
+            joint_matrices = matrices(joint_ud_us)
+        fmt = Fmt(merge_ud=True, ud=ud, cluster=cluster, joint=len(joint_matrices), **kwargs)
+        joints, ctrls = add_joint_ctrls(fmt.joins(), joint_matrices)
+        cluster_us = update_us(ud, get_curve_parameter_list(cluster, False))
+        clusters, ctrls = add_cluster_ctrls(fmt.clusters(), matrices(cluster_us))
+        ctrls_follow_joints(ctrls, joints, close=False, us=joint_us)
+        return dict(clusters=clusters, joints=joints, us=joint_ud_us)
+
+
+def update_us(ud, us):
+    if ud == "Up":
+        return [u*0.5 for u in us]
+    else:
+        return [1.0-u*0.5 for u in us]
+

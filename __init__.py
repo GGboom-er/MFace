@@ -1,7 +1,4 @@
-try:
-    from importlib import reload
-except ImportError:
-    pass
+from importlib import reload
 from . import control
 from . import node
 from . import data
@@ -14,21 +11,24 @@ from . import fastPin
 from . import preset
 from . import tools
 from . import ui
-reload(control)
-reload(data)
-reload(node)
-reload(fits)
-reload(core)
-reload(rigs)
-reload(bs)
-reload(facs)
-reload(fastPin)
-reload(preset)
-reload(tools)
-reload(ui)
-
 from . import test
-reload(test)
+
+def reload_modules():
+    reload(control)
+    reload(data)
+    reload(node)
+    reload(fits)
+    reload(core)
+    reload(rigs)
+    reload(bs)
+    reload(facs)
+    reload(fastPin)
+    reload(preset)
+    reload(tools)
+    reload(ui)
+    reload(test)
+
+reload_modules()
 
 
 

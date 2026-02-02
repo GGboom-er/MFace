@@ -21,6 +21,21 @@ def test_joint():
     build_all()
 
 
+def test_joints():
+    from maya import cmds
+    cmds.file(new=1, f=1)
+    cmds.polySphere(ch=0)
+    cmds.select("pSphere1.vtx[230:233]")
+    create_fit("Joint", "Joints", "Dimple", "R")
+    joint1 = cmds.joint(None, n="jointA")
+    joint2 = cmds.joint(None, n="jointB")
+    cmds.setAttr("jointA.t", -1, 1, 0)
+    cmds.setAttr("jointB.t", -2, 2, 0)
+    cmds.select(joint1, joint2)
+    create_fit("Joint", "Joints", "Puff", "R")
+    build_all()
+
+
 def test_surface():
     from maya import cmds
     cmds.file(new=1, f=1)
@@ -381,7 +396,6 @@ def test_all_rigs():
     create_fit("Lip", "ToothUp", "ToothUp", "M")
     cmds.select("pSphere1.vtx[264]")
     create_fit("Lip", "ToothDn", "ToothDn", "M")
-
     # build all
     cmds.setAttr("MFaceFits.v", 0)
     cmds.setAttr("pSphere1.v", 0)
@@ -485,10 +499,15 @@ def test_loop():
     cmds.polySphere(ch=0)
     cmds.setAttr("pSphere1.rx", 90)
     cmds.setAttr("pSphere1.tx", -3)
-    cmds.xform("pSphere1", ws=1, rp=[0, 0, 0])
     cmds.select("pSphere1.e[280:299]")
     create_fit("Loop", "Loop", "Orbita", "R")
-    cmds.setAttr("FitOrbita_RSurface.joint", -1)
+    cmds.setAttr("FitOrbita_RSurface.cluster", 3)
+    cmds.setAttr("FitOrbita_RSurface.joint", 6)
+
+    cmds.setAttr("pSphere1.tx", 0)
+    cmds.select("pSphere1.e[280:299]")
+    create_fit("Loop", "Loop", "Orbita", "M")
+
     build_all()
 
 
@@ -535,10 +554,39 @@ def test_re_skin():
     build_all()
 
 
+def add_joint_face_target(target_name):
+    from . import facs
+    bridge = facs.get_bridge()
+    if not facs.exist_target(target_name):
+        cmds.addAttr(bridge, ln=target_name, min=0, max=1, at="double", k=1)
+    attr = Face()["Additive"][target_name]
+    joints = Joint.all()
+    matrices = [joint.joint.xform(q=1, ws=1, m=1) for joint in joints]
+    Ctrl.reset_all()
+    attr.set(1)
+    for joint, matrix in zip(joints, matrices):
+        joint.add_pose(attr, matrix)
+    attr.set(0)
+
+
+def mh_test():
+    bs_name = "blendShape3"
+    for i, attr in enumerate(cmds.listAttr(bs_name + ".weight", m=1)):
+        t = i + 2
+        cmds.currentTime(t)
+        for sdr_joint in cmds.ls("sdr*joint"):
+            j = sdr_joint.replace("sdr", "").replace("joint", "")
+            j = int(j)
+            m_face_joint = "Jointmh%03d_M" % j
+            cmds.xform(m_face_joint, ws=1, m=cmds.xform(sdr_joint, q=1, ws=1, m=1))
+        add_joint_face_target(attr)
+
+
 def doit():
     import traceback
     try:
-        test_all_rigs()
+        mh_test()
+        # Ctrl.add_pins()
         # test_nose()
     except Exception as e:
         print(traceback.format_exc())

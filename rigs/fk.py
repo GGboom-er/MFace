@@ -38,4 +38,5 @@ def rig_fk(root, fits):
         Hierarchy.set_parent(hry["In"], cache[parent]["In"])
         Hierarchy.set_parent(hry["Link"], cache[parent]["Out"])
         Hierarchy.set_parent(joint.joint, cache[parent]["Joint"])
+    Ctrl.set_all_typ(ctrls, "fk")
     return dict(joints=joints, ctrls=ctrls)

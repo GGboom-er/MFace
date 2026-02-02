@@ -6,10 +6,32 @@
   <component name="ChangeListManager">
     <list default="true" id="3835c658-7212-4b03-94b6-041d04fd1cef" name="更改" comment="update">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bs.py" beforeDir="false" afterPath="$PROJECT_DIR$/bs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/control.py" beforeDir="false" afterPath="$PROJECT_DIR$/control.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/core.py" beforeDir="false" afterPath="$PROJECT_DIR$/core.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data.py" beforeDir="false" afterPath="$PROJECT_DIR$/data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/facs.py" beforeDir="false" afterPath="$PROJECT_DIR$/facs.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/fits.py" beforeDir="false" afterPath="$PROJECT_DIR$/fits.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/introduction.md" beforeDir="false" afterPath="$PROJECT_DIR$/introduction.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/plug-ins/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/plug-ins/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/plug-ins/FunCToPy.h" beforeDir="false" afterPath="$PROJECT_DIR$/plug-ins/FunCToPy.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/eye.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/fk.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/fk.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/joint.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/joint.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rigs/lip.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/lip.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/loop.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/loop.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/roll.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/roll.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rigs/surface.py" beforeDir="false" afterPath="$PROJECT_DIR$/rigs/surface.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test.py" beforeDir="false" afterPath="$PROJECT_DIR$/test.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ui/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/cluster.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/cluster.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/facs.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/facs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/fit.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/fit.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/preset.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/preset.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -23,7 +45,6 @@
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
-    <option name="UPDATE_TYPE" value="REBASE" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {
@@ -31,10 +52,31 @@
     &quot;assignee&quot;: &quot;GGboom-er&quot;
   }
 }</component>
+  <component name="GitHubPullRequestState">{
+  &quot;prStates&quot;: [
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOOiF7vM6hH4dT&quot;,
+        &quot;number&quot;: 2
+      },
+      &quot;lastSeen&quot;: 1753779044533
+    }
+  ]
+}</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/GGboom-er/MFace.git&quot;,
     &quot;accountId&quot;: &quot;02e50f63-5e88-4550-a80b-746ca8ad6964&quot;
+  },
+  &quot;recentNewPullRequestHead&quot;: {
+    &quot;server&quot;: {
+      &quot;useHttp&quot;: false,
+      &quot;host&quot;: &quot;github.com&quot;,
+      &quot;port&quot;: null,
+      &quot;suffix&quot;: null
+    },
+    &quot;owner&quot;: &quot;GGboom-er&quot;,
+    &quot;repository&quot;: &quot;MFace&quot;
   }
 }</component>
   <component name="ProjectColorInfo">{
@@ -45,22 +87,22 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;test&quot;,
-    &quot;last_opened_file_path&quot;: &quot;Y:/GGbommer/scripts/adPose&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "test",
+    "last_opened_file_path": "Y:/GGbommer/scripts/MFace2",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -82,7 +124,11 @@
       <workItem from="1749108070575" duration="4839000" />
       <workItem from="1753070466038" duration="2603000" />
       <workItem from="1753247924465" duration="7502000" />
-      <workItem from="1753769686016" duration="2776000" />
+      <workItem from="1753769686016" duration="5856000" />
+      <workItem from="1753961215214" duration="7162000" />
+      <workItem from="1754045563556" duration="2779000" />
+      <workItem from="1758021056655" duration="1901000" />
+      <workItem from="1769688032480" duration="3424000" />
     </task>
     <task id="LOCAL-00001" summary="Initial commit">
       <option name="closed" value="true" />
@@ -132,7 +178,23 @@
       <option name="project" value="LOCAL" />
       <updated>1753261188120</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="update">
+      <option name="closed" value="true" />
+      <created>1753776606476</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1753776606476</updated>
+    </task>
+    <task id="LOCAL-00008" summary="update">
+      <option name="closed" value="true" />
+      <created>1753776875230</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1753776875230</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -149,7 +211,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="main" />
+                        <option value="test" />
                       </list>
                     </value>
                   </entry>

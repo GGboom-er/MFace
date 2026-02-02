@@ -245,7 +245,7 @@ def get_us_by_curve(node):
 
 
 def get_fit_surface_curve_matrices(number, **kwargs):
-    if number < 0:
+    if isinstance(number, int) and number < 0:
         return get_fit_curve_matrices(**kwargs)
     else:
         return get_fit_surface_matrices(number=number, **kwargs)

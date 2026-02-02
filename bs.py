@@ -68,11 +68,10 @@ def get_orig(polygon):
 
 
 def get_index(node, alias_name):
-    print (node, alias_name)
     if node is None:
         return
     parent_attr = cmds.attributeQuery(alias_name, node=node, ln=1)
-    parent_name = "{node}{parent_attr}".format(**locals())
+    parent_name = "{node}.{parent_attr}".format(**locals()).replace("..", ".")
     elem_names = cmds.listAttr(parent_name, m=1)
     elem_indexes = cmds.getAttr(parent_name, mi=1)
     if alias_name in elem_names:
@@ -91,7 +90,8 @@ def check_bs(fun):
 
 @check_bs
 def get_bs_attr(bs, target):
-    return bs + "." + target
+    attr = bs + "." + target
+    return attr.replace("..", ".")
 
 
 def check_target(fun):
@@ -435,7 +435,7 @@ def set_selected_bs_data(data, path):
 def load_selected_bs_data(path):
     if not os.path.isfile(path):
         return
-    with open(path, "w") as fp:
+    with open(path, "r") as fp:
         data = json.load(fp)
     set_selected_bs_data(data, path)
 

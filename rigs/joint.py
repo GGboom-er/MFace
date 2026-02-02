@@ -2,11 +2,16 @@ from .rig import *
 
 
 class Joint(RigSystem):
-    fit_configs = dict(Joint=dict(pre="", fit="joint", names=["Tooth", "Check", "Puff", "Dimple"], rml="RML"))
+    fit_configs = dict(Joint=dict(pre="", fit="joint", names=["Tooth", "Check", "Puff", "Dimple"], rml="RML"),
+                       Joints=dict(pre="", fit="joints", names=["Tooth", "Check", "Puff", "Dimple"], rml="RML"))
     fit_kwargs = [(dict(), dict(main=False, cluster=False, joint=True, driver=False))]
 
     def rig_rml(self, fits):
-        rig_joint(**fits.data[0])
+        for fit in fits.data:
+            fit = dict(fit)
+            fit["name"] = fit["name"] + fit["suf"].replace("Joint", "")
+            rig_joint(**fit)
+            # rig_joint(**fits.data[0])
 
 
 def rig_joint(joint=False, cluster=False, main=False, driver=False, **kwargs):

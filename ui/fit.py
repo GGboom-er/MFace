@@ -46,7 +46,6 @@ class FitCreateTool(QDialog):
                         q_button(u"跟随模型", tools.ctrl_follow_to_selected_polygon),
                         q_button(u"删除选择", tools.ctrl_delete_selected),
                     ),
-                    q_button(u"控制器 --> 模型点", tools.ctrl_follow_to_selected_point),
                 ),
                 q_box(
                     u"预设",
@@ -89,10 +88,13 @@ class FitCreateTool(QDialog):
         pre = config["pre"]
         names = [pre+name for name in config["names"]]
         comp = QCompleter(names)
-        comp.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
-        self.name.setCompleter(comp)
-        self.name.setValidator(QRegularExpressionValidator(QRegularExpression("^{pre}.+$".format(pre=pre))))
+        if hasattr(QCompleter, 'UnfilteredPopupCompletion'):
+             comp.setCompletionMode(QCompleter.UnfilteredPopupCompletion)
+        else:
+             comp.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
 
+        self.name.setCompleter(comp)
+        self.name.setValidator(QRegExpValidator(QRegExp("^{pre}.+$".format(pre=pre))))
         self.name.setPlaceholderText(pre)
         self.name.setText(names[0])
         if old_pre and old_name.startswith(old_pre):

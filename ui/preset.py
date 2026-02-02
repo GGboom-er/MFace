@@ -11,7 +11,7 @@ class Image(QWidget):
         QWidget.__init__(self, parent)
         self.icon = QIcon(path)
         self.setFixedSize(QImage(path).size())
-        self.mode = QIcon.Normal
+        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
         self.path = path
 
     def paintEvent(self, event):
@@ -26,7 +26,7 @@ class IconButton(Image):
     def __init__(self, parent, path):
         Image.__init__(self, parent, path)
         self.icon = QIcon(path)
-        self.setMask(QPixmap(path).mask().scaled(QImage(path).size()))
+        self.setMask(QBitmap(QPixmap(path).mask().scaled(QImage(path).size())))
         self.setMouseTracking(True)
 
     def update_mode(self):
@@ -34,23 +34,23 @@ class IconButton(Image):
 
     def mousePressEvent(self, event):
         super(IconButton, self).mousePressEvent(event)
-        self.mode = QIcon.Selected
+        self.mode = getattr(QIcon, 'Selected', QIcon.Mode.Selected) if hasattr(QIcon, 'Mode') else QIcon.Selected
         self.update_mode()
 
     def mouseReleaseEvent(self, event):
         super(IconButton, self).mouseReleaseEvent(event)
-        self.mode = QIcon.Normal
+        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
         self.clicked.emit()
         self.update_mode()
 
     def enterEvent(self, event):
         super(IconButton, self).enterEvent(event)
-        self.mode = QIcon.Active
+        self.mode = getattr(QIcon, 'Active', QIcon.Mode.Active) if hasattr(QIcon, 'Mode') else QIcon.Active
         self.update_mode()
 
     def leaveEvent(self, event):
         super(IconButton, self).leaveEvent(event)
-        self.mode = QIcon.Normal
+        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
         self.update_mode()
 
 
@@ -67,11 +67,14 @@ class FitButton(IconButton):
         return cmds.objExists(name)
 
     def update_mode(self):
-        if self.mode in [QIcon.Disabled, QIcon.Normal]:
+        disabled_mode = getattr(QIcon, 'Disabled', QIcon.Mode.Disabled) if hasattr(QIcon, 'Mode') else QIcon.Disabled
+        normal_mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
+        
+        if self.mode in [disabled_mode, normal_mode]:
             if self.is_fit_exist():
-                self.mode = QIcon.Disabled
+                self.mode = disabled_mode
             else:
-                self.mode = QIcon.Normal
+                self.mode = normal_mode
         self.update()
 
     def create_fit(self):
@@ -89,7 +92,8 @@ class Preset(QDialog):
     def build_children(self):
         root = os.path.abspath("{}/../../data/presets/{}".format(__file__, self.preset)).replace("\\", "/")
         bg = Image(self, root + "/background.jpg")
-        bg.setContextMenuPolicy(Qt.CustomContextMenu)
+        policy = getattr(Qt, 'CustomContextMenu', Qt.ContextMenuPolicy.CustomContextMenu) if hasattr(Qt, 'ContextMenuPolicy') else Qt.CustomContextMenu
+        bg.setContextMenuPolicy(policy)
         bg.customContextMenuRequested.connect(self.show_menu)
 
         for name in os.listdir(root):
@@ -101,7 +105,7 @@ class Preset(QDialog):
         build_path = os.path.abspath("{}/../../data/presets/build.png".format(__file__)).replace("\\", "/")
         build_button = IconButton(self, build_path)
         build_button.setFixedSize(32, 32)
-        build_button.setMask(QPixmap(build_path).mask().scaled(32, 32))
+        build_button.setMask(QBitmap(QPixmap(build_path).mask().scaled(32, 32)))
         build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
         build_button.clicked.connect(self.build)
 
@@ -123,7 +127,10 @@ class Preset(QDialog):
         sub_save_load_delete(u"融合变形", "blend_shape")
         sub_save_load_delete(u"蒙皮权重", "blend_shape")
         menu.addAction(u"删除预设", self.delete_preset)
-        menu.exec_(QCursor.pos())
+        if hasattr(menu, "exec"):
+            menu.exec(QCursor.pos())
+        else:
+            menu.exec_(QCursor.pos())
 
     def update_pngs(self):
         tools.save_preset_pngs(self.preset)
@@ -160,7 +167,10 @@ class CreatePreset(QDialog):
             q_add(QHBoxLayout(), q_prefix(u"名称：", 60), self.line),
             q_add(QHBoxLayout(), q_button(u"创建", self.apply), q_button(u"取消", self.close))
         ))
-        self.setFont(QFont(u"楷体", 12))
+        font = QFont(u"楷体", 12)
+        if not font.exactMatch():
+            font = QFont("Arial", 10)
+        self.setFont(font)
 
     def apply(self):
         preset = self.line.text()

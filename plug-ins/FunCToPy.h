@@ -1,4 +1,4 @@
-#ifdef maya2025
+#ifdef maya2024
 #define python3 1
 #endif 
 #ifdef maya2022
@@ -132,7 +132,11 @@ PyObject* c_to_py(MString& c_obj) {
 #ifdef python3
 void py_to_c(PyObject* py_obj, MString& c_obj) {
     Py_ssize_t len = PyUnicode_GetLength(py_obj);
-    c_obj = PyUnicode_AsWideCharString(py_obj, &len);
+    wchar_t* str = PyUnicode_AsWideCharString(py_obj, &len);
+    if (str) {
+        c_obj = MString(str);
+        PyMem_Free(str);
+    }
 }
 #else
 void py_to_c(PyObject* py_obj, MString& c_obj) {
