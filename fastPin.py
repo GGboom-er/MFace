@@ -1,5 +1,5 @@
 # coding:utf-8
-from .node import *
+from .nodes import *
 from maya.api.OpenMaya import *
 from maya.api.OpenMayaAnim import *
 

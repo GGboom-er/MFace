@@ -19,7 +19,10 @@ def get_presets():
     root = os.path.abspath("{}/../data/presets".format(__file__)).replace("\\", "/")
     presets = []
     for preset in os.listdir(root):
-        if not os.path.isdir(os.path.join(root, preset)):
+        preset_dir = os.path.join(root, preset)
+        if not os.path.isdir(preset_dir):
+            continue
+        if not os.path.isfile(os.path.join(preset_dir, "background.jpg")):
             continue
         presets.append(preset)
     return presets

@@ -1,7 +1,7 @@
 # coding:utf-8
 import re
 
-from .node import *
+from .nodes import *
 from .control import Control, Color
 from maya.api.OpenMaya import *
 from maya import cmds
@@ -175,11 +175,11 @@ class Face(Hierarchy):
 
     def ctrl_fmt(self):
         self.add_ctrl_fmt()
-        return self["Fit"]["ctrl_fmt"].get()
+        return self["Fit"]["ctrl_fmt"].get() or "FCtrl{core}_{rml}"
 
     def joint_fmt(self):
         self.add_joint_fmt()
-        return self["Fit"]["joint_fmt"].get()
+        return self["Fit"]["joint_fmt"].get() or "{core}_{rml}"
 
 
 class Ctrl(Hierarchy):

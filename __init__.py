@@ -1,6 +1,6 @@
 from importlib import reload
 from . import control
-from . import node
+from . import nodes
 from . import data
 from . import fits
 from . import core
@@ -16,7 +16,7 @@ from . import test
 def reload_modules():
     reload(control)
     reload(data)
-    reload(node)
+    reload(nodes)
     reload(fits)
     reload(core)
     reload(rigs)
