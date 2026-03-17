@@ -223,14 +223,68 @@ def create_surface_by_point_matrix(points, matrix):
 
 
 def get_us_by_points(points, close=False):
+    if not points:
+        return []
     if close:
         points = list(points) + [points[0]]
+    if len(points) == 1:
+        return [0.5]
     distances = [get_distance(p1, p2) for p1, p2 in zip(points, points[1:])]
     sum_distance = sum(distances)
-    us = [sum(distances[:i])/sum_distance for i in range(len(points))]
+    if sum_distance < 0.0000001:
+        return get_curve_parameter_list(len(points), close)
+    us = [sum(distances[:i]) / sum_distance for i in range(len(points))]
     if close:
         us.pop(-1)
     return us
+
+
+def resample_polyline_points(points, count, close=False):
+    if count <= 0 or not points:
+        return []
+    if close:
+        pts = list(points) + [points[0]]
+    else:
+        pts = list(points)
+    if len(pts) == 1:
+        return [list(pts[0]) for _ in range(count)]
+    seg_lengths = []
+    total = 0.0
+    for p1, p2 in zip(pts, pts[1:]):
+        d = get_distance(p1, p2)
+        seg_lengths.append(d)
+        total += d
+    if total < 0.0000001:
+        return [list(pts[0]) for _ in range(count)]
+
+    def point_at_distance(dist):
+        if dist <= 0:
+            return list(pts[0])
+        if dist >= total:
+            return list(pts[-1])
+        acc = 0.0
+        for i, seg in enumerate(seg_lengths):
+            nxt = acc + seg
+            if dist <= nxt or i == len(seg_lengths) - 1:
+                if seg < 0.0000001:
+                    return list(pts[i + 1])
+                t = (dist - acc) / seg
+                p1 = pts[i]
+                p2 = pts[i + 1]
+                return [p1[j] + (p2[j] - p1[j]) * t for j in range(3)]
+            acc = nxt
+        return list(pts[-1])
+
+    if close:
+        step = total / count
+        distances = [step * i for i in range(count)]
+    else:
+        if count == 1:
+            distances = [total * 0.5]
+        else:
+            step = total / (count - 1)
+            distances = [step * i for i in range(count)]
+    return [point_at_distance(d) for d in distances]
 
 
 def get_fit_curve_matrices(points, us, **kwargs):

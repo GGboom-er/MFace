@@ -370,6 +370,18 @@ def save_data(node, **kwargs):
     for attr, value in kwargs.items():
         if cmds.attributeQuery(attr, node=node, ex=1):
             return
+        if attr == "sample":
+            labels = ["param", "length", "topo"]
+            if isinstance(value, int):
+                dv = max(0, min(len(labels) - 1, value))
+            else:
+                try:
+                    dv = labels.index(value)
+                except Exception:
+                    dv = 0
+            cmds.addAttr(node, ln=attr, at="enum", en=":".join(labels), k=1, dv=dv)
+            cmds.setAttr(node + "." + attr, dv)
+            continue
         if isinstance(value, bool):
             cmds.addAttr(node, ln=attr, dv=value, at="bool", k=1)
         elif isinstance(value, int):

@@ -11,6 +11,7 @@ class Surface(RigSystem):
 
 def update_fit_surface_curve_data(fit, surface, curve):
     fit["node"] = surface
+    fit["curve"] = curve
     points = get_fit_cv_points(curve, fit["mirror"])
     if fit["joint"] < 0:
         us = get_us_by_points(points)

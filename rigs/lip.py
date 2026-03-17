@@ -15,7 +15,7 @@ class Lip(RigSystem):
                        ToothUp=dict(pre="ToothUp", fit="joint", names=["", "A", "B", "C"], rml="MRL"),
                        ToothDn=dict(pre="ToothDn", fit="joint", names=["", "A", "B", "C"], rml="MRL"))
 
-    fit_kwargs = [(dict(pre="Lip"), dict(cluster2=0, joint=9, degree=2)),
+    fit_kwargs = [(dict(pre="Lip"), dict(cluster2=0, joint=9, degree=2, sample="param")),
                   (dict(suf="Aim"), dict(zip=False))]
 
     def rig_rml(self, fits):
@@ -207,11 +207,55 @@ def get_lip_weights(joint):
     return weights
 
 
-def rig_ud_surface(joint, count, us, side, cluster2, degree, cluster, **kwargs):
+def _normalize_sample(sample):
+    if isinstance(sample, int):
+        return ["param", "length", "topo"][min(max(sample, 0), 2)]
+    if isinstance(sample, str):
+        return sample
+    return "param"
+
+
+def _sample_joint_points(sample, joint, points, curve, mirror):
+    if joint <= 0:
+        return
+    if sample == "length":
+        if curve:
+            points = get_points_by_curve(curve, joint)
+            if mirror:
+                points = mirror_points(points)
+        elif points:
+            points = resample_polyline_points(points, joint, False)
+        else:
+            return
+    elif sample == "topo":
+        if points:
+            points = resample_polyline_points(points, joint, False)
+        elif curve:
+            points = get_points_by_curve(curve, joint)
+            if mirror:
+                points = mirror_points(points)
+        else:
+            return
+    else:
+        return
+    return points, get_us_by_points(points, False)
+
+
+def rig_ud_surface(joint, count, us, side, cluster2, degree, cluster, sample="param",
+                   points=None, curve=None, mirror=False, **kwargs):
+    fit_kwargs = dict(kwargs)
+    fit_kwargs["mirror"] = mirror
+    sample = _normalize_sample(sample)
     fmt = Fmt(merge_ud=True, joint=count, cluster2=cluster2, cluster=cluster, **kwargs)
-    matrices = functools.partial(get_fit_surface_curve_matrices, us=us, **kwargs)
+    matrices = functools.partial(get_fit_surface_curve_matrices, us=us, **fit_kwargs)
     matrices = functools.partial(get_side_matrices, matrices, side)
-    joints, ctrls = add_joint_ctrls(fmt.joins(), matrices(number=joint))
+    sampled = _sample_joint_points(sample, joint, points, curve, mirror)
+    if sampled:
+        points, us = sampled
+        joint_matrices = get_fit_curve_matrices(points=points, us=us, **fit_kwargs)
+        joints, ctrls = add_joint_ctrls(fmt.joins(), joint_matrices)
+    else:
+        joints, ctrls = add_joint_ctrls(fmt.joins(), matrices(number=joint))
     clusters1, ctrls1 = add_cluster_ctrls(fmt.clusters(), matrices(number=cluster))
     set_jac_weights(clusters1, joints, get_cluster_weights(cluster, us, degree, False))
     ctrls_follow_joints(ctrls1, joints, us=us)
@@ -224,6 +268,7 @@ def rig_ud_surface(joint, count, us, side, cluster2, degree, cluster, **kwargs):
 def rig_up_dn_lip(us, **kwargs):
     ud_surface = rig_ud_surface(us=us, cluster=5, **kwargs)
     joints = ud_surface["joints"]
+    us = ud_surface["us"]
     weights = get_lip_weights(us)
     set_jac_weights(ud_surface["clusters1"], joints, weights)
     for ctrl in list(ud_surface["ctrls1"][1: -1]) + list(ud_surface["ctrls2"][1:-1]):
