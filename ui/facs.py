@@ -49,7 +49,7 @@ class FacePoseTool(QDialog):
         self.list.menu.addAction(u"拷贝翻转", self.run_targets(tools.copy_flip_target, False))
         self.list.menu.addAction(u"删除", self.run_targets(tools.delete_targets))
         self.list.menu.addAction(u"删除选择点/骨骼/模型", self.run_targets(tools.delete_selected_targets))
-        self.list.menu.addAction(u"导出pose", )
+        self.list.menu.addAction(u"导出pose", save_json(tools.save_face_pose_data))
         self.line.textChanged.connect(self.list.filter)
         self.list.itemDoubleClicked.connect(self.run_targets(tools.set_pose_by_targets, False))
         self.slider.slider.valueChanged.connect(self.set_slider_pose)

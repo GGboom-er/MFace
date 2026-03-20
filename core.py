@@ -130,7 +130,13 @@ class Fmt(object):
         elif name.endswith("_L"):
             return name[:-1] + "R"
         else:
-            return name
+            parts = name.split('_')
+            for i, p in enumerate(parts):
+                if p == 'L':
+                    parts[i] = 'R'
+                elif p == 'R':
+                    parts[i] = 'L'
+            return '_'.join(parts)
 
 
 class Face(Hierarchy):
@@ -518,7 +524,7 @@ class Joint(Hierarchy):
 
     def add_pose(self, weight, matrix):
         x, y, z, p = [matrix[i: i + 3] for i in range(0, 16, 4)]
-        s = [sum([v ** 2 for v in xyz]) ** 2 for xyz in [x, y, z]]
+        s = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [x, y, z]]
         values = [matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
         for bw, value in zip(self.bws, values):
             bw.add_pose(weight, value)
