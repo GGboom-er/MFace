@@ -125,7 +125,7 @@ class Preset(QDialog):
         sub_save_load_delete(u"表情姿势", "face_sdk")
         sub_save_load_delete(u"骨骼驱动", "joint_additive")
         sub_save_load_delete(u"融合变形", "blend_shape")
-        sub_save_load_delete(u"蒙皮权重", "blend_shape")
+        sub_save_load_delete(u"蒙皮权重", "skin_weights")
         menu.addAction(u"删除预设", self.delete_preset)
         if hasattr(menu, "exec"):
             menu.exec(QCursor.pos())
