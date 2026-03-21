@@ -753,6 +753,23 @@ class Cluster(Hierarchy):
         for joint in Joint.all():
             joint.joint["weight"].delete()
 
+    @staticmethod
+    def cancel_edit_weights():
+        for wt in Weight.all():
+            attr = wt.weight.input()
+            if not attr:
+                continue
+            if attr.attr != "weight":
+                continue
+            if cmds.nodeType(attr.node) != "joint":
+                continue
+            orig_value = cmds.attributeQuery("weight", node=attr.node, listDefault=True)[0]
+            wt.weight.disconnect()
+            wt.weight.set(orig_value)
+        for joint in Joint.all():
+            if cmds.objExists(joint.joint.name + ".weight"):
+                joint.joint["weight"].delete()
+
     def get_weight_data(self):
         return {joint.name: self.weight(joint).value() for joint in Joint.all()}
 

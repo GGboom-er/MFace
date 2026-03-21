@@ -52,7 +52,8 @@ class FacePoseTool(QDialog):
         self.list.menu.addAction(u"导出pose", save_json(tools.save_face_pose_data))
         self.line.textChanged.connect(self.reload)
         self.list.itemDoubleClicked.connect(self.double_click_item)
-        self.slider.slider.valueChanged.connect(self.set_slider_pose)
+        # Remove high frequency valueChanged constraint, bind to safe evaluation
+        self.slider.slider.valueChanged.connect(self._throttled_set_slider_pose)
         self.slider.slider.sliderPressed.connect(self.start_slider_undo)
         self.slider.slider.sliderReleased.connect(self.end_slider_undo)
         
@@ -61,6 +62,22 @@ class FacePoseTool(QDialog):
         # Undo/Redo Sync Callbacks
         self._undo_cb = None
         self._redo_cb = None
+        self._slider_timer = None
+        
+    def _throttled_set_slider_pose(self, value):
+        # Debounce the slider execution to prevent stack overflow on heavy rigs
+        if self._slider_timer is not None:
+            self.killTimer(self._slider_timer)
+        self._slider_val_cache = value
+        self._slider_timer = self.startTimer(15) # 15ms debounce (~60fps)
+
+    def timerEvent(self, event):
+        if event.timerId() == self._slider_timer:
+            self.killTimer(self._slider_timer)
+            self._slider_timer = None
+            self.set_slider_pose(self._slider_val_cache)
+        else:
+            super(FacePoseTool, self).timerEvent(event)
 
     def _sync_ui_on_undo_redo(self, *args):
         import maya.utils
@@ -82,6 +99,13 @@ class FacePoseTool(QDialog):
         if self._redo_cb:
             om.MMessage.removeCallback(self._redo_cb)
             self._redo_cb = None
+            
+        try:
+            import tools.bs
+            tools.bs.cancel_duplicate_edit()
+        except:
+            pass
+            
         super(FacePoseTool, self).closeEvent(event)
 
     def double_click_item(self, item):
@@ -107,6 +131,10 @@ class FacePoseTool(QDialog):
         if cmds.objExists(attr):
             val = cmds.getAttr(attr)
             slider_val = int(val * 60)
+            
+            # Clamp the value strictly between 0 and 60 to prevent overdriven targets from crashing the UI
+            slider_val = max(0, min(60, slider_val))
+            
             self.slider.slider.blockSignals(True)
             self.slider.box.blockSignals(True)
             

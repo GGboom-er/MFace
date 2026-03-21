@@ -5,13 +5,21 @@ from .core import *
 from . import bs
 
 
+def __get_node_name(attr):
+    ctrl_name = attr.split(".", 1)[0]
+    ctrl_name = ctrl_name.split("|")[-1].split(":")[-1]
+    return ctrl_name
+
+
 def get_target_name(attr, default, value):
     if value > default:
         suffix = "max"
     else:
         suffix = "min"
-    ctrl_name, attr_name = attr.split(".")
-    ctrl_name = ctrl_name.split("|")[-1].split(":")[-1]
+    # Safely split attr into ctrl_name and attr_name
+    parts = attr.split(".", 1)
+    ctrl_name = __get_node_name(parts[0])
+    attr_name = parts[1] if len(parts) > 1 else "" # Handle cases where attr might not have a dot
     return "_".join([ctrl_name, attr_name, suffix])
 
 
@@ -60,9 +68,11 @@ def exist_target(target_name):
 
 
 def check_swing_twist(attr):
-    ctrl, name = attr.split(".")
+    if "." not in attr:
+        return attr
+    ctrl, name = attr.split(".", 1)
     rotates = ["rx", "ry", "rz"]
-    if name not in ["rx", "ry", "rz"]:
+    if name not in rotates:
         return attr
     index = rotates.index(name)
     axis = [0, 0, 0, 0]
@@ -249,17 +259,21 @@ def get_base_sdk_data(target_name):
     if not attr or len(attr) != 1:
         return
     attr = attr[0]
-    ctrl, attr = attr.split(".")
-    attr = cmds.attributeQuery(attr, sn=1, n=ctrl)
-    if attr in ["real_rx", "real_ry", "real_rz"]:
-        attr = attr[5:]
+    if "." not in attr:
+        return
+    ctrl, attr_name = attr.split(".", 1)
+    attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
+    if attr_name in ["real_rx", "real_ry", "real_rz"]:
+        attr_name = attr_name[5:]
     if cmds.nodeType(ctrl) == "unitConversion":
-        attr = cmds.listConnections(ctrl, s=1, d=0, p=1)
-        if len(attr) != 1:
+        attr_query = cmds.listConnections(ctrl, s=1, d=0, p=1)
+        if not attr_query or len(attr_query) != 1:
             return
-        attr = attr[0]
-        ctrl, attr = attr.split(".")
-        attr = cmds.attributeQuery(attr, sn=1, n=ctrl)
+        attr = attr_query[0]
+        if "." not in attr:
+            return
+        ctrl, attr_name = attr.split(".", 1)
+        attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
     
     # Robustly find default value: Find the keyframe where the Driven Value (Target Weight) is 0.
     # The animCurve maps Driver Value (Time) -> Driven Value (Value).
@@ -290,7 +304,7 @@ def get_base_sdk_data(target_name):
              default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
              value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
 
-    return ctrl, attr, default_value, value
+    return ctrl, attr_name, default_value, value
 
 
 def reset_all():
@@ -550,14 +564,15 @@ def mirror_polygon_targets(target_mirrors):
 def mirror_targets(target_names):
     target_mirrors = mirror_drive_targets(target_names)
     run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, target_mirrors)
-    dst_names = [dst for src, dst in target_mirrors]
-    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">镜像完成！已生成靶标: %s</span>' % ", ".join(dst_names), pos='midCenter', fade=True)
+    msgs = [u"从 %s 镜像至 -> %s" % (src, dst) for src, dst in target_mirrors]
+    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">姿势镜像完成！%s</span>' % ", ".join(msgs), pos='midCenter', fade=True)
 
 
 def copy_flip_target(target_names):
     if len(target_names) != 2:
         return
     run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, [target_names])
+    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">拷贝翻转完成！%s -> %s</span>' % (target_names[0], target_names[1]), pos='midCenter', fade=True)
 
 
 def delete_polygon_connect_targets(target_names):

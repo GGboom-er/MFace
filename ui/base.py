@@ -368,6 +368,7 @@ class TargetGrid(QTableWidget):
              item.setFlags(item.flags() & ~Qt.ItemIsEditable)
              item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
              item.setData(Qt.UserRole, t)
+             item.setData(Qt.UserRole + 1, True)  # <-- Give it the driver boolean tag
              item.setForeground(QColor("#79dc7f"))
              self.setItem(i, 0, item)
              self._target_items[t] = item

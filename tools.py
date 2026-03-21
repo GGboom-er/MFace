@@ -48,19 +48,36 @@ def is_edit_cluster_weights():
 @undo
 def cluster_weight_apply():
     if is_edit_cluster_weights():
+        editing_clusters = set()
+        for wt in Weight.all():
+            attr = wt.weight.input()
+            if attr and attr.attr == "weight" and cmds.nodeType(attr.node) == "joint":
+                editing_clusters.add(wt.cluster.name)
+        
         Cluster.finsh_edit_weights()
+        if editing_clusters:
+            return True, u"结束修改: " + ", ".join(editing_clusters)
+        return True, u"结束修改"
     else:
         clusters = Cluster.selected()
         if len(clusters) != 1:
-            return
+            return False, u"请先在场景中选择唯一一个需要修改的 Cluster 控制器！"
         cluster = clusters[0]
         cluster.edit_weights()
+        return True, u"开始修改: " + cluster.name
 
 
 @undo
 def mirror_cluster_weights():
+    msgs = []
     for cluster in Cluster.selected():
         cluster.mirror_weights()
+        if cluster.name.endswith(("_R", "_L")):
+            msgs.append(u"从 %s 镜像至 -> %s" % (cluster.name, Fmt.mirror_name(cluster.name)))
+        else:
+            msgs.append(u"%s 自身对称完成" % cluster.name)
+    if msgs:
+        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 18px;">Cluster 权重镜像！%s</span>' % ", ".join(msgs), pos='midCenter', fade=True)
 
 
 def save_cluster_weights(path):

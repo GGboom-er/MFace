@@ -282,58 +282,23 @@ class ClusterTool(QDialog):
         menu.exec(self.but.mapToGlobal(pos))
 
     def cancel_edit(self):
-        # To discard changes, we must NOT call finsh_edit_weights() because that saves values.
-        # Instead, we just break connections. The Weight node (destination) retains its original value 
-        # (or needs to be reset if it was driven).
-        # Actually, Weight.weight is driven by joint.weight. When connected, Weight.weight takes the value.
-        # If we just delete joint.weight, Weight.weight might keep the last driven value.
-        # We should check if we need to restore the original value.
-        # However, MFace's Weight node structure (from core.py) suggests 'weight' attr is the storage.
-        # When editing, 'joint.weight' connects TO 'Weight.weight'.
-        # So 'Weight.weight' IS being changed in real-time.
-        # To cancel, we strictly need to restore the value it had BEFORE editing.
-        # But we didn't cache it. 
-        # Wait, usually 'edit_weights' creates 'joint.weight' with default value = current weight.
-        # If we modify 'joint.weight', 'Weight.weight' updates.
-        # So the data IS dirty.
-        # Reverting requires knowing the original value.
-        # Since we don't store it, we can't perfectly "Revert" unless we reload from file or if the system caches it.
-        # BUT, looking at core.py: `joint.joint["weight"].connect(weight.weight)`
-        # It's a direct connection. 
-        # If we assume the user wants to "Cancel" = "Stop editing without saving future changes" (which is just finish),
-        # but they asked for "Discard".
-        # Without a cache, we can't revert. 
-        # OPTION: Just delete the attribute. If the user changed it, the value is already in the Weight node.
-        # Modification: We will just disconnect and delete. The value will remain what it is now. 
-        # TO FIX THIS PROPERLY: We would need to cache weights on 'edit_weight' start.
-        # For now, let's just do the cleanup to stop the "Saving" logic of finsh_edit_weights (which might do extra stuff).
-        # Actually finsh_edit_weights does: value = wt.value(); disconnect; set(value).
-        # So it "bakes" the connection.
-        # If we just disconnect, the attribute might revert to default or stay? 
-        # Let's try just disconnecting.
-        
-        # 1. Disconnect all weights (Reverse of edit_weights logic)
-        # Note: We can't easily revert values without cache. 
-        # This implementation simply exits edit mode without the explicit "Bake" step, 
-        # though in Maya, breaking a connection usually leaves the attribute at its last value.
-        
-        from ..core import Weight
-        for wt in Weight.all():
-            if wt.weight.input():
-                wt.weight.disconnect()
-        
-        # 2. Delete temp attributes
-        for joint in Joint.all():
-            if joint.joint["weight"]:
-                joint.joint["weight"].delete()
-        
+        from ..core import Cluster
+        Cluster.cancel_edit_weights()
         self.update_button_text()
 
     def edit_weight(self):
-        tools.cluster_weight_apply()
+        is_editing_before = tools.is_edit_cluster_weights()
+        if not is_editing_before:
+            clusters = tools.Cluster.selected()
+            if len(clusters) != 1:
+                cmds.inViewMessage(amg='<span style="color: #FF0000; font-size: 20px;">请先在场景中选择一个需要修改权重的 Cluster 控制器！</span>', pos='midCenter', fade=True)
+                return
+        result = tools.cluster_weight_apply()
         self.update_button_text()
-        if not tools.is_edit_cluster_weights():
-             cmds.inViewMessage(amg='<span style="color: #00FF00; font-size: 20px;">修改成功</span>', pos='midCenter', fade=True)
+        if result:
+            success, msg = result
+            color = "#00FF00" if success else "#FF0000"
+            cmds.inViewMessage(amg='<span style="color: {}; font-size: 20px;">{}</span>'.format(color, msg), pos='midCenter', fade=True)
 
     @staticmethod
     def save_weight():
