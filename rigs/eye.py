@@ -60,7 +60,16 @@ def rig_look(root, name, aim_matrix, roll_matrix):
     hry = Hierarchy(name, root)
     hry.build(("Point", "Look", "Offset", "Link"))
     hry["Point"].xform(ws=1, t=roll_matrix[12:15])
-    look_matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, roll_matrix[12], roll_matrix[13], distance * 7, 1]
+    aim_pos = aim_matrix[12:15]
+    roll_pos = roll_matrix[12:15]
+    look_dir = [a - r for a, r in zip(aim_pos, roll_pos)]
+    length = (sum([l**2 for l in look_dir]))**0.5
+    if length < 0.0001:
+        look_dir = [0, 0, 1]
+    else:
+        look_dir = [l / length for l in look_dir]
+    target_pos = [r + l * (distance * 7) for r, l in zip(roll_pos, look_dir)]
+    look_matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, target_pos[0], target_pos[1], target_pos[2], 1]
     aim_ctrl = Ctrl.add("Aim"+name, look_matrix, "aim")
     aim_ctrl.control(l=["r", "s", "v"])
     axis = -1 if is_mirror(name) else 1

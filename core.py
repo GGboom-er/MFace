@@ -150,6 +150,17 @@ class Face(Hierarchy):
         self.add_radius()
         self.add_ctrl_fmt()
         self.add_joint_fmt()
+
+        joints_grp = "MFaceJoints"
+        head_grp = "Head_M"
+        if cmds.objExists(joints_grp) and cmds.objExists(head_grp):
+            parents = cmds.listRelatives(joints_grp, p=1) or []
+            if head_grp not in parents:
+                try:
+                    cmds.parent(joints_grp, head_grp)
+                except Exception:
+                    pass
+
         return self
 
     def add_joint_fmt(self):

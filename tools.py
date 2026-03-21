@@ -56,6 +56,13 @@ def cluster_weight_apply():
         
         Cluster.finsh_edit_weights()
         if editing_clusters:
+            ctrl_names = []
+            for c_name in editing_clusters:
+                ctrl_node = Ctrl(c_name)
+                if ctrl_node and cmds.objExists(ctrl_node.ctrl.name):
+                    ctrl_names.append(ctrl_node.ctrl.name)
+            if ctrl_names:
+                cmds.select(ctrl_names)
             return True, u"结束修改: " + ", ".join(editing_clusters)
         return True, u"结束修改"
     else:
