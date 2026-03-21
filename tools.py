@@ -9,8 +9,9 @@ from . import fastPin
 def undo(fun):
     def undo_fun(*args, **kwargs):
         cmds.undoInfo(openChunk=1)
-        fun(*args, **kwargs)
+        res = fun(*args, **kwargs)
         cmds.undoInfo(closeChunk=1)
+        return res
     return undo_fun
 
 
@@ -103,6 +104,7 @@ copy_flip_target = undo(facs.copy_flip_target)
 delete_selected_targets = undo(facs.delete_selected_targets)
 esc = undo(facs.esc)
 auto_duplicate_edit = undo(facs.auto_duplicate_edit)
+cancel_duplicate_edit = undo(facs.cancel_duplicate_edit)
 is_on_duplicate_edit = facs.bs.is_on_duplicate_edit
 save_face_pose_data = undo(facs.save_face_pose_data)
 load_face_pose_data = undo(facs.load_face_pose_data)
@@ -147,5 +149,9 @@ delete_preset_skin_weights = undo(preset.delete_preset_skin_weights)
 @undo
 def ctrl_follow_to_selected_polygon():
     polygon = fastPin.get_selected_polygon()
+    if not polygon:
+        cmds.warning(u"请先选择要跟随的目标模型！")
+        return
     pins = Ctrl.add_pins()
     fastPin.create_pins(polygon, pins)
+    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">已成功绑定控制器跟随！</span>', pos='midCenter', fade=True)

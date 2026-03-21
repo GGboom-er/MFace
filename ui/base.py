@@ -182,3 +182,203 @@ def q_box(label, lay, *children):
     box.setLayout(lay)
     q_add(lay, *children)
     return box
+
+
+class ColorDelegate(QStyledItemDelegate):
+    def initStyleOption(self, option, index):
+        super(ColorDelegate, self).initStyleOption(option, index)
+        has_driver = index.data(Qt.UserRole + 1)
+        if option.state & getattr(QStyle, 'State_Selected', 1):
+            option.palette.setColor(QPalette.HighlightedText, QColor("yellow") if has_driver else QColor("white"))
+
+
+class TargetGrid(QTableWidget):
+
+    def __init__(self, parent=None):
+        QTableWidget.__init__(self, parent)
+        mode = getattr(QAbstractItemView, 'ExtendedSelection', None)
+        if mode is None and hasattr(QAbstractItemView, 'SelectionMode'):
+             mode = QAbstractItemView.SelectionMode.ExtendedSelection
+        self.setSelectionMode(mode)
+        self.verticalHeader().setVisible(False)
+        self.menu = QMenu(self)
+        self._target_items = {}
+        
+        font = self.font()
+        if font.pointSize() > 0:
+            font.setPointSize(font.pointSize() + 6)
+        elif font.pixelSize() > 0:
+            font.setPixelSize(font.pixelSize() + 8)
+        self.setFont(font)
+        self.setItemDelegate(ColorDelegate(self))
+        self.itemSelectionChanged.connect(self.update_selection_colors)
+
+    def update_selection_colors(self):
+        for i in range(self.rowCount()):
+            for j in range(self.columnCount()):
+                item = self.item(i, j)
+                if not item: continue
+                has_driver = item.data(Qt.UserRole + 1)
+                # Regardless of the selection, set Foreground, the delegate will override HighlightedText!
+                item.setForeground(QColor("#79dc7f") if has_driver else QColor("gray"))
+
+    def contextMenuEvent(self, event):
+        if hasattr(self.menu, "exec"):
+            self.menu.exec(event.globalPos())
+        else:
+            self.menu.exec_(event.globalPos())
+
+    def filter(self, text):
+        pass # Handle inside reload() externally
+
+    def current_name(self):
+        names = self.selected_names()
+        return names[0] if len(names) == 1 else ""
+
+    def selected_names(self):
+        names = []
+        for item in self.selectedItems():
+            t = item.data(Qt.UserRole)
+            if t and t not in names:
+                names.append(t)
+        return names
+        
+    def select_targets(self, targets):
+        for t in targets:
+            if t in self._target_items:
+                 self._target_items[t].setSelected(True)
+        sel_items = self.selectedItems()
+        if sel_items:
+             self.scrollToItem(sel_items[0])
+
+    def build_controller_grid(self, ctrl, all_existing):
+        self.clear()
+        self.setRowCount(0)
+        self.setColumnCount(2)
+        self.setHorizontalHeaderLabels([u"最小值驱动", u"最大值驱动"])
+        
+        import maya.cmds as cmds
+        
+        attrs = []
+        for trs in "trs":
+            for xyz in "xyz":
+                 attrs.append(trs + xyz)
+                 
+        if cmds.objExists(ctrl):
+            ud_attrs = cmds.listAttr(ctrl, ud=True, sn=True) or []
+            for ud in ud_attrs:
+                 if cmds.getAttr(ctrl + "." + ud, type=True) == "double":
+                     attrs.append(ud)
+                     
+        row_count = len(attrs)
+        self.setRowCount(row_count)
+        
+        ctrl_base_name = ctrl.split("|")[-1].split(":")[-1]
+        self._target_items = {}
+        
+        for i, attr in enumerate(attrs):
+            min_target = ctrl_base_name + "_" + attr + "_min"
+            max_target = ctrl_base_name + "_" + attr + "_max"
+            
+            item_min = QTableWidgetItem(attr.capitalize() + "---Min")
+            item_min.setFlags(item_min.flags() & ~Qt.ItemIsEditable)
+            item_min.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            item_min.setData(Qt.UserRole, min_target)
+            if min_target in all_existing:
+                item_min.setForeground(QColor("#79dc7f"))
+                item_min.setData(Qt.UserRole + 1, True)
+            else:
+                item_min.setForeground(QColor("gray"))
+                item_min.setData(Qt.UserRole + 1, False)
+            self.setItem(i, 0, item_min)
+            self._target_items[min_target] = item_min
+            
+            item_max = QTableWidgetItem(attr.capitalize() + "---Max")
+            item_max.setFlags(item_max.flags() & ~Qt.ItemIsEditable)
+            item_max.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item_max.setData(Qt.UserRole, max_target)
+            if max_target in all_existing:
+                item_max.setForeground(QColor("#79dc7f"))
+                item_max.setData(Qt.UserRole + 1, True)
+            else:
+                item_max.setForeground(QColor("gray"))
+                item_max.setData(Qt.UserRole + 1, False)
+            self.setItem(i, 1, item_max)
+            self._target_items[max_target] = item_max
+
+        other_targets = []
+        for t in all_existing:
+            if ctrl_base_name in t and t not in self._target_items:
+                 other_targets.append(t)
+                 
+        if other_targets:
+             import math
+             other_rows = int(math.ceil(len(other_targets) / 2.0))
+             self.setRowCount(row_count + other_rows)
+             for k, t in enumerate(other_targets):
+                  short_name = t.replace(ctrl_base_name + "_", "")
+                  item = QTableWidgetItem(short_name)
+                  item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                  
+                  r = row_count + (k // 2)
+                  c = k % 2
+                  
+                  if c == 0:
+                      item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                  else:
+                      item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                      
+                  item.setData(Qt.UserRole, t)
+                  item.setData(Qt.UserRole + 1, True)
+                  item.setForeground(QColor("#79dc7f"))
+                  self.setItem(r, c, item)
+                  self._target_items[t] = item
+                  
+        self.update_selection_colors()
+
+        header = self.horizontalHeader()
+        try:
+            if hasattr(QHeaderView, 'Stretch'):
+                header.setSectionResizeMode(QHeaderView.Stretch)
+            else:
+                header.setStretchLastSection(True)
+        except:
+             try: header.setResizeMode(QHeaderView.Stretch)
+             except: pass
+
+    def build_flat_list(self, search_text, all_existing):
+        self.clear()
+        self.setRowCount(0)
+        self.setColumnCount(1)
+        self.setHorizontalHeaderLabels([u"驱动目标"])
+        
+        import re
+        fields = [field.replace("*", ".+") for field in search_text.split(",") if field]
+        
+        filtered_targets = []
+        for t in all_existing:
+             if not any([bool(re.findall(field, t)) for field in fields]+[not bool(fields)]):
+                  continue
+             filtered_targets.append(t)
+             
+        self.setRowCount(len(filtered_targets))
+        self._target_items = {}
+        for i, t in enumerate(filtered_targets):
+             item = QTableWidgetItem(t)
+             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+             item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+             item.setData(Qt.UserRole, t)
+             item.setForeground(QColor("#79dc7f"))
+             self.setItem(i, 0, item)
+             self._target_items[t] = item
+             
+        header = self.horizontalHeader()
+        try:
+            if hasattr(QHeaderView, 'Stretch'):
+                header.setSectionResizeMode(QHeaderView.Stretch)
+            else:
+                header.setStretchLastSection(True)
+        except:
+             try: header.setResizeMode(QHeaderView.Stretch)
+             except: pass
+

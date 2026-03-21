@@ -718,30 +718,43 @@ void get_bs_points(MString bs_name, int target_index, MPointArray& all_points) {
 }
 
 
-std::vector<MPointArray> _CACHE_POINTS;
+#include <map>
+#include <string>
 
+std::map<std::string, std::map<int, MPointArray>> _CACHE_ID_POINT_MAPS;
 
 void cache_target_points(MString bs_name, MIntArray target_indexes) {
-    _CACHE_POINTS.clear();
     int target_length = target_indexes.length();
-    _CACHE_POINTS.resize(target_length);
     for (int target_id = 0; target_id < target_length; target_id++) {
-        get_bs_points(bs_name, target_indexes[target_id], _CACHE_POINTS[target_id]);
+        MPointArray pts;
+        get_bs_points(bs_name, target_indexes[target_id], pts);
+        _CACHE_ID_POINT_MAPS[bs_name.asChar()][target_indexes[target_id]] = pts;
     }
 }
 
 void load_cache_target_points(MString bs_name, MIntArray target_indexes, MIntArray vtx_ids) {
     int target_length = target_indexes.length();
-    if (target_length != _CACHE_POINTS.size()) {
-        return;
-    }
     for (int target_id = 0; target_id < target_length; target_id++) {
         int target_index = target_indexes[target_id];
+        
+        auto bs_it = _CACHE_ID_POINT_MAPS.find(bs_name.asChar());
+        if (bs_it == _CACHE_ID_POINT_MAPS.end()) continue;
+        
+        auto pt_it = bs_it->second.find(target_index);
+        if (pt_it == bs_it->second.end()) continue;
+        
+        MPointArray& cached_points = pt_it->second;
+        
+        if (vtx_ids.length() == 0) {
+            set_bs_points(bs_name, target_index, cached_points);
+            continue;
+        }
+        
         MPointArray all_points;
         get_bs_points(bs_name, target_index, all_points);
         int count = vtx_ids.length();
         for (int i = 0; i < count; i++) {
-            all_points[vtx_ids[i]] = _CACHE_POINTS[target_id][vtx_ids[i]];
+            all_points[vtx_ids[i]] = cached_points[vtx_ids[i]];
         }
         set_bs_points(bs_name, target_index, all_points);
     }

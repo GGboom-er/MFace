@@ -275,9 +275,6 @@ def mirror_targets(bs_name, orig_name, src_indexes, dst_indexes):
         set_bs_points(bs_name, dst_target_i, dst_points)
 
 
-_CACHE_ID_POINT_MAPS = []
-
-
 def get_bs_id_point_map(bs_name, target_index):
     id_point_map = dict()
     ids = MIntArray()
@@ -295,17 +292,20 @@ def set_bs_id_point_map(bs_name, target_index, id_point_map):
         if MVector(point).length() < 0.00001:
             continue
         ids.append(i)
-        print i
         points.append(point)
     set_bs_id_points(bs_name, target_index, ids, points)
 
 
+_CACHE_ID_POINT_MAPS = {}
+
 def cache_target_points(bs_name, target_indexes):
     global _CACHE_ID_POINT_MAPS
-    _CACHE_ID_POINT_MAPS = []
+    if bs_name not in _CACHE_ID_POINT_MAPS:
+        _CACHE_ID_POINT_MAPS[bs_name] = {}
+        
     target_length = len(target_indexes)
     for target_id in range(target_length):
-        _CACHE_ID_POINT_MAPS.append(get_bs_id_point_map(bs_name, target_indexes[target_id]))
+        _CACHE_ID_POINT_MAPS[bs_name][target_indexes[target_id]] = get_bs_id_point_map(bs_name, target_indexes[target_id])
 
 
 def load_cache_target_points(bs_name, target_indexes, ids):
@@ -313,7 +313,7 @@ def load_cache_target_points(bs_name, target_indexes, ids):
     target_length = len(target_indexes)
     for target_id in range(target_length):
         target_index = target_indexes[target_id]
-        cache_id_point_map = _CACHE_ID_POINT_MAPS[target_id]
+        cache_id_point_map = _CACHE_ID_POINT_MAPS.get(bs_name, {}).get(target_index, {})
         if not ids:
             set_bs_id_point_map(bs_name, target_index, cache_id_point_map)
             continue

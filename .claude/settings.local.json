@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__maya__list_sessions",
+      "mcp__maya__execute_code",
+      "mcp__maya__write_module",
+      "mcp__maya__add_session",
+      "Bash(tasklist:*)",
+      "Bash(netstat:*)"
+    ]
+  }
+}

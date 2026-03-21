@@ -1,0 +1,294 @@
+{
+    "Brow_L": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "main": true,
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 3
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "L"
+    },
+    "Brow_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {
+                    "cluster": true,
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "M"
+    },
+    "Eye_L": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Eye",
+        "pre": "Eye",
+        "name": "Eye",
+        "rml": "L"
+    },
+    "Jaw_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "zip": false,
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Lip",
+        "pre": "Jaw",
+        "name": "Jaw",
+        "rml": "M"
+    },
+    "Lip_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Up"
+                },
+                {
+                    "cluster2": 0,
+                    "joint": 9,
+                    "degree": 3
+                }
+            ],
+            [
+                {
+                    "suf": "Dn"
+                },
+                {
+                    "cluster2": 0,
+                    "joint": 9,
+                    "degree": 3
+                }
+            ]
+        ],
+        "fit": "loop_curve",
+        "rig": "Lip",
+        "pre": "Lip",
+        "name": "Lip",
+        "rml": "M"
+    },
+    "Tongue_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "onSystem|MainSystem|MainExtra3Oft|MainExtra3|MainExtra2Oft|MainExtra2|MainExtra1Oft|MainExtra1|MainOft|Main|FacialSystem|MFaces|MFaceFits|FitTongue_M|FitTongue_M01|FitTongue_M02|FitTongue_M03|FitTongue_M04|FitTongue_M05"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "onSystem|MainSystem|MainExtra3Oft|MainExtra3|MainExtra2Oft|MainExtra2|MainExtra1Oft|MainExtra1|MainOft|Main|FacialSystem|MFaces|MFaceFits|FitTongue_M|FitTongue_M01|FitTongue_M02|FitTongue_M03|FitTongue_M04"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "onSystem|MainSystem|MainExtra3Oft|MainExtra3|MainExtra2Oft|MainExtra2|MainExtra1Oft|MainExtra1|MainOft|Main|FacialSystem|MFaces|MFaceFits|FitTongue_M|FitTongue_M01|FitTongue_M02|FitTongue_M03"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "onSystem|MainSystem|MainExtra3Oft|MainExtra3|MainExtra2Oft|MainExtra2|MainExtra1Oft|MainExtra1|MainOft|Main|FacialSystem|MFaces|MFaceFits|FitTongue_M|FitTongue_M01|FitTongue_M02"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "01"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "fk",
+        "rig": "Lip",
+        "pre": "Tongue",
+        "name": "Tongue",
+        "rml": "M"
+    },
+    "ToothUp_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Lip",
+        "pre": "ToothUp",
+        "name": "ToothUp",
+        "rml": "M"
+    },
+    "ToothDn_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Lip",
+        "pre": "ToothDn",
+        "name": "ToothDn",
+        "rml": "M"
+    },
+    "Nose_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Nose",
+        "pre": "Nose",
+        "name": "Nose",
+        "rml": "M"
+    },
+    "Nostril_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 1
+                }
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 1
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Nose",
+        "pre": "Nostril",
+        "name": "Nostril",
+        "rml": "M"
+    },
+    "Lid_L": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Up"
+                },
+                {
+                    "cluster2": 0,
+                    "joint": 7,
+                    "degree": 3,
+                    "roll": true
+                }
+            ],
+            [
+                {
+                    "suf": "Dn"
+                },
+                {
+                    "cluster2": 0,
+                    "joint": 7,
+                    "degree": 3,
+                    "roll": true
+                }
+            ]
+        ],
+        "fit": "loop_curve",
+        "rig": "Eye",
+        "pre": "Lid",
+        "name": "Lid",
+        "rml": "L"
+    }
+}

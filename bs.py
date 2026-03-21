@@ -233,12 +233,19 @@ def delete_connect_targets(attr):
 
 
 class LEditTargetJob(object):
+    _BACKUP = {}
 
     def __init__(self, src, dst, target):
         self.del_job()
         self.bs = get_bs(dst)
         self.index = get_index(self.bs, target)
         self.src = src
+        bs_api.cache_target_points(self.bs, [self.index])
+        
+        self.__class__._BACKUP[self.src] = {
+            "bs": self.bs,
+            "index": self.index
+        }
         bs_api.cache_target(self.bs, self.index, dst, get_orig(dst))
         cmds.scriptJob(attributeChange=[cmds.listRelatives(src, s=1)[0] + ".outMesh", self])
 
@@ -254,7 +261,7 @@ class LEditTargetJob(object):
     @classmethod
     def del_job(cls):
         for job in cmds.scriptJob(listJobs=True):
-            if repr(cls.__name__) in job:
+            if cls.__name__ in job:
                 cmds.scriptJob(kill=int(job.split(":")[0]))
 
 
@@ -263,23 +270,61 @@ def finish_duplicate_edit(set_pose_by_target):
     root = "|lush_duplicate_edit"
     if not cmds.objExists(root):
         return
-    for target_group in cmds.listRelatives(root):
+    for target_group in cmds.listRelatives(root) or []:
         if target_group[:5] != "edit_":
             continue
         target = target_group[5:]
         set_pose_by_target(target)
-        for src in cmds.listRelatives(target_group):
+        for src in cmds.listRelatives(target_group, fullPath=True) or []:
             if not is_shape(src):
                 continue
-            dst = src[len(target)+1:]
-            if not is_shape(dst):
+            short_src = src.split("|")[-1]
+            if not short_src.startswith(target + "_"):
                 continue
-            uu = cmds.ls(cmds.listConnections(dst+".v", s=1, d=0), type=["animCurveUU", "blendWeighted"])
+            dst = short_src[len(target)+1:]
+            if not cmds.objExists(dst):
+                continue
+            uu = cmds.listConnections(dst+".v", s=1, d=0)
             if uu:
-                cmds.delete(uu)
+                to_delete = [n for n in uu if cmds.objectType(n).startswith("animCurve") or cmds.objectType(n) == "blendWeighted"]
+                if to_delete:
+                    cmds.delete(to_delete)
             cmds.setAttr(dst+".v", True)
             edit_target(src, dst, target)
     cmds.delete(root)
+    LEditTargetJob._BACKUP.clear()
+
+
+def cancel_duplicate_edit(set_pose_by_target):
+    LEditTargetJob.del_job()
+    root = "|lush_duplicate_edit"
+    if not cmds.objExists(root):
+        return
+    for target_group in cmds.listRelatives(root) or []:
+        if target_group[:5] != "edit_":
+            continue
+        target = target_group[5:]
+        set_pose_by_target(target)
+        for src in cmds.listRelatives(target_group, fullPath=True) or []:
+            if not is_shape(src):
+                continue
+            short_src = src.split("|")[-1]
+            if not short_src.startswith(target + "_"):
+                continue
+            dst = short_src[len(target)+1:]
+            if not cmds.objExists(dst):
+                continue
+            uu = cmds.listConnections(dst+".v", s=1, d=0)
+            if uu:
+                to_delete = [n for n in uu if cmds.objectType(n).startswith("animCurve") or cmds.objectType(n) == "blendWeighted"]
+                if to_delete:
+                    cmds.delete(to_delete)
+            backup = LEditTargetJob._BACKUP.get(src) or LEditTargetJob._BACKUP.get(short_src)
+            if backup:
+                bs_api.load_cache_target_points(backup["bs"], [backup["index"]], [])
+            cmds.setAttr(dst+".v", True)
+    cmds.delete(root)
+    LEditTargetJob._BACKUP.clear()
 
 
 def wireframe_planes():
@@ -346,8 +391,9 @@ def duplicate_edit_selected_polygons(attrs, set_pose_by_target):
         target = get_target(attr)
         set_pose_by_target(target)
         for polygon in polygons:
-            duplicate_polygon(attr, polygon)
-    duplicate_edit_polygon(attrs[0], polygons[0])
+            dup = duplicate_polygon(attr, polygon)
+            LEditTargetJob(dup, polygon, target)
+    wireframe_planes()
 
 
 def is_on_duplicate_edit():

@@ -25,7 +25,7 @@ class FacePoseTool(QDialog):
 
     def __init__(self):
         QDialog.__init__(self, get_app())
-        self.list = List()
+        self.list = TargetGrid()
         self.line = QLineEdit()
         self.but = q_button(u"复制修改", self.apply)
         self.setWindowTitle(u"姿势工具")
@@ -41,25 +41,88 @@ class FacePoseTool(QDialog):
             self.but
         ))
         add_menu = self.list.menu.addMenu(u"添加")
-        add_menu.addAction(u"驱动姿势", self.run_none(tools.add_sdk_by_selected))
-        add_menu.addAction(u"组合", self.run_targets(tools.add_comb))
-        add_menu.addAction(u"中间帧", self.run_target(tools.add_ib))
-        self.list.menu.addAction(u"修改", self.run_target(tools.edit_target, False))
-        self.list.menu.addAction(u"镜像", self.run_targets(tools.mirror_targets))
+        add_menu.addAction(u"驱动姿势", self.add_driver_action)
+        add_menu.addAction(u"组合", self.add_comb_action)
+        add_menu.addAction(u"中间帧", self.add_ib_action)
+        self.list.menu.addAction(u"修改", self.edit_target_action)
+        self.list.menu.addAction(u"镜像", self.run_targets(tools.mirror_targets, True))
         self.list.menu.addAction(u"拷贝翻转", self.run_targets(tools.copy_flip_target, False))
         self.list.menu.addAction(u"删除", self.run_targets(tools.delete_targets))
-        self.list.menu.addAction(u"删除选择点/骨骼/模型", self.run_targets(tools.delete_selected_targets))
+        self.list.menu.addAction(u"删除选择点/骨骼/模型", self.run_targets(tools.delete_selected_targets, False))
         self.list.menu.addAction(u"导出pose", save_json(tools.save_face_pose_data))
-        self.line.textChanged.connect(self.list.filter)
-        self.list.itemDoubleClicked.connect(self.run_targets(tools.set_pose_by_targets, False))
+        self.line.textChanged.connect(self.reload)
+        self.list.itemDoubleClicked.connect(self.double_click_item)
         self.slider.slider.valueChanged.connect(self.set_slider_pose)
         self.slider.slider.sliderPressed.connect(self.start_slider_undo)
         self.slider.slider.sliderReleased.connect(self.end_slider_undo)
+        
+        self.list.itemSelectionChanged.connect(self.sync_slider_to_target_weight)
+        
+        # Undo/Redo Sync Callbacks
+        self._undo_cb = None
+        self._redo_cb = None
+
+    def _sync_ui_on_undo_redo(self, *args):
+        import maya.utils
+        maya.utils.executeDeferred(self.reload)
+
+    def showEvent(self, event):
+        from maya.api import OpenMaya as om
+        if not self._undo_cb:
+            self._undo_cb = om.MEventMessage.addEventCallback("Undo", self._sync_ui_on_undo_redo)
+        if not self._redo_cb:
+            self._redo_cb = om.MEventMessage.addEventCallback("Redo", self._sync_ui_on_undo_redo)
+        super(FacePoseTool, self).showEvent(event)
+
+    def closeEvent(self, event):
+        from maya.api import OpenMaya as om
+        if self._undo_cb:
+            om.MMessage.removeCallback(self._undo_cb)
+            self._undo_cb = None
+        if self._redo_cb:
+            om.MMessage.removeCallback(self._redo_cb)
+            self._redo_cb = None
+        super(FacePoseTool, self).closeEvent(event)
+
+    def double_click_item(self, item):
+        target = item.data(Qt.UserRole)
+        if not target or target not in tools.get_targets(): return
+        tools.set_pose_by_targets([target], 60, True)
+        self._auto_select([target], 60)
+        
+        # Select the driver object in Maya Viewport
+        ctrl = self.line.text().strip()
+        import maya.cmds as cmds
+        if ctrl and cmds.objExists(ctrl):
+            cmds.select(ctrl)
+
+    def sync_slider_to_target_weight(self):
+        target = self.list.current_name()
+        if not target: return
+        bridge = tools.facs.get_bridge()
+        if not bridge: return
+        attr = bridge + "." + target
+        
+        import maya.cmds as cmds
+        if cmds.objExists(attr):
+            val = cmds.getAttr(attr)
+            slider_val = int(val * 60)
+            self.slider.slider.blockSignals(True)
+            self.slider.box.blockSignals(True)
+            
+            self.slider.slider.setValue(slider_val)
+            self.slider.box.setValue(slider_val)
+            
+            self.slider.box.blockSignals(False)
+            self.slider.slider.blockSignals(False)
 
     def reload(self):
-        self.list.clear()
-        self.list.addItems(tools.get_targets())
-        self.list.filter(self.line.text())
+        text = self.line.text().strip()
+        import maya.cmds as cmds
+        if text and cmds.objExists(text) and cmds.objectType(text) == "transform":
+            self.list.build_controller_grid(text, tools.get_targets())
+        else:
+            self.list.build_flat_list(text, tools.get_targets())
 
     def load(self):
         self.line.setText(tools.get_face_pose_filter())
@@ -89,6 +152,48 @@ class FacePoseTool(QDialog):
                 self.reload()
         return wrapper
 
+    def _auto_select(self, targets, set_weight=None):
+        if not targets: targets = []
+        if not isinstance(targets, (list, tuple)):
+            targets = [targets]
+        self.reload()
+        self.list.clearSelection()
+        if not targets: return
+        self.reload()
+        self.list.clearSelection()
+        self.list.select_targets(targets)
+        if set_weight is not None:
+            self.slider.slider.setValue(set_weight)
+            self.set_slider_pose(set_weight)
+
+    def add_driver_action(self):
+        ctrl = self.line.text().strip()
+        if not ctrl: return
+        targets = tools.add_sdk_by_selected([ctrl])
+        if not targets: return
+        
+        if len(targets) > 1:
+            self._auto_select([], None)
+        else:
+            self._auto_select(targets, 60)
+
+    def add_comb_action(self):
+        target = tools.add_comb(self.list.selected_names())
+        self._auto_select(target, 60)
+
+    def add_ib_action(self):
+        target = self.list.current_name()
+        if not target: return
+        new_target = tools.add_ib(target)
+        self._auto_select(new_target, None) # IB keeps relative weight
+
+    def edit_target_action(self):
+        target = self.list.current_name()
+        if not target or target not in tools.get_targets(): return
+        new_target = tools.edit_target(target)
+        if new_target:
+            self._auto_select([new_target], None)
+
     def start_slider_undo(self):
         from maya import cmds
         cmds.undoInfo(openChunk=True)
@@ -101,11 +206,17 @@ class FacePoseTool(QDialog):
         tools.facs.set_pose_by_targets(self.list.selected_names(), value, False)
 
     def apply(self):
-        targets = self.list.selected_names()
+        existing = tools.get_targets()
+        targets = [t for t in self.list.selected_names() if t in existing]
         if not targets:
              return
         
-        self.run_targets(tools.auto_duplicate_edit, False)()
+        # Capture strictly resolved/swapped targets from C++ logic
+        resolved_targets = tools.auto_duplicate_edit(targets)
+        if resolved_targets:
+            self._auto_select(resolved_targets, None)
+        else:
+            self._auto_select(targets, None)
         # Check scene state directly as a fallback
         import maya.cmds as cmds
         if cmds.objExists("lush_duplicate_edit"):
@@ -125,8 +236,6 @@ class FacePoseTool(QDialog):
                 self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
             except:
                 pass
-            target_str = ",".join(targets)
-            cmds.inViewMessage(amg='<span style="color: #00FF00; font-size: 20px;">修改 %s 成功</span>' % target_str, pos='midCenter', fade=True)
 
     def show_cancel_menu(self, pos):
         targets = self.list.selected_names()
@@ -139,45 +248,20 @@ class FacePoseTool(QDialog):
         # Cancel logic for duplicate edit
         import maya.cmds as cmds
         if cmds.objExists("|lush_duplicate_edit"):
-            # Restore visibility of original meshes hidden by duplicate_edit
-            # Iterate children of temp groups to find original meshes
-            for target_group in cmds.listRelatives("|lush_duplicate_edit") or []:
-                if not target_group.startswith("edit_"): continue
-                target = target_group[5:]
-                for src in cmds.listRelatives(target_group) or []:
-                    if "mesh" not in cmds.nodeType(src) and "transform" not in cmds.nodeType(src): continue 
-                    # Assuming src is the duplicate, we need to find the original. 
-                    # The original name is usually part of the duplicate name or stored in connections.
-                    # Actually, bs.py's duplicate_polygon sets a driven key on .v of original.
-                    # We need to break that connection and set .v to 1.
-                    # The original polygon name is derived.
-                    # Name convention in duplicate_polygon: name = target + "_" + polygon.split("|")[-1]
-                    # This is hard to reverse exactly if naming is complex.
-                    # Better to look at the visibility connections on the duplicate group logic or just restore all.
-                    pass
+            targets = self.list.selected_names()
+            if targets:
+                tools.cancel_duplicate_edit(targets)
+            else:
+                from .. import bs
+                bs.cancel_duplicate_edit(lambda x: None)
             
-            # Since proper restoration is complex without modifying bs.py core logic, 
-            # we will try to delete the group and hopefully the user can manually unhide if needed, 
-            # OR we implement a proper cancel in bs.py.
-            # But per instruction, we should try to do it.
-            # Let's delete the group and clear script jobs.
-            cmds.delete("|lush_duplicate_edit")
-            
-            # Kill script jobs
-            from .. import bs
-            bs.LEditTargetJob.del_job()
-            
-            # Restore visibility for ALL selected polygons (approximation)
-            # Or better, just restore visibility for objects that have driven keys on .v connected to the blendshape weights?
-            # Too complex for quick UI patch. 
-            # Let's just delete the temp group and let user unhide. 
-            # Wait, the driven key on original mesh .v is driven by the target weight.
-            # When we delete temp group, the weight is still 1? No, we didn't change weight on start?
-            # set_pose_by_target sets weight.
-            # If we cancel, we might want to reset weight?
-            pass
-        
-        self.apply() # Refresh button state
+            self.but.setText(u"复制修改")
+            self.but.setStyleSheet("")
+            self.but.setContextMenuPolicy(Qt.NoContextMenu)
+            try:
+                self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
+            except:
+                pass
 
 
 window = None
