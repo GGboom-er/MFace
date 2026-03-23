@@ -555,6 +555,18 @@ def mirror_joint_targets(target_mirrors):
     for src, dst in target_mirrors:
         Joint.mirror_all_additive(src, dst)
 
+def auto_mirror_polygon_targets(target_mirrors):
+    # 自动查找场景中包含 src target 的 blendShape 节点并进行翻转，不再依赖当前用户选择
+    all_bs = cmds.ls(type="blendShape")
+    for bs_node in all_bs:
+        aliases = cmds.aliasAttr(bs_node, q=1) or []
+        alias_names = aliases[::2]
+        
+        for src, dst in target_mirrors:
+            if src in alias_names:
+                dst_attr = get_driver_attr(dst)
+                bs.connect_target(bs_node, dst_attr)
+                bs.mirror_target(bs_node, src, bs.get_target(dst_attr))
 
 def mirror_polygon_targets(target_mirrors):
     target_mirrors = [[src, get_driver_attr(dst)] for src, dst in target_mirrors]
@@ -563,7 +575,20 @@ def mirror_polygon_targets(target_mirrors):
 
 def mirror_targets(target_names):
     target_mirrors = mirror_drive_targets(target_names)
-    run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, target_mirrors)
+    
+    # 骨骼部分保留判断，因为有选择隔离功能(若选了骨骼只镜像选中的)
+    if cmds.ls(sl=1, type="joint") or get_selected_ctrls():
+        mirror_joint_targets(target_mirrors)
+    elif not cmds.ls(sl=1, o=1, type="mesh"):
+        # 如果什么都没选，默认全部执行
+        mirror_joint_targets(target_mirrors)
+        
+    # polygon部分：不再用 run_joint_or_polygon 判断，只要有能匹配上的BS就直接翻转
+    if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
+        mirror_polygon_targets(target_mirrors)
+    else:
+        auto_mirror_polygon_targets(target_mirrors)
+        
     msgs = [u"从 %s 镜像至 -> %s" % (src, dst) for src, dst in target_mirrors]
     cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">姿势镜像完成！%s</span>' % ", ".join(msgs), pos='midCenter', fade=True)
 
@@ -571,7 +596,17 @@ def mirror_targets(target_names):
 def copy_flip_target(target_names):
     if len(target_names) != 2:
         return
-    run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, [target_names])
+        
+    if cmds.ls(sl=1, type="joint") or get_selected_ctrls():
+        mirror_joint_targets([target_names])
+    elif not cmds.ls(sl=1, o=1, type="mesh"):
+        mirror_joint_targets([target_names])
+
+    if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
+        mirror_polygon_targets([target_names])
+    else:
+        auto_mirror_polygon_targets([target_names])
+        
     cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">拷贝翻转完成！%s -> %s</span>' % (target_names[0], target_names[1]), pos='midCenter', fade=True)
 
 
