@@ -28,17 +28,24 @@ class FacePoseTool(QDialog):
         self.list = TargetGrid()
         self.line = QLineEdit()
         self.but = q_button(u"复制修改", self.apply)
+        self.btn_reset = q_button(u"还原控制器", tools.esc)
         self.setWindowTitle(u"姿势工具")
         self.slider = TargetSlider()
         self.slider.button.clicked.connect(tools.esc)
         load = q_button(u"<<<", self.load)
         load.setFixedWidth(40)
+        
+        btn_lay = QHBoxLayout()
+        btn_lay.setContentsMargins(0, 0, 0, 0)
+        btn_lay.addWidget(self.btn_reset)
+        btn_lay.addWidget(self.but)
+        
         self.setLayout(q_add(
             QVBoxLayout(),
             self.slider,
             q_add(QHBoxLayout(), q_prefix(u"搜索：", 50), self.line, load),
             self.list,
-            self.but
+            btn_lay
         ))
         add_menu = self.list.menu.addMenu(u"添加")
         add_menu.addAction(u"驱动姿势", self.add_driver_action)

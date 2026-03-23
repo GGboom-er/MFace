@@ -670,6 +670,17 @@ def esc():
     Ctrl.reset_all()
 
 
+def restore_controllers():
+    ctrls = get_selected_ctrls()
+    if not ctrls:
+        esc()
+        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">全场景所有控制器及修形目标极值已重置归零！</span>', pos='midCenter', fade=True)
+    else:
+        for c in ctrls:
+            Ctrl(c).reset()
+        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">您所选中的控制器通道已被归零！</span>', pos='midCenter', fade=True)
+
+
 def auto_duplicate_edit(targets):
     polygons = bs.get_selected_polygons()
     is_finishing = bs.is_on_duplicate_edit()

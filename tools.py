@@ -127,6 +127,7 @@ delete_targets = undo(facs.delete_targets)
 copy_flip_target = undo(facs.copy_flip_target)
 delete_selected_targets = undo(facs.delete_selected_targets)
 esc = undo(facs.esc)
+restore_controllers = undo(facs.restore_controllers)
 auto_duplicate_edit = undo(facs.auto_duplicate_edit)
 cancel_duplicate_edit = undo(facs.cancel_duplicate_edit)
 is_on_duplicate_edit = facs.bs.is_on_duplicate_edit
