@@ -2,6 +2,7 @@
 import struct
 
 from .rig import *
+from .rig import _normalize_sample, _sample_joint_points
 from .roll import rig_roll
 from .fk import rig_fk
 from .joint import rig_joint
@@ -206,39 +207,6 @@ def get_lip_weights(joint):
     weights = [weight4[0], weight5[1], weight2, weight5[3], weight4[-1]]
     return weights
 
-
-def _normalize_sample(sample):
-    if isinstance(sample, int):
-        return ["param", "length", "topo"][min(max(sample, 0), 2)]
-    if isinstance(sample, str):
-        return sample
-    return "param"
-
-
-def _sample_joint_points(sample, joint, points, curve, mirror):
-    if joint <= 0:
-        return
-    if sample == "length":
-        if curve:
-            points = get_points_by_curve(curve, joint)
-            if mirror:
-                points = mirror_points(points)
-        elif points:
-            points = resample_polyline_points(points, joint, False)
-        else:
-            return
-    elif sample == "topo":
-        if points:
-            points = resample_polyline_points(points, joint, False)
-        elif curve:
-            points = get_points_by_curve(curve, joint)
-            if mirror:
-                points = mirror_points(points)
-        else:
-            return
-    else:
-        return
-    return points, get_us_by_points(points, False)
 
 
 def rig_ud_surface(joint, count, us, side, cluster2, degree, cluster, sample="param",

@@ -1,14 +1,8 @@
 import functools
 from .rig import *
+from .rig import _normalize_sample
 from .surface import update_fit_surface_curve_data
 
-
-def _normalize_sample(sample):
-    if isinstance(sample, int):
-        return ["param", "length", "topo"][min(max(sample, 0), 2)]
-    if isinstance(sample, str):
-        return sample
-    return "param"
 
 
 class Loop(RigSystem):

@@ -8,7 +8,7 @@ from .surface import rig_surface, merge_surface_curve_fits
 class Nose(RigSystem):
     fit_configs = dict(Nostril=dict(pre="Nostril", fit="surface", names=["", "A", "B", "C"], rml="MRL"),
                        Nose=dict(pre="Nose", fit="roll", names=["", "A", "B", "C"], rml="MRL"))
-    fit_kwargs = [(dict(pre="Nostril"), dict(cluster=3, joint=5, degree=1))]
+    fit_kwargs = [(dict(pre="Nostril"), dict(cluster=3, joint=5, degree=1, sample="param"))]
 
     def rig_rml(self, fits):
         aim, roll = [fits.find(suf=suf) for suf in ["Aim", "Roll"]]

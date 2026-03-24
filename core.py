@@ -262,7 +262,7 @@ class Ctrl(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
-        self.follow.xform(m=matrix)
+        self.follow.xform(ws=1, m=matrix)
         self.follow["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if self.is_left():
             self.mirror.xform(ws=0, m=list(MMatrix(matrix).inverse()))
@@ -519,11 +519,16 @@ class Joint(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
+        # matrix 为世界矩阵，bws default 驱动 Additive 节点的局部 translate/rotate
+        # 需先转换为相对于 self.root 的局部矩阵，否则 MFace 组有偏移时产生双重偏移
+        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
-            self.bws[i].set_default(matrix[j])
+            self.bws[i].set_default(local_matrix[j])
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         self.re_skin()
         return self
+
 
     def re_skin(self):
         for attr in self.joint["worldMatrix[0]"].connects(s=0, d=1, p=1):
@@ -628,15 +633,12 @@ class Joint(Hierarchy):
                 j_node = cls(name)
                 default_vals = [b.default.get() for b in j_node.bws]
                 target_vals = [d + a for d, a in zip(default_vals, value)]
-                
                 t_base = om.MVector(default_vals[0:3])
                 y_base = om.MVector(default_vals[3:6])
                 z_base = om.MVector(default_vals[6:9])
-                
                 t_pose = om.MVector(target_vals[0:3])
                 y_pose = om.MVector(target_vals[3:6])
                 z_pose = om.MVector(target_vals[6:9])
-                
                 def get_rot_mat(y_vec, z_vec):
                     y_n = y_vec.normal()
                     z_n = z_vec.normal()
@@ -647,25 +649,26 @@ class Joint(Hierarchy):
                         z_n.x, z_n.y, z_n.z, 0,
                         0.0, 0.0, 0.0, 1.0
                     ])
-                    
                 r_base = get_rot_mat(y_base, z_base)
                 r_pose = get_rot_mat(y_pose, z_pose)
                 
-                # 平移增量世界空间反射
+                # 平移：相对世界 YZ 平面的位移镜像
                 delta_t = t_pose - t_base
-                delta_t_sym = om.MVector(-delta_t.x, delta_t.y, delta_t.z)
-                t_sym = t_base + delta_t_sym
+                t_sym = t_base + om.MVector(-delta_t.x, delta_t.y, delta_t.z)
                 
-                # 旋转增量世界空间反射
-                delta_r = r_pose * r_base.inverse()
+                # 旋转：提取世界空间中的旋转增量
+                delta_r_world = r_base.inverse() * r_pose
+                
+                # 对世界变化量进行镜面反射
                 S_x = om.MMatrix([-1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,0,1])
-                delta_r_sym = S_x * delta_r * S_x
-                r_sym = delta_r_sym * r_base
+                delta_r_world_sym = S_x * delta_r_world * S_x
+                
+                # 基于同样的基础姿势，应用镜像后的变化量，保证自身朝向基础不被错误倒转
+                r_sym = r_base * delta_r_world_sym
                 
                 m_sym_list = list(r_sym)
                 sy = target_vals[10]
                 sz = target_vals[11]
-                
                 sym_vals = [
                     t_sym.x, t_sym.y, t_sym.z,
                     m_sym_list[4]*sy, m_sym_list[5]*sy, m_sym_list[6]*sy,
@@ -673,7 +676,6 @@ class Joint(Hierarchy):
                     target_vals[9], target_vals[10], target_vals[11]
                 ]
                 
-                # 计算属于左侧(对称)的 additive offset
                 mirror_value = [s - d for s, d in zip(sym_vals, default_vals)]
                 mirror_data[name] = mirror_value
             else:
@@ -693,7 +695,6 @@ class Joint(Hierarchy):
             for i in range(0, 3, 6):
                 mirror_value[i] *= -1
             mirror_data[Fmt.mirror_name(name)] = mirror_value
-        # 同样对 _M 执行真正的轴投射翻转 （如果需要的话，但自身镜像是两侧动作一样，不需要操作 _M 骨骼，所以跳过 _M 是对的）
         return mirror_data
 
 
@@ -763,7 +764,7 @@ class Cluster(Hierarchy):
 
     def set_matrix(self, matrix):
         self.pre["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-        self.pre.xform(m=matrix, ws=0)
+        self.pre.xform(ws=1, m=matrix)
         return self
 
     def parent_to(self, other):

@@ -454,8 +454,12 @@ class Fits(object):
         if cmds.objExists(group):
             cmds.delete(group)
         classify = name[len(pre):]
-        cmds.createNode("transform", n=group, p=ROOT, ss=1)
+        # 先在世界根创建 group，保证所有 fit_* 函数在干净的世界坐标系下运行
+        # 避免 MFaceFits 有位移/旋转时，曲线、surface、joint 的局部坐标计算出现偏移
+        cmds.createNode("transform", n=group, ss=1)
         nodes = globals()["fit_" + fit](group)
+        # fit 完成后再 parent 进 ROOT，保留世界位置
+        cmds.parent(group, ROOT)
         nodes = nodes if isinstance(nodes, tuple) else [nodes]
         for node in nodes:
             save_data(node, fit=fit, rig=rig, pre=pre, classify=classify, name=name, rml=rml, suf=node[len(group):])

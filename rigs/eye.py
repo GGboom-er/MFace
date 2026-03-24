@@ -2,13 +2,14 @@
 from .rig import *
 from .roll import rig_roll
 from .lip import update_aim_curve, rig_ud_surface
-from .. import facs
+from ..nodes import Exp, Node
+from maya import cmds
 
 
 class Eye(RigSystem):
     fit_configs = dict(Lid=dict(pre="Lid", fit="loop_curve", names=["", "A", "B", "C"], rml="RML"),
                        Eye=dict(pre="Eye", fit="roll", names=["", "A", "B", "C"], rml="RML"))
-    fit_kwargs = [(dict(pre="Lid"), dict(cluster2=0, joint=9, degree=2, roll=True))]
+    fit_kwargs = [(dict(pre="Lid"), dict(cluster2=0, joint=9, degree=2, roll=True, sample="param"))]
 
     def build(self):
         aims = [self.rig_rml(fits) for fits in self.fits.group("rml")]
@@ -45,8 +46,10 @@ class Eye(RigSystem):
         kwargs = dict(static=look_cluster.pre, dynamic=look_cluster.cluster, v1=0, v2=10, dv=2)
         Cons.blend(Cons.parent, up_result["ctrl"]["Follow"], dst=up_result["cluster"], **kwargs)
         Cons.blend(Cons.parent, dn_result["ctrl"]["Follow"], dst=dn_result["cluster"], **kwargs)
-        rig_close_driver(up_result["ctrl"], dn_result["ctrl"], up_result["joints"], dn_result["joints"],
-                         up_us=up_result["us"], dn_us=dn_result["us"])
+
+        # 弧线 Blink/BlinkCenter 眼皮闭合系统
+        eye_base_ctrl = Node("FCtrl" + Fmt(**aim).name())
+        rig_blink_facs(eye_base_ctrl, up_result, dn_result, roll_matrix)
         return look_ctrl
 
 
@@ -120,7 +123,7 @@ def rig_up_dn_lip(us, root, roll_matrix, roll, **kwargs):
     ctrls_follow_joints(ctrls, joints)
     follow = Cluster.add(fmt.typ("Follow"), roll_matrix)
     set_jac_weights([follow], joints, [lid_weights[1]])
-    return dict(ctrl=ctrls[1].ctrl, cluster=follow.cluster, joints=joints, us=us)
+    return dict(ctrl=ctrls[1].ctrl, cluster=follow.cluster, joints=joints, us=us, ctrls=ctrls)
 
 
 def snap_us(src_us, dst_us):
@@ -151,37 +154,332 @@ def snap_us(src_us, dst_us):
                 if m in snap_ids:
                     continue
                 us[m] += o
+def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
+    """
+    眼皮 Blink 弧面闭合系统 v4（全量6DOF + 纯叠加）：
+    1. 彻底移除 v3 的 suppress cluster 逻辑，恢复原版所见即所得的线性叠加
+    2. 引入 YAxis/ZAxis 旋转目标注入，确保 Blink 闭合时完全沿球面自旋
+    """
+    if not up_result or not dn_result:
+        return
+
+    up_joints = up_result.get("joints", [])
+    dn_joints = dn_result.get("joints", [])
+    if not up_joints or not dn_joints:
+        return
+
+    import math
+    from maya.api.OpenMaya import MMatrix, MPoint
+
+    # --- 1. Blink / BlinkCenter 属性 ---
+    for attr_name, mn, mx, dv in [("Blink", 0, 10, 0), ("BlinkCenter", 0, 10, 5)]:
+        if not cmds.objExists("{}.{}".format(blink_host.name, attr_name)):
+            cmds.addAttr(blink_host.name, ln=attr_name, at="double", min=mn, max=mx, dv=dv, k=True)
+
+    # --- 2. 共享节点 ---
+    up_ctrl_name = up_result["ctrl"].name
+    dn_ctrl_name = dn_result["ctrl"].name
+    
+    old_exp = "Blink" + up_ctrl_name.replace("FCtrl", "")
+    for node in cmds.ls(old_exp + "*") or []:
+        if cmds.objExists(node):
+            try: cmds.delete(node)
+            except Exception: pass
+            
+    exp_name = "Blink" + blink_host.name.replace("FCtrl", "")
+    blink_exp = Exp(exp_name)
+
+    for node in cmds.ls(exp_name + "*") or []:
+        if cmds.objExists(node):
+            try: cmds.delete(node)
+            except Exception: pass
+
+    # Fix1: 重置 Inverse/Additive 节点的 offsetParentMatrix，防止 rebuild 时残留值污染 set_matrix
+    identity = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
+    for ctrl_name in [up_ctrl_name, dn_ctrl_name]:
+        inv_n = "Inverse" + ctrl_name.replace("FCtrl", "")
+        if cmds.objExists(inv_n):
+            cmds.setAttr(inv_n + ".offsetParentMatrix", identity, typ="matrix")
+    for joints in [up_joints, dn_joints]:
+        for joint in joints:
+            add_n = "Additive" + joint.name
+            if cmds.objExists(add_n):
+                cmds.setAttr(add_n + ".offsetParentMatrix", identity, typ="matrix")
+
+    md_norm = cmds.createNode("multiplyDivide", n=exp_name+"_BlinkNorm_MD")
+    cmds.connectAttr(str(blink_host["Blink"]), "{}.input1X".format(md_norm))
+    cmds.setAttr("{}.input2X".format(md_norm), 0.1)
+    blink_norm_out = Attr(md_norm, "outputX")
+    dn_ratio_out   = blink_exp.unit(blink_host["BlinkCenter"], 0.1)
+
+    pma_node = exp_name + "UpRatioPMA"
+    if cmds.objExists(pma_node): cmds.delete(pma_node)
+    pma = cmds.createNode("plusMinusAverage", n=pma_node)
+    cmds.setAttr("{}.operation".format(pma), 2)
+    cmds.setAttr("{}.input1D[0]".format(pma), 1.0)
+    cmds.connectAttr(str(dn_ratio_out), "{}.input1D[1]".format(pma))
+    up_ratio_out = "{}.output1D".format(pma)
+
+    roll_mat = MMatrix(roll_matrix)
+    cy = roll_matrix[13]
+    cz = roll_matrix[14]
+    
+    static_root = Node("MFaceAdditives")
+
+    try:
+        # Correctly evaluate local anatomical orientation regardless of eye global yaw/pitch rotations
+        roll_inv = roll_mat.inverse()
+        
+        mid_up_joint = up_joints[len(up_joints)//2]
+        mid_dn_joint = dn_joints[len(dn_joints)//2]
+        
+        # Dynamically evaluate the current, real-time rest poses of the Template locators
+        # Ensures the Eyelid matrix follows the eyeball if the user mathematically translates the whole group
+        up_bws = cmds.xform(mid_up_joint.name, q=1, ws=1, t=1)
+        dn_bws = cmds.xform(mid_dn_joint.name, q=1, ws=1, t=1)
+        
+        up_pt = MPoint(*up_bws) * roll_inv
+        dn_pt = MPoint(*dn_bws) * roll_inv
+        
+        # Calculate exactly the required pitch deviation to the anatomical Equator
+        deg_up = math.degrees(math.atan2(up_pt.y, up_pt.z))
+        deg_dn = math.degrees(math.atan2(dn_pt.y, dn_pt.z))
+        
+        # Determine Equator Y-intercept for the UI controllers based directly on the Mid-joints
+        macro_target_y = (up_pt.y + dn_pt.y) / 2.0
+        
+        # Sign +1 for Down works precisely to track it upwards toward the equator naturally!
+        for pre, ctrl_node, ratio, sign, start_rest in [("Up", up_ctrl_name.replace("FCtrl", ""), up_ratio_out, -1, up_pt), 
+                                                ("Dn", dn_ctrl_name.replace("FCtrl", ""), dn_ratio_out, 1, dn_pt)]:
+            md_n = exp_name + "_{}_MacroRot_MD".format(pre)
+            cm_n = exp_name + "_{}_MacroRot_CM".format(pre)
+            norm_n = md_n + "_Norm"
+            inv_n = "Inverse" + ctrl_node
+            fctrl_n = "FCtrl" + ctrl_node
+            
+            for n in [md_n, cm_n, norm_n]:
+                if cmds.objExists(n): cmds.delete(n)
+                
+            if cmds.objExists(inv_n):
+                cmds.createNode("multiplyDivide", n=md_n)
+                cmds.createNode("composeMatrix", n=cm_n)
+                cmds.createNode("multiplyDivide", n=norm_n)
+                
+                # We dynamically track the Inverse OPM offset for the macro UI natively inside the Roll's Local Space Pivot
+                best_val = 0
+                best_diff = 9999
+                best_axis = "Z"
+                start_pos = MPoint(*cmds.xform(fctrl_n, q=1, ws=1, t=1))
+                start_ls = start_pos * roll_inv
+                
+                tmp_cm = cmds.createNode("composeMatrix")
+                
+                for ax in ["X", "Y", "Z"]:
+                    cmds.setAttr("{}.inputRotateX".format(tmp_cm), 0)
+                    cmds.setAttr("{}.inputRotateY".format(tmp_cm), 0)
+                    cmds.setAttr("{}.inputRotateZ".format(tmp_cm), 0)
+                    for test_v in range(-180, 180, 5):
+                        cmds.setAttr("{}.inputRotate{}".format(tmp_cm, ax), test_v)
+                        
+                        # Apply Euler rotation exclusively inside local Cornea space
+                        delta_m = MMatrix(cmds.getAttr("{}.outputMatrix".format(tmp_cm)))
+                        new_ls = start_ls * delta_m
+                        
+                        diff = abs(new_ls.y - macro_target_y)
+                        
+                        # Penalize extreme wide rotations to ensure it logically selects the most direct path to the equator
+                        # instead of wrapping 145 degrees entirely to the opposite side of the Cornea Origin
+                        diff += abs(test_v) * 0.001
+                        
+                        if diff < best_diff:
+                            best_diff = diff
+                            best_val = test_v
+                            best_axis = ax
+                            
+                cmds.delete(tmp_cm)
+                
+                print(f"DEBUG IK-SOLVER: inv_n={inv_n}, target_y={macro_target_y}, best_val={best_val}, best_axis={best_axis}")
+
+                
+                cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
+                # best_val represents the angle simply to the equator (half the eye distance).
+                # But the ratio is out of the ENTIRE eye closure (1.0 = full close).
+                cmds.setAttr("{}.input2X".format(md_n), best_val * 2.0)
+                
+                cmds.connectAttr("{}.outputX".format(md_n), "{}.input1X".format(norm_n))
+                orig_norm_out = blink_norm_out if isinstance(blink_norm_out, str) else str(blink_norm_out)
+                cmds.connectAttr(orig_norm_out, "{}.input2X".format(norm_n))
+                
+                target_ax = best_axis.upper()
+                cmds.connectAttr("{}.outputX".format(norm_n), "{}.inputRotate{}".format(cm_n, target_ax))
+
+                # Fix2: 空间转换 — composeMatrix 的旋转在 roll 本地空间求解，
+                # 但 Inverse.offsetParentMatrix 作用在 Follow(aim_matrix) 空间。
+                # 插入 multMatrix: aim_inv * roll * cm * roll_inv * aim
+                # 使旋转正确地在 roll 本地空间生效。
+                follow_n = "Follow" + ctrl_node
+                if cmds.objExists(follow_n):
+                    aim_mat_raw = cmds.getAttr(follow_n + ".bindPreMatrix")
+                    # cmds.getAttr 对 matrix 返回嵌套 tuple，需展平为 16 元素列表
+                    aim_mat = list(aim_mat_raw) if len(aim_mat_raw) == 16 else [v for row in aim_mat_raw for v in row]
+                    aim_inv_mat = list(MMatrix(aim_mat).inverse())
+                    roll_inv_list = list(roll_mat.inverse())
+
+                    space_mm = exp_name + "_{}_SpaceMM".format(pre)
+                    if cmds.objExists(space_mm): cmds.delete(space_mm)
+                    cmds.createNode("multMatrix", n=space_mm)
+
+                    # matrixIn[0] = aim_inv (常量)
+                    cmds.setAttr("{}.matrixIn[0]".format(space_mm), aim_inv_mat, typ="matrix")
+                    # matrixIn[1] = roll (常量)
+                    cmds.setAttr("{}.matrixIn[1]".format(space_mm), roll_matrix, typ="matrix")
+                    # matrixIn[2] = composeMatrix 输出 (动态)
+                    cmds.connectAttr("{}.outputMatrix".format(cm_n), "{}.matrixIn[2]".format(space_mm))
+                    # matrixIn[3] = roll_inv (常量)
+                    cmds.setAttr("{}.matrixIn[3]".format(space_mm), roll_inv_list, typ="matrix")
+                    # matrixIn[4] = aim (常量)
+                    cmds.setAttr("{}.matrixIn[4]".format(space_mm), aim_mat, typ="matrix")
+
+                    cmds.connectAttr("{}.matrixSum".format(space_mm), "{}.offsetParentMatrix".format(inv_n), f=True)
+                else:
+                    # 回退：无 Follow 节点时直接连接（原始行为）
+                    cmds.connectAttr("{}.outputMatrix".format(cm_n), "{}.offsetParentMatrix".format(inv_n), f=True)
+                
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+    pair_count = min(len(up_joints), len(dn_joints))
+    for up_joint, dn_joint in zip(up_joints[:pair_count], dn_joints[:pair_count]):
+        jname_up = up_joint.name
+        jname_dn = dn_joint.name
+
+        try:
+            up_bone_pos = cmds.xform(jname_up, q=1, ws=1, t=1)
+            dn_bone_pos = cmds.xform(jname_dn, q=1, ws=1, t=1)
+            
+            up_pt = MPoint(*up_bone_pos) * roll_inv
+            dn_pt = MPoint(*dn_bone_pos) * roll_inv
+            
+            # THE TRUE EQUATOR: The anatomical geometric midpoint between the Up and Dn template bone.
+            target_y = (up_pt.y + dn_pt.y) / 2.0
+            
+            deg_up = math.degrees(math.atan2(up_pt.y, up_pt.z))
+            deg_dn = math.degrees(math.atan2(dn_pt.y, dn_pt.z))
+        except Exception:
+            continue
+
+        def _build_nodes(tag, hry, def_bws):
+            fbfm_n = exp_name + "_{}_FBF".format(tag)
+            fbfm_inv_n = exp_name + "_{}_FBF_INV".format(tag)
+            mm_n   = exp_name + "_{}_MM".format(tag)
+            vmm_n  = exp_name + "_{}_VMM".format(tag)
+            dcm_n  = exp_name + "_{}_DCM".format(tag)
+            pivot_n= exp_name + "_{}_Pivot".format(tag)
+            
+            for n in [fbfm_n, fbfm_inv_n, mm_n, vmm_n, dcm_n, pivot_n]:
+                if cmds.objExists(n): cmds.delete(n)
+            
+            cmds.createNode("fourByFourMatrix", n=fbfm_n)
+            for fi, rv in enumerate(roll_matrix):
+                cmds.setAttr("{}.in{}{}".format(fbfm_n, fi//4, fi%4), rv)
+
+            cmds.createNode("fourByFourMatrix", n=fbfm_inv_n)
+            roll_mat_inv = list(MMatrix(roll_matrix).inverse())
+            for fi, rv in enumerate(roll_mat_inv):
+                cmds.setAttr("{}.in{}{}".format(fbfm_inv_n, fi//4, fi%4), rv)
+            
+            cmds.createNode("multMatrix", n=mm_n)
+            cmds.connectAttr(str(hry["BlinkRollYZ"]["matrix"]), "{}.matrixIn[0]".format(mm_n))
+            cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[1]".format(mm_n))
+
+            cmds.createNode("multMatrix", n=vmm_n)
+            cmds.connectAttr("{}.output".format(fbfm_inv_n), "{}.matrixIn[0]".format(vmm_n))
+            cmds.connectAttr(str(hry["BlinkRollYZ"]["matrix"]), "{}.matrixIn[1]".format(vmm_n))
+            cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[2]".format(vmm_n))
+            
+            return vmm_n
+
+        hry_up = Hierarchy("BlinkUp" + jname_up, static_root)
+        hry_up.build(("BlinkRoll", "BlinkRollYZ"))
+        hry_up["BlinkRoll"].xform(ws=1, m=roll_matrix)
+        pivot_up = _build_nodes("Up_{}".format(jname_up), hry_up, up_joint.bws)
+
+        hry_dn = Hierarchy("BlinkDn" + jname_dn, static_root)
+        hry_dn.build(("BlinkRoll", "BlinkRollYZ"))
+        hry_dn["BlinkRoll"].xform(ws=1, m=roll_matrix)
+        pivot_dn = _build_nodes("Dn_{}".format(jname_dn), hry_dn, dn_joint.bws)
+
+        def _build_rz_md(tag, hry, jname, target_local_y):
+            # Dynamic probing: Find exact Rotate Axis and Angle that brings this bone to target pitch
+            add_node = "Additive" + jname
+            
+            fbfm_inv_n = exp_name + "_{}_FBF_INV".format(tag)
+            fbfm_n = exp_name + "_{}_FBF".format(tag)
+            
+            tmp_cm = cmds.createNode("composeMatrix")
+            tmp_vmm = cmds.createNode("multMatrix")
+            cmds.connectAttr("{}.output".format(fbfm_inv_n), "{}.matrixIn[0]".format(tmp_vmm))
+            cmds.connectAttr("{}.outputMatrix".format(tmp_cm), "{}.matrixIn[1]".format(tmp_vmm))
+            cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[2]".format(tmp_vmm))
+            
+            best_val = 0
+            best_diff = 9999
+            best_axis = "Z" # Default to old behavior
+            
+            start_pos = MPoint(*cmds.xform(jname, q=1, ws=1, t=1))
+            start_ls = start_pos * roll_inv
+            
+            ax = "Z"
+            for test_v in range(-180, 180, 5):
+                cmds.setAttr("{}.inputRotateZ".format(tmp_cm), test_v)
+                delta_m = MMatrix(cmds.getAttr("{}.matrixSum".format(tmp_vmm)))
+                new_ws = start_pos * delta_m
+                new_ls = new_ws * roll_inv
+                
+                diff = abs(new_ls.y - target_local_y)
+                # Mathematically penalize arc coordinates that slip to the opposite side of the eyeball horizon
+                if start_ls.x * new_ls.x < 0:
+                    diff += 10.0
+                
+                if diff < best_diff:
+                    best_diff = diff
+                    best_val = test_v
+                    best_axis = ax
+            
+            cmds.delete(tmp_cm, tmp_vmm)
+            
+            md1 = exp_name + "_{}_MD1".format(tag)
+            md2 = exp_name + "_{}_MD2".format(tag)
+            for n in [md1, md2]:
+                if cmds.objExists(n): cmds.delete(n)
+            cmds.createNode("multiplyDivide", n=md1)
+            cmds.createNode("multiplyDivide", n=md2)
+            cmds.connectAttr(str(blink_norm_out), "{}.input1X".format(md1))
+            # best_val solves to reaching the equator line. Because the ratio
+            # multipliers define percentage of FULL eye closure, we double the equator angle.
+            cmds.setAttr("{}.input2X".format(md1), best_val * 2.0)
+            cmds.connectAttr("{}.outputX".format(md1), "{}.input1X".format(md2))
+            
+            if "Up" in tag:
+                cmds.connectAttr(up_ratio_out, "{}.input2X".format(md2))
+            else:
+                cmds.connectAttr(str(dn_ratio_out), "{}.input2X".format(md2))
+                
+            # Wire it to the dynamically solved closing axis on the Blink Roll Transform
+            target_ax = best_axis.lower()
+            cmds.connectAttr("{}.outputX".format(md2), str(hry["BlinkRollYZ"]["r" + target_ax]))
+
+        _build_rz_md("Up_{}".format(jname_up), hry_up, jname_up, target_y)
+        _build_rz_md("Dn_{}".format(jname_dn), hry_dn, jname_dn, target_y)
+
+        def _apply_opm_additive(joint, vmm_n):
+            add_node = "Additive" + joint.name
+            if cmds.objExists(add_node) and cmds.objExists(vmm_n):
+                cmds.connectAttr("{}.matrixSum".format(vmm_n), "{}.offsetParentMatrix".format(add_node), f=True)
+
+        _apply_opm_additive(up_joint, pivot_up)
+        _apply_opm_additive(dn_joint, pivot_dn)
 
 
-def rig_close_driver(up_ctrl, dn_ctrl, up_joints, dn_joints, up_us, dn_us):
-    snap_us(up_us, dn_us)
-    up_point = up_ctrl.xform(q=1, ws=1, t=1)
-    dn_point = dn_ctrl.xform(q=1, ws=1, t=1)
-    target_name = up_ctrl.name+"_ty_min"
-    if not facs.exist_target(target_name):
-        Ctrl.reset_all()
-        distance = get_distance(up_point, dn_point)
-        up_ctrl["ty"] = -distance
-        cmds.select(up_ctrl.name)
-        facs.add_sdk_by_selected()
-    points = [joint.joint.xform(q=1, ws=1, t=1) for joint in dn_joints]
-
-    if len(points) != len(up_joints):
-        if len(points) < 2:
-            return
-        new_points = []
-        wts = get_follow_weights(up_us, dn_us, False)
-        for ws in wts:
-            new_points.append([0.0, 0.0, 0.0])
-            for w, p in zip(ws, points):
-                if w < 0.00001:
-                    continue
-                for i in range(3):
-                    new_points[-1][i] += w * p[i]
-        points = new_points
-
-    facs.to_pose(target_name)
-    for up_joint, point in zip(up_joints, points):
-        up_joint.joint.xform(ws=1, t=point)
-    facs.edit_target(up_ctrl.name+"_ty_min")
-    Ctrl.reset_all()

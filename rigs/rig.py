@@ -133,7 +133,9 @@ def get_rig_fit_config(rig_name, typ_name):
 
 
 def create_fit(rig, typ, name, rml):
+    sel = cmds.ls(sl=1, fl=1)
     Face().get()
+    cmds.select(sel, r=1)
     rig_cls = get_rig_name_cls()[rig]
     config = rig_cls.fit_configs[typ]
     if not name.startswith(config["pre"]):
@@ -161,4 +163,46 @@ def delete_selected():
 
 def is_mirror(name):
     return name.endswith("_L")
+
+
+def _normalize_sample(sample):
+    u"""将 sample 参数统一转换为字符串形式（"param" / "length" / "topo"）。"""
+    if isinstance(sample, int):
+        return ["param", "length", "topo"][min(max(sample, 0), 2)]
+    if isinstance(sample, str):
+        return sample
+    return "param"
+
+
+def _sample_joint_points(sample, joint, points, curve, mirror):
+    u"""
+    根据 sample 模式对骨骼采样点重新计算。
+    - param: 返回 None，由调用方直接按曲面参数采样
+    - length: 按曲线弧长均匀采样 joint 个点
+    - topo:   按顶点拓扑均匀重采样 joint 个点
+    返回 (points, us) 或 None（param 模式）。
+    """
+    if joint <= 0:
+        return None
+    if sample == "length":
+        if curve:
+            pts = get_points_by_curve(curve, joint)
+            if mirror:
+                pts = mirror_points(pts)
+        elif points:
+            pts = resample_polyline_points(points, joint, False)
+        else:
+            return None
+    elif sample == "topo":
+        if points:
+            pts = resample_polyline_points(points, joint, False)
+        elif curve:
+            pts = get_points_by_curve(curve, joint)
+            if mirror:
+                pts = mirror_points(pts)
+        else:
+            return None
+    else:
+        return None
+    return pts, get_us_by_points(pts, False)
 
