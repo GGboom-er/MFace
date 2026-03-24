@@ -332,7 +332,8 @@ def fit_roll(name="Jaw"):
     if is_mirror(name):
         aim_vector = [-1, 0,  0]
     cmds.aimConstraint(aim, roll, aim=aim_vector, u=[0, 1, 0], wu=[0, 1, 0], wuo=aim, wut="objectrotation")
-    cmds.xform(aim, ws=1, ro=cmds.xform(roll, q=1, ws=1, ro=1))
+    tmp_orient = cmds.orientConstraint(roll, aim, mo=False)[0]
+    cmds.delete(tmp_orient)
     distance = cmds.createNode("distanceBetween", n=name+"Distance")
     cmds.connectAttr(roll+'.t', distance + ".point1")
     cmds.connectAttr(aim+'.t', distance + ".point2")

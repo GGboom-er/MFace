@@ -54,6 +54,7 @@ class Eye(RigSystem):
 
 
 def rig_look(root, name, aim_matrix, roll_matrix):
+    aim_matrix, roll_matrix = check_aim_roll(aim_matrix, roll_matrix, is_mirror(name))
     joint = Joint.add(name, roll_matrix)
     cluster = Cluster.add(name, roll_matrix)
     cluster.weight(joint).set(1)
@@ -298,9 +299,6 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                             
                 cmds.delete(tmp_cm)
                 
-                print(f"DEBUG IK-SOLVER: inv_n={inv_n}, target_y={macro_target_y}, best_val={best_val}, best_axis={best_axis}")
-
-                
                 cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
                 # best_val represents the angle simply to the equator (half the eye distance).
                 # But the ratio is out of the ENTIRE eye closure (1.0 = full close).
@@ -313,32 +311,15 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 target_ax = best_axis.upper()
                 cmds.connectAttr("{}.outputX".format(norm_n), "{}.inputRotate{}".format(cm_n, target_ax))
 
-                # Fix2: 空间转换 — composeMatrix 的旋转在 roll 本地空间求解，
-                # 但 Inverse.offsetParentMatrix 作用在 Follow(aim_matrix) 空间。
-                # 插入 multMatrix: aim_inv * roll * cm * roll_inv * aim
-                # 使旋转正确地在 roll 本地空间生效。
+                # 简化：仅将 MacroRot_CM 输入到 SpaceMM
                 follow_n = "Follow" + ctrl_node
                 if cmds.objExists(follow_n):
-                    aim_mat_raw = cmds.getAttr(follow_n + ".bindPreMatrix")
-                    # cmds.getAttr 对 matrix 返回嵌套 tuple，需展平为 16 元素列表
-                    aim_mat = list(aim_mat_raw) if len(aim_mat_raw) == 16 else [v for row in aim_mat_raw for v in row]
-                    aim_inv_mat = list(MMatrix(aim_mat).inverse())
-                    roll_inv_list = list(roll_mat.inverse())
-
                     space_mm = exp_name + "_{}_SpaceMM".format(pre)
                     if cmds.objExists(space_mm): cmds.delete(space_mm)
                     cmds.createNode("multMatrix", n=space_mm)
 
-                    # matrixIn[0] = aim_inv (常量)
-                    cmds.setAttr("{}.matrixIn[0]".format(space_mm), aim_inv_mat, typ="matrix")
-                    # matrixIn[1] = roll (常量)
-                    cmds.setAttr("{}.matrixIn[1]".format(space_mm), roll_matrix, typ="matrix")
-                    # matrixIn[2] = composeMatrix 输出 (动态)
-                    cmds.connectAttr("{}.outputMatrix".format(cm_n), "{}.matrixIn[2]".format(space_mm))
-                    # matrixIn[3] = roll_inv (常量)
-                    cmds.setAttr("{}.matrixIn[3]".format(space_mm), roll_inv_list, typ="matrix")
-                    # matrixIn[4] = aim (常量)
-                    cmds.setAttr("{}.matrixIn[4]".format(space_mm), aim_mat, typ="matrix")
+                    # 不传自定义矩阵：完全由你确认！单纯输入 MacroRot_CM （纯自转）给眼皮 UI 大控
+                    cmds.connectAttr("{}.outputMatrix".format(cm_n), "{}.matrixIn[0]".format(space_mm))
 
                     cmds.connectAttr("{}.matrixSum".format(space_mm), "{}.offsetParentMatrix".format(inv_n), f=True)
                 else:
@@ -395,9 +376,11 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
             cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[1]".format(mm_n))
 
             cmds.createNode("multMatrix", n=vmm_n)
-            cmds.connectAttr("{}.output".format(fbfm_inv_n), "{}.matrixIn[0]".format(vmm_n))
+            # 重建完美的骨骼层同级内自旋，使用 BlinkRoll（已在局部坐标系锁定球心）
+            # T(-E) * R * T(E) （消除一切父级 WorldSpace 干扰产生的飘飞）
+            cmds.connectAttr(str(hry["BlinkRoll"]["inverseMatrix"]), "{}.matrixIn[0]".format(vmm_n))
             cmds.connectAttr(str(hry["BlinkRollYZ"]["matrix"]), "{}.matrixIn[1]".format(vmm_n))
-            cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[2]".format(vmm_n))
+            cmds.connectAttr(str(hry["BlinkRoll"]["matrix"]), "{}.matrixIn[2]".format(vmm_n))
             
             return vmm_n
 

@@ -22,7 +22,7 @@ def get_points_by_curve(curve, number):
     else:
         step = curve.length()/(number-1)
         lengths = [step*i for i in range(number)]
-    return list(map(lambda x: list(curve.getPointAtParam(curve.findParamFromLength(x)))[:3], lengths))
+    return list(map(lambda x: list(curve.getPointAtParam(curve.findParamFromLength(x), space=MSpace.kWorld))[:3], lengths))
 
 
 def get_points_by_cv(curve):
