@@ -21,6 +21,93 @@ class TargetSlider(QHBoxLayout):
         q_add(self, q_prefix(u"控制：", 50), self.slider, self.box, self.button)
 
 
+class ActiveDriverDialog(QDialog):
+    u"""弹窗：勾选要保留（不重置）的活跃 Pose 驱动，未勾选的将按常规逻辑被还原。"""
+
+    def __init__(self, driver_infos, parent=None):
+        QDialog.__init__(self, parent or get_app())
+        self.setWindowTitle(u"保留选定驱动")
+        self.setMinimumWidth(420)
+        self._checkboxes = {}   # ctrl_attr -> QCheckBox
+
+        layout = QVBoxLayout()
+        tip = QLabel(u"以下 Pose 驱动当前处于激活状态，勾选的驱动形变将写入目标，未勾选的将被排除（不影响目标）：")
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
+
+        # 全选复选框
+        self._chk_all = QCheckBox(u"全选 / 全不选")
+        self._chk_all.setChecked(True)
+        self._chk_all.stateChanged.connect(self._on_select_all)
+        layout.addWidget(self._chk_all)
+
+        # 分割线
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(line)
+
+        # 驱动列表（每项一个复选框）
+        for info in driver_infos:
+            chk = QCheckBox(info["display_label"])
+            chk.setToolTip(info["ctrl_attr"])
+            chk.setChecked(True)
+            chk.stateChanged.connect(self._sync_select_all)
+            self._checkboxes[info["ctrl_attr"]] = chk
+            layout.addWidget(chk)
+
+        # 底部按钮
+        line2 = QFrame()
+        line2.setFrameShape(QFrame.HLine)
+        line2.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(line2)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText(u"确认")
+        btns.button(QDialogButtonBox.Cancel).setText(u"取消")
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+        self.setLayout(layout)
+
+    def _on_select_all(self, state):
+        checked = (state == 2)  # Qt.Checked == 2
+        for chk in self._checkboxes.values():
+            chk.blockSignals(True)
+            chk.setChecked(checked)
+            chk.blockSignals(False)
+
+    def _sync_select_all(self):
+        all_checked = all(chk.isChecked() for chk in self._checkboxes.values())
+        none_checked = not any(chk.isChecked() for chk in self._checkboxes.values())
+        self._chk_all.blockSignals(True)
+        if all_checked:
+            self._chk_all.setCheckState(Qt.Checked)
+        elif none_checked:
+            self._chk_all.setCheckState(Qt.Unchecked)
+        else:
+            self._chk_all.setCheckState(Qt.PartiallyChecked)
+        self._chk_all.blockSignals(False)
+
+    def kept_ctrl_attrs(self):
+        u"""返回需要「保留活跃」来将其效果从 delta 中排除的 ctrl_attr 集合。
+        数学原理：勾选 = 写入目标 = 重置该驱动（不keep）；不勾选 = 排除 = 保留活跃（keep）。"""
+        return {ca for ca, chk in self._checkboxes.items() if not chk.isChecked()}
+
+
+def _query_active_drivers(target_names):
+    u"""检查活跃外部 Pose 驱动；若有则弹窗（只针对骨骼姿势驱动，不含模型选择时的操作）。
+    返回 keep set（保留的 ctrl_attr 集合），无活跃驱动时返回空 set，用户取消则返回 None。"""
+    from .. import facs as facs_module
+    infos = facs_module.get_active_other_drivers(target_names)
+    if not infos:
+        return set()
+    dlg = ActiveDriverDialog(infos)
+    if dlg.exec_() == QDialog.Accepted:
+        return dlg.kept_ctrl_attrs()
+    return None
+
+
 class FacePoseTool(QDialog):
 
     def __init__(self):
@@ -28,10 +115,10 @@ class FacePoseTool(QDialog):
         self.list = TargetGrid()
         self.line = QLineEdit()
         self.but = q_button(u"复制修改", self.apply)
-        self.btn_reset = q_button(u"还原控制器", tools.esc)
+        self.btn_reset = q_button(u"还原控制器", tools.restore_controllers)
         self.setWindowTitle(u"姿势工具")
         self.slider = TargetSlider()
-        self.slider.button.clicked.connect(tools.esc)
+        self.slider.button.clicked.connect(tools.restore_controllers)
         load = q_button(u"<<<", self.load)
         load.setFixedWidth(40)
         
@@ -225,7 +312,10 @@ class FacePoseTool(QDialog):
     def edit_target_action(self):
         target = self.list.current_name()
         if not target or target not in tools.get_targets(): return
-        new_target = tools.edit_target(target)
+        keep = _query_active_drivers([target])
+        if keep is None:
+            return  # 用户取消
+        new_target = tools.edit_target(target, keep_ctrl_attrs=keep)
         if new_target:
             self._auto_select([new_target], None)
 
@@ -245,9 +335,14 @@ class FacePoseTool(QDialog):
         targets = [t for t in self.list.selected_names() if t in existing]
         if not targets:
              return
+        keep = _query_active_drivers(targets)
+        if keep is None:
+            return  # 用户取消
+        tools.facs.set_keep_ctrl_attrs(keep)  # 暂存到 facs 模块级变量供 auto_duplicate_edit 使用
         
         # Capture strictly resolved/swapped targets from C++ logic
         resolved_targets = tools.auto_duplicate_edit(targets)
+        tools.facs.set_keep_ctrl_attrs(None)  # 清除暂存
         if resolved_targets:
             self._auto_select(resolved_targets, None)
         else:

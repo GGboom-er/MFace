@@ -387,10 +387,14 @@ class Ctrl(Hierarchy):
         names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         return [cls(name) for name in filter_pres(names, ["Follow"])]
 
+    def reset(self):
+        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        return self
+
     @classmethod
     def reset_all(cls):
         for ctrl in cls.all():
-            ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+            ctrl.reset()
 
     def control(self, **kwargs):
         radius = Face().radius()

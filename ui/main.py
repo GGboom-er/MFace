@@ -1,7 +1,7 @@
 # coding=utf-8
 from .base import *
 from . import cluster
-from . import facs
+from . import pose_tool
 from . import fit
 from . import preset
 
@@ -18,7 +18,7 @@ class MFaceMain(QDialog):
         self.setWindowTitle(u"MFace2.0")
         self.fit = fit.FitCreateTool()
         self.cluster = cluster.ClusterTool()
-        self.facePose = facs.FacePoseTool()
+        self.facePose = pose_tool.FacePoseTool()
         self.tab.addTab(self.fit, u"绑定")
         self.tab.addTab(self.cluster, u"跟随")
         self.tab.addTab(self.facePose, u"姿势")

@@ -4,6 +4,16 @@ import re
 from .core import *
 from . import bs
 
+# 模块级变量：UI 弹窗确认后暂存 keep_ctrl_attrs，供 auto_duplicate_edit 取用
+_keep_ctrl_attrs = None
+
+def set_keep_ctrl_attrs(value):
+    global _keep_ctrl_attrs
+    _keep_ctrl_attrs = value
+
+def get_keep_ctrl_attrs():
+    return _keep_ctrl_attrs
+
 
 def __get_node_name(attr):
     ctrl_name = attr.split(".", 1)[0]
@@ -236,6 +246,66 @@ def rest_ctrl(ctrl):
     cmds.xform(ctrl, ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
 
 
+def get_active_other_drivers(target_names):
+    u"""扫描当前场景中，活跃（值非零）且不属于 target_names 所指定目标驱动的控制器属性。
+    对 COMB 目标，组件驱动偏离了 SDK 阈值（用户手动改变了）时也会返回。
+    返回列表，每项为 dict: {ctrl_attr, display_label, current_value}
+    """
+    bridge = get_bridge()
+    # 先拿到目标自身用到的 ctrl_attr 和 SDK 阈值
+    own_ctrl_attrs = set()
+    # COMB 组件驱动的 SDK 阈值映射（ctrl_attr → threshold_value）
+    own_thresholds = {}
+    for tgt in target_names:
+        for base_tgt in get_base_targets([tgt]):
+            data = get_base_sdk_data(base_tgt)
+            if data:
+                ctrl, attr, _, threshold = data
+                ca = ctrl + "." + attr
+                own_ctrl_attrs.add(ca)
+                own_thresholds[ca] = threshold
+
+    is_comb = any("_COMB_" in tgt for tgt in target_names)
+
+    found = []
+    seen = set()
+    for base_tgt in get_base_targets(get_targets()):
+        if not exist_target(base_tgt):
+            continue
+        data = get_base_sdk_data(base_tgt)
+        if not data:
+            continue
+        ctrl, attr, default_value, _ = data
+        ctrl_attr = ctrl + "." + attr
+        if ctrl_attr in seen:
+            continue
+        # 判断此驱动是否为 COMB 目标的组件自身驱动
+        is_own_comb_driver = is_comb and ctrl_attr in own_ctrl_attrs
+        # 非 COMB 目标的自身驱动跳过
+        if ctrl_attr in own_ctrl_attrs and not is_own_comb_driver:
+            continue
+        seen.add(ctrl_attr)
+        try:
+            val = cmds.getAttr(ctrl_attr)
+            if is_own_comb_driver:
+                # COMB 组件驱动：只有当前值偏离 SDK 阈值时才显示（用户手动改变了）
+                threshold = own_thresholds.get(ctrl_attr, default_value)
+                if abs(val - threshold) < 0.001:
+                    continue  # 处于 COMB 正常激活状态，不需要用户干预
+            else:
+                # 外部驱动：值在默认值附近则不显示
+                if abs(val - default_value) < 0.001:
+                    continue
+            found.append(dict(
+                ctrl_attr=ctrl_attr,
+                display_label=u"%s  (当前=%.3f)" % (ctrl_attr, val),
+                current_value=val
+            ))
+        except:
+            pass
+    return found
+
+
 def get_base_targets(targets):
     base_targets = []
     for target in targets:
@@ -307,30 +377,45 @@ def get_base_sdk_data(target_name):
     return ctrl, attr_name, default_value, value
 
 
-def reset_all():
+def reset_all(ctrls=None, exclude_ctrl_attrs=None):
+    u"""重置所有 Pose 驱动控制器。exclude_ctrl_attrs 为 set/list，其中的 ctrl.attr 将被跳过（即保留）。"""
     bridge = get_bridge()
+    exclude = set(exclude_ctrl_attrs) if exclude_ctrl_attrs else set()
+    # 构建「有排除属性的控制器名」集合，避免 rest_ctrl 连带重置 exclude 属性
+    exclude_ctrl_set = {ea.split(".")[0] for ea in exclude}
+    # 记录已经被 rest_ctrl 整体重置过的控制器，避免重复调用
+    already_rest = set()
     for base_target in get_base_targets(get_targets()):
         if not exist_target(base_target):
             continue
         data = get_base_sdk_data(base_target)
         if not data:
-            # Safety: If controller link is broken, force reset the weight on the bridge
-            # to ensure the mesh isn't stuck in a deformed state.
-            try:
-                cmds.setAttr(bridge + "." + base_target, 0)
-            except:
-                pass
+            if not ctrls:
+                try:
+                    cmds.setAttr(bridge + "." + base_target, 0)
+                except:
+                    pass
             continue
         ctrl, attr, default_value, _ = data
+        ctrl_attr = ctrl + "." + attr
+        if ctrls and ctrl not in ctrls:
+            continue
+        if ctrl_attr in exclude:
+            continue
         try:
-            rest_ctrl(ctrl)
-            # Optimization: Only force the controller to the specific default_value (from SDK)
-            # if the current reset state (0) results in a non-zero weight.
-            # This handles cases like clamped ranges (e.g. 0 to -0.85 is dead zone) 
-            # where we prefer the controller to stay at 0 rather than jumping to -0.85.
-            current_weight = cmds.getAttr(bridge + "." + base_target)
-            if abs(current_weight) > 0.001:
-                cmds.setAttr(ctrl+"."+attr, default_value)
+            if not ctrls:
+                if ctrl in exclude_ctrl_set:
+                    # ★ 该控制器有被 exclude 的属性 → 只重置当前属性，不整体重置 Transform
+                    cmds.setAttr(ctrl + "." + attr, default_value)
+                else:
+                    # 安全：该控制器无 exclude 属性 → 可以整体重置 Transform
+                    if ctrl not in already_rest:
+                        rest_ctrl(ctrl)
+                        already_rest.add(ctrl)
+                    # rest_ctrl 后检查权重，必要时精确设置 default_value
+                    current_weight = cmds.getAttr(bridge + "." + base_target)
+                    if abs(current_weight) > 0.001:
+                        cmds.setAttr(ctrl + "." + attr, default_value)
         except:
             pass
 
@@ -372,7 +457,7 @@ def get_driver_attr(target_name):
 
 
 def get_selected_ctrls():
-    return [sel for sel in cmds.ls(type="transform", o=1) if bs.is_shape(sel, bs.Shape.nurbsCurve)]
+    return [sel for sel in cmds.ls(sl=1, type="transform") if bs.is_shape(sel, bs.Shape.nurbsCurve)]
 
 
 def run_joint_or_polygon(joint_fun, polygon_fun, *args, **kwargs):
@@ -383,10 +468,16 @@ def run_joint_or_polygon(joint_fun, polygon_fun, *args, **kwargs):
 
 
 @keep_selected
-def edit_joint_target(target_name):
+def edit_joint_target(target_name, keep_ctrl_attrs=None):
+    u"""提取骨骼 Pose 并写入指定目标。
+    keep_ctrl_attrs: set/list，其中的 ctrl.attr 在 reset_all 时不会被归零，
+    使其形变贡献量保留在快照减数中，从而纳入最终的 additive 差值。
+    """
     if not exist_target(target_name):
         return
         
+    exclude = set(keep_ctrl_attrs) if keep_ctrl_attrs else set()
+
     driver_cache = []
     base_targets = get_base_targets([target_name])
     for base_target in base_targets:
@@ -398,34 +489,77 @@ def edit_joint_target(target_name):
 
     joints = Joint.all()
     matrices = [joint.joint.xform(q=1, ws=1, m=1) for joint in joints]
-    Ctrl.reset_all()
+    
+    # 从 "ctrl.attr" 提取纯节点名，用于跳过绑定控制器的 Transform 重置（支持去命名空间以保证强匹配）
+    exclude_ctrl_names = {ca.split(".")[0].split("|")[-1].split(":")[-1] for ca in exclude}
 
-    active_drivers = False
-    for attr, val in driver_cache:
-        if abs(val) > 0.001:
-            active_drivers = True
-            
-    if active_drivers:
-        for attr, val in driver_cache:
-            try: cmds.setAttr(attr, val)
-            except: pass
-    else:
-        set_pose_by_targets([target_name])
+    # 重置未被「排除」的绑定控制器（捕获直接移动的控制器变换）
+    for ctrl in Ctrl.all():
+        short_name = ctrl.ctrl.name.split("|")[-1].split(":")[-1]
+        if short_name not in exclude_ctrl_names:
+            ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+
+    # 重置未被「排除」的 Pose 驱动控制器（按精确 ctrl.attr 匹配）
+    reset_all(exclude_ctrl_attrs=exclude)
+
+    # 始终将目标自身驱动恢复到快照时的值，确保基准与快照的驱动状态一致
+    # 但对 COMB 目标中被排除（exclude）的组件驱动，不恢复快照值（下面单独处理）
+    for attr_val, val in driver_cache:
+        if attr_val in exclude:
+            continue
+        try:
+            cmds.setAttr(attr_val, val)
+        except: pass
+
+    # COMB 目标特殊处理：将被排除的组件驱动恢复到 SDK 阈值
+    # 数学原理：delta = snapshot - base。如果 base 包含被排除驱动的单独效果，
+    # 那么 delta 会自动减去该效果。当 COMB 激活时：
+    # a_individual + b_individual + delta = a_indiv + b_indiv + (-a_indiv + adjustment) = b_indiv + adjustment
+    if "_COMB_" in target_name and exclude:
+        for base_target in base_targets:
+            data = get_base_sdk_data(base_target)
+            if data:
+                ctrl, attr, default_value, threshold = data
+                ca = ctrl + "." + attr
+                if ca in exclude:
+                    try: cmds.setAttr(ca, threshold)
+                    except: pass
 
     for joint, matrix in zip(joints, matrices):
         joint.add_pose(Face()["Additive"][target_name], matrix)
 
+    # 录制完成后：将被「排除」的驱动归零（即不勾选的那些 pose 驱动）
+    # 这样场景最终干净，只有 happy 是激活状态
+    if exclude:
+        bridge = get_bridge()
+        for base_target in get_base_targets(get_targets()):
+            data = get_base_sdk_data(base_target)
+            if not data:
+                continue
+            ctrl, attr, default_value, _ = data
+            ctrl_attr = ctrl + "." + attr
+            if ctrl_attr in exclude:
+                try:
+                    rest_ctrl(ctrl)
+                    current_weight = cmds.getAttr(bridge + "." + base_target)
+                    if abs(current_weight) > 0.001:
+                        cmds.setAttr(ctrl_attr, default_value)
+                except:
+                    pass
 
-def auto_update_threshold(target_name, silent=False):
+
+def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
     if not exist_target(target_name):
         return False, 0.0
-        
+    
+    exclude = set(exclude_ctrl_attrs) if exclude_ctrl_attrs else set()
+    
     combo, _ = target_to_base_ib(target_name)
     if "_COMB_" in combo:
         updated_any = False
         vals = []
         for base_tgt in get_base_targets([target_name]):
-            upd, val = auto_update_threshold(base_tgt, silent=True)
+            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude)
             if upd: updated_any = True
             vals.append(val)
         avg_val = (sum(vals)/len(vals)) if vals else 0.0
@@ -436,6 +570,12 @@ def auto_update_threshold(target_name, silent=False):
     data = get_base_sdk_data(target_name)
     if not data: return False, 0.0
     ctrl, attr, default_value, old_value = data
+    
+    # 跳过被排除的驱动（用户在弹窗中取消勾选的），防止其 SDK 阈值被误改
+    ctrl_attr = ctrl + "." + attr
+    if ctrl_attr in exclude:
+        return False, old_value
+    
     try:
         value = cmds.getAttr(ctrl + "." + attr)
     except:
@@ -458,7 +598,11 @@ def auto_update_threshold(target_name, silent=False):
                     target_index = i
                     break
             if target_index != -1:
-                cmds.keyframe(uu, edit=True, index=(target_index, target_index), absolute=True, floatChange=value)
+                try:
+                    cmds.keyframe(uu, edit=True, index=(target_index, target_index), absolute=True, floatChange=value)
+                except RuntimeError:
+                    # "Cannot move keys" — 目标浮点位置与已有 key 冲突，跳过阈值更新
+                    return False, old_value
                 try:
                     cmds.setAttr(ctrl + "." + attr, value)
                 except:
@@ -499,12 +643,12 @@ def resolve_target_crossings(targets):
             
     return resolved, messages
 
-def edit_target(target_name):
+def edit_target(target_name, keep_ctrl_attrs=None):
     targets, msg = resolve_target_crossings([target_name])
     if not targets: return
     target_name = targets[0]
         
-    edit_joint_target(target_name)
+    edit_joint_target(target_name, keep_ctrl_attrs=keep_ctrl_attrs)
     polygons = bs.get_selected_polygons()
     if len(polygons) > 0:
         bs.edit_connect_selected_target(get_driver_attr(target_name))
@@ -676,9 +820,10 @@ def restore_controllers():
         esc()
         cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">全场景所有控制器及修形目标极值已重置归零！</span>', pos='midCenter', fade=True)
     else:
+        reset_all(ctrls)
         for c in ctrls:
-            Ctrl(c).reset()
-        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">您所选中的控制器通道已被归零！</span>', pos='midCenter', fade=True)
+            rest_ctrl(c)
+        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">您所选中的控制器及相关修形极值已被归零！</span>', pos='midCenter', fade=True)
 
 
 def auto_duplicate_edit(targets):
@@ -700,11 +845,11 @@ def auto_duplicate_edit(targets):
 
     if not polygons and not is_finishing:
         for target in targets:
-            edit_joint_target(target)
+            edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
             
         updated_msgs = []
         for target in targets:
-            updated, val = auto_update_threshold(target, silent=True)
+            updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
             if updated:
                 updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
                 
@@ -720,8 +865,8 @@ def auto_duplicate_edit(targets):
     else:
         if not is_finishing:
             for target in targets:
-                edit_joint_target(target)
-                auto_update_threshold(target, silent=True)
+                edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
+                auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
 
             def clone_to_pose(t):
                 to_pose(t)
@@ -735,8 +880,8 @@ def auto_duplicate_edit(targets):
             bs.auto_duplicate_edit(list(map(get_driver_attr, targets)), to_pose)
             updated_msgs = []
             for target in targets:
-                edit_joint_target(target)
-                updated, val = auto_update_threshold(target, silent=True)
+                edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
+                updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
                 if updated:
                     updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
             for attr, val in driver_states.items():
