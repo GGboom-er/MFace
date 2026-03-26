@@ -10,4 +10,6 @@
 - [触发条件]auto_update_threshold中cmds.keyframe报Cannot move keys → [根因]目标浮点位置与已有key冲突 → [正确方案]用try/except RuntimeError包裹keyframe edit调用 → [避坑规则]SDK keyframe编辑操作必须捕获RuntimeError！
 - [触发条件]编辑COMB目标关闭某组件驱动但delta仍叠加该效果 → [根因]基准计算时排除驱动保持0(非阈值)，delta不含反向补偿；COMB激活时a_indiv+delta=a_indiv未被抵消 → [正确方案]排除的COMB组件驱动在基准中恢复到SDK阈值，delta自动含-a_indiv补偿 → [避坑规则]COMB目标排除驱动必须在base恢复阈值而非保持0！
 - [触发条件]COMB组件驱动处于正常阈值却出现在弹窗中 → [根因]对COMB组件驱动用default_value而非SDK阈值(old_value)过滤 → [正确方案]COMB组件驱动用own_thresholds[ca]比较，处于阈值则跳过 → [避坑规则]COMB组件弹窗过滤必须比SDK阈值而非默认值！
-- [触发条件]auto_update_threshold误改排除驱动的SDK阈值 → [根因]无exclude参数，递归COMB时对所有组件更新 → [正确方案]添加exclude_ctrl_attrs参数，匹配的ctrl_attr直接return跳过 → [避坑规则]阈值更新必须传递并尊重排除集！
+- [触发条件]auto_update_threshold误改排除驱动的SDK阈值 -> [根因]无exclude参数，递归COMB时对所有组件更新 -> [正确方案]添加exclude_ctrl_attrs参数，匹配的ctrl_attr直接return跳过 -> [避坑规则]阈值更新必须传递并尊重排除集！
+- [触发条件]查询控制器是否存在对应骨骼/簇时意外在场景里生成了垃圾节点 -> [根因]原先的 Joint.__init__ 初始化时强行调用了 .get() 导致如果该骨骼不存在即刻就会被 cmds.createNode 创建。查询行为带有写入副作用。 -> [正确方案]将所有产生真实 Maya 节点创建的操作剥离出 __init__，仅在显式调用 .get() 或 .add() 时创建。查询逻辑改为通过底层 Node 对象做存在性布尔检测。 -> [避坑规则]类实例化(__init__)绝对禁止带有改变场景结缔树的副作用(如创建Node)！查询API与创建API必须严格物理隔离。
+- [触发条件]眼皮Blink闭合时上下边缘留下数毫米的物理缝隙没有严丝合缝闭合 -> [根因]原有的眼弧位置推算算法使用了一个 5度的暴力搜索循环 (range(-180, 180, 5)) 来寻找赤道Y轴的碰撞结果，这就导致了永远存在最高2.5度的微小数学误差，在实际模型表面放大为肉眼可见的裂缝。 -> [正确方案]使用纯解析三角学 (`math.atan2` 和 `math.acos`) 直接推导出包含10位小数的绝对吻合角度，取代这种低效且有损精度的暴力试探法。 -> [避坑规则]在进行纯3D数学空间坐标系的夹角/投射算解时，坚决弃用带步长(step)的 procedural loop（除非无数学解），必须采用分析法/三角函数直接求取精确的解析解。

@@ -156,13 +156,22 @@ def snap_us(src_us, dst_us):
                     continue
                 us[m] += o
 def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
-    """
-    眼皮 Blink 弧面闭合系统 v4（全量6DOF + 纯叠加）：
-    1. 彻底移除 v3 的 suppress cluster 逻辑，恢复原版所见即所得的线性叠加
-    2. 引入 YAxis/ZAxis 旋转目标注入，确保 Blink 闭合时完全沿球面自旋
-    """
-    if not up_result or not dn_result:
-        return
+    import math
+    def get_exact_z_rotation(x, y, target_y):
+        R = math.hypot(x, y)
+        if R < 1e-6: return 0.0
+        if R < abs(target_y): target_y = math.copysign(R, target_y)
+        alpha = math.atan2(x, y)
+        beta = math.acos(target_y / R)
+        t1 = math.degrees(alpha + beta)
+        t2 = math.degrees(alpha - beta)
+        t1 = (t1 + 180) % 360 - 180
+        t2 = (t2 + 180) % 360 - 180
+        return t1 if abs(t1) < abs(t2) else t2
+        
+    for res in [up_result, dn_result]:
+        if not res:
+            return
 
     up_joints = up_result.get("joints", [])
     dn_joints = dn_result.get("joints", [])
@@ -266,38 +275,11 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 cmds.createNode("composeMatrix", n=cm_n)
                 cmds.createNode("multiplyDivide", n=norm_n)
                 
-                # We dynamically track the Inverse OPM offset for the macro UI natively inside the Roll's Local Space Pivot
-                best_val = 0
-                best_diff = 9999
-                best_axis = "Z"
+                # Use exact analytical Z-axis pitch solver
                 start_pos = MPoint(*cmds.xform(fctrl_n, q=1, ws=1, t=1))
                 start_ls = start_pos * roll_inv
-                
-                tmp_cm = cmds.createNode("composeMatrix")
-                
-                for ax in ["X", "Y", "Z"]:
-                    cmds.setAttr("{}.inputRotateX".format(tmp_cm), 0)
-                    cmds.setAttr("{}.inputRotateY".format(tmp_cm), 0)
-                    cmds.setAttr("{}.inputRotateZ".format(tmp_cm), 0)
-                    for test_v in range(-180, 180, 5):
-                        cmds.setAttr("{}.inputRotate{}".format(tmp_cm, ax), test_v)
-                        
-                        # Apply Euler rotation exclusively inside local Cornea space
-                        delta_m = MMatrix(cmds.getAttr("{}.outputMatrix".format(tmp_cm)))
-                        new_ls = start_ls * delta_m
-                        
-                        diff = abs(new_ls.y - macro_target_y)
-                        
-                        # Penalize extreme wide rotations to ensure it logically selects the most direct path to the equator
-                        # instead of wrapping 145 degrees entirely to the opposite side of the Cornea Origin
-                        diff += abs(test_v) * 0.001
-                        
-                        if diff < best_diff:
-                            best_diff = diff
-                            best_val = test_v
-                            best_axis = ax
-                            
-                cmds.delete(tmp_cm)
+                best_val = get_exact_z_rotation(start_ls.x, start_ls.y, macro_target_y)
+                best_axis = "Z"
                 
                 cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
                 # best_val represents the angle simply to the equator (half the eye distance).
@@ -401,37 +383,11 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
             fbfm_inv_n = exp_name + "_{}_FBF_INV".format(tag)
             fbfm_n = exp_name + "_{}_FBF".format(tag)
             
-            tmp_cm = cmds.createNode("composeMatrix")
-            tmp_vmm = cmds.createNode("multMatrix")
-            cmds.connectAttr("{}.output".format(fbfm_inv_n), "{}.matrixIn[0]".format(tmp_vmm))
-            cmds.connectAttr("{}.outputMatrix".format(tmp_cm), "{}.matrixIn[1]".format(tmp_vmm))
-            cmds.connectAttr("{}.output".format(fbfm_n), "{}.matrixIn[2]".format(tmp_vmm))
-            
-            best_val = 0
-            best_diff = 9999
-            best_axis = "Z" # Default to old behavior
-            
+            # Exact analytical pitch resolution for the individual eye bones
             start_pos = MPoint(*cmds.xform(jname, q=1, ws=1, t=1))
             start_ls = start_pos * roll_inv
-            
-            ax = "Z"
-            for test_v in range(-180, 180, 5):
-                cmds.setAttr("{}.inputRotateZ".format(tmp_cm), test_v)
-                delta_m = MMatrix(cmds.getAttr("{}.matrixSum".format(tmp_vmm)))
-                new_ws = start_pos * delta_m
-                new_ls = new_ws * roll_inv
-                
-                diff = abs(new_ls.y - target_local_y)
-                # Mathematically penalize arc coordinates that slip to the opposite side of the eyeball horizon
-                if start_ls.x * new_ls.x < 0:
-                    diff += 10.0
-                
-                if diff < best_diff:
-                    best_diff = diff
-                    best_val = test_v
-                    best_axis = ax
-            
-            cmds.delete(tmp_cm, tmp_vmm)
+            best_val = get_exact_z_rotation(start_ls.x, start_ls.y, target_local_y)
+            best_axis = "Z"
             
             md1 = exp_name + "_{}_MD1".format(tag)
             md2 = exp_name + "_{}_MD2".format(tag)

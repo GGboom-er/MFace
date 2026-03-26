@@ -280,10 +280,10 @@ class Ctrl(Hierarchy):
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
         joint = Joint(self.name)
-        if joint:
+        if joint.joint:
             joint.set_matrix(matrix)
         cluster = Cluster(self.name)
-        if cluster:
+        if cluster.cluster:
             cluster.set_matrix(matrix)
         self.reset_constraint_offset()
 
@@ -338,11 +338,11 @@ class Ctrl(Hierarchy):
         for ctrl in cls.selected():
             joint = Joint(ctrl.name)
             cluster = Cluster(ctrl.name)
-            if joint:
+            if joint.joint:
                 matrix = joint.joint.xform(q=1, ws=1, m=1)
-            elif cluster:
+            elif cluster.cluster:
                 matrix = cluster.cluster.xform(q=1, ws=1, m=1)
-            elif ctrl:
+            elif ctrl.output:
                 matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"]))
             else:
                 continue
@@ -365,13 +365,13 @@ class Ctrl(Hierarchy):
         names = list(set(sum([[sel.name for sel in cls.selected()] for cls in [Ctrl, Cluster, Joint]], [])))
         for name in names:
             joint = Joint(name)
-            if joint:
+            if joint.joint:
                 joint.delete()
             cluster = Cluster(name)
-            if cluster:
+            if cluster.cluster:
                 cluster.delete()
             ctrl = Ctrl(name)
-            if ctrl:
+            if ctrl.ctrl:
                 ctrl.delete()
 
     def reset_matrix(self):
@@ -496,7 +496,7 @@ class Joint(Hierarchy):
 
     def __init__(self, name):
         Hierarchy.__init__(self, name, Face()["Additive"])
-        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
+        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint")
         self.additive, self.port = self["Additive"], self["Port"]
         self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
 
@@ -847,7 +847,7 @@ class Cluster(Hierarchy):
     def set_weight_data(self, data):
         for name, value in data.items():
             joint = Joint(name)
-            if not joint:
+            if not joint.joint:
                 continue
             self.weight(joint).set(value)
 
