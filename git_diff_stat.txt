@@ -1,0 +1,160 @@
+ .claude/origin_facs.py                             |  190 ++
+ .claude/settings.local.json                        |   12 +
+ .idea/MFace2.iml                                   |    7 +
+ .idea/misc.xml                                     |    2 +-
+ .idea/workspace.xml                                |   58 +-
+ .vscode/settings.json                              |    2 +
+ __init__.py                                        |   38 +-
+ __pycache__/__init__.cpython-311.pyc               |  Bin 1315 -> 1661 bytes
+ __pycache__/api_lib.cpython-311.pyc                |  Bin 1488 -> 1489 bytes
+ __pycache__/bs.cpython-311.pyc                     |  Bin 27463 -> 30688 bytes
+ __pycache__/control.cpython-311.pyc                |  Bin 16866 -> 16867 bytes
+ __pycache__/core.cpython-311.pyc                   |  Bin 63835 -> 70691 bytes
+ __pycache__/data.cpython-311.pyc                   |  Bin 26454 -> 33168 bytes
+ __pycache__/facs.cpython-311.pyc                   |  Bin 30677 -> 55054 bytes
+ __pycache__/fastPin.cpython-311.pyc                |  Bin 18107 -> 18109 bytes
+ __pycache__/fits.cpython-311.pyc                   |  Bin 34405 -> 36831 bytes
+ __pycache__/nodes.cpython-311.pyc                  |  Bin 0 -> 40000 bytes
+ __pycache__/preset.cpython-311.pyc                 |  Bin 24094 -> 24304 bytes
+ __pycache__/test.cpython-311.pyc                   |  Bin 31797 -> 35191 bytes
+ __pycache__/tools.cpython-311.pyc                  |  Bin 9647 -> 12207 bytes
+ __pycache__/wts.cpython-311.pyc                    |  Bin 13206 -> 13207 bytes
+ bs.py                                              |   72 +-
+ core.py                                            |  248 +-
+ data.py                                            |   60 +-
+ data/presets/Face/ButtonBrow_L.png                 |  Bin 0 -> 5616 bytes
+ data/presets/Face/ButtonBrow_M.png                 |  Bin 0 -> 4394 bytes
+ data/presets/Face/ButtonEye_L.png                  |  Bin 0 -> 4320 bytes
+ data/presets/Face/ButtonJaw_M.png                  |  Bin 0 -> 4352 bytes
+ data/presets/Face/ButtonLid_L.png                  |  Bin 0 -> 5541 bytes
+ data/presets/Face/ButtonLip_M.png                  |  Bin 0 -> 4764 bytes
+ data/presets/Face/ButtonNose_M.png                 |  Bin 0 -> 4350 bytes
+ data/presets/Face/ButtonNostril_M.png              |  Bin 0 -> 4289 bytes
+ data/presets/Face/ButtonTongue_M.png               |  Bin 0 -> 8611 bytes
+ data/presets/Face/ButtonToothDn_M.png              |  Bin 0 -> 4364 bytes
+ data/presets/Face/ButtonToothUp_M.png              |  Bin 0 -> 4368 bytes
+ data/presets/Face/Buttoneir_L.png                  |  Bin 0 -> 6931 bytes
+ data/presets/Face/background.jpg                   |  Bin 0 -> 71847 bytes
+ data/presets/Face/ctrl.json                        | 2842 ++++++++++++++++++++
+ data/presets/Face/fits.json                        |  294 ++
+ data/presets/Face/plane.ma                         |   63 +
+ facs.py                                            |  597 +++-
+ facs_old.py                                        |  490 ++++
+ fastPin.py                                         |    2 +-
+ fits.py                                            |   51 +-
+ node.py => nodes.py                                |    0
+ plug-ins/CMakeLists.txt                            |    4 -
+ plug-ins/FunCToPy.h                                |    8 +-
+ plug-ins/bs_api.cpp                                |   29 +-
+ plug-ins/build/ALL_BUILD.vcxproj                   |  202 --
+ plug-ins/build/ALL_BUILD.vcxproj.filters           |    8 -
+ plug-ins/build/CMakeCache.txt                      |  301 ---
+ .../generate.stamp.rule                            |    1 -
+ .../build/CMakeFiles/3.27.8/CMakeCXXCompiler.cmake |   85 -
+ .../3.27.8/CMakeDetermineCompilerABI_CXX.bin       |  Bin 52736 -> 0 bytes
+ .../build/CMakeFiles/3.27.8/CMakeRCCompiler.cmake  |    6 -
+ plug-ins/build/CMakeFiles/3.27.8/CMakeSystem.cmake |   15 -
+ .../3.27.8/CompilerIdCXX/CMakeCXXCompilerId.cpp    |  855 ------
+ .../3.27.8/CompilerIdCXX/CompilerIdCXX.exe         |  Bin 15360 -> 0 bytes
+ .../3.27.8/CompilerIdCXX/CompilerIdCXX.vcxproj     |   72 -
+ .../CompilerIdCXX/Debug/CMakeCXXCompilerId.obj     |  Bin 2373 -> 0 bytes
+ .../CompilerIdCXX/Debug/CompilerIdCXX.exe.recipe   |   11 -
+ .../Debug/CompilerIdCXX.tlog/CL.command.1.tlog     |  Bin 764 -> 0 bytes
+ .../Debug/CompilerIdCXX.tlog/CL.read.1.tlog        |  Bin 600 -> 0 bytes
+ .../Debug/CompilerIdCXX.tlog/CL.write.1.tlog       |  Bin 404 -> 0 bytes
+ .../Debug/CompilerIdCXX.tlog/Cl.items.tlog         |    1 -
+ .../CompilerIdCXX.lastbuildstate                   |    2 -
+ .../Debug/CompilerIdCXX.tlog/link.command.1.tlog   |  Bin 1048 -> 0 bytes
+ .../Debug/CompilerIdCXX.tlog/link.read.1.tlog      |  Bin 3450 -> 0 bytes
+ .../Debug/CompilerIdCXX.tlog/link.write.1.tlog     |  Bin 394 -> 0 bytes
+ plug-ins/build/CMakeFiles/3.27.8/VCTargetsPath.txt |    1 -
+ .../build/CMakeFiles/3.27.8/VCTargetsPath.vcxproj  |   31 -
+ .../3.27.8/x64/Debug/VCTargetsPath.recipe          |   11 -
+ .../VCTargetsPath.lastbuildstate                   |    2 -
+ plug-ins/build/CMakeFiles/CMakeConfigureLog.yaml   |  121 -
+ plug-ins/build/CMakeFiles/TargetDirectories.txt    |    3 -
+ plug-ins/build/CMakeFiles/cmake.check_cache        |    1 -
+ plug-ins/build/CMakeFiles/generate.stamp           |    1 -
+ plug-ins/build/CMakeFiles/generate.stamp.depend    |   94 -
+ plug-ins/build/CMakeFiles/generate.stamp.list      |    1 -
+ plug-ins/build/Release/bs_api.exp                  |  Bin 750 -> 0 bytes
+ plug-ins/build/Release/bs_api.lib                  |  Bin 1716 -> 0 bytes
+ plug-ins/build/Release/bs_api.mll                  |  Bin 158720 -> 0 bytes
+ plug-ins/build/Release/bs_api.pyd                  |  Bin 158720 -> 0 bytes
+ plug-ins/build/ZERO_CHECK.vcxproj                  |  194 --
+ plug-ins/build/ZERO_CHECK.vcxproj.filters          |   13 -
+ .../build/bs_api.dir/Release/bs_api.mll.recipe     |   14 -
+ plug-ins/build/bs_api.dir/Release/bs_api.obj       |  Bin 597970 -> 0 bytes
+ .../build/bs_api.dir/Release/bs_api.pyd.recipe     |   14 -
+ .../Release/bs_api.tlog/CL.command.1.tlog          |  Bin 1340 -> 0 bytes
+ .../bs_api.dir/Release/bs_api.tlog/CL.read.1.tlog  |  Bin 87304 -> 0 bytes
+ .../bs_api.dir/Release/bs_api.tlog/CL.write.1.tlog |  Bin 242 -> 0 bytes
+ .../bs_api.dir/Release/bs_api.tlog/Cl.items.tlog   |    1 -
+ .../Release/bs_api.tlog/CustomBuild.command.1.tlog |   10 -
+ .../Release/bs_api.tlog/CustomBuild.read.1.tlog    |   93 -
+ .../Release/bs_api.tlog/CustomBuild.write.1.tlog   |    2 -
+ .../Release/bs_api.tlog/bs_api.lastbuildstate      |    2 -
+ .../Release/bs_api.tlog/link.command.1.tlog        |  Bin 1878 -> 0 bytes
+ .../Release/bs_api.tlog/link.read.1.tlog           |  Bin 4128 -> 0 bytes
+ .../Release/bs_api.tlog/link.write.1.tlog          |  Bin 630 -> 0 bytes
+ .../Release/bs_api.tlog/link.write.2u.tlog         |  Bin 362 -> 0 bytes
+ plug-ins/build/bs_api.sln                          |   59 -
+ plug-ins/build/bs_api.vcxproj                      |  361 ---
+ plug-ins/build/bs_api.vcxproj.filters              |   16 -
+ plug-ins/build/cmake_install.cmake                 |   44 -
+ .../build/x64/Release/ALL_BUILD/ALL_BUILD.recipe   |   21 -
+ .../ALL_BUILD.tlog/ALL_BUILD.lastbuildstate        |    2 -
+ .../ALL_BUILD.tlog/CustomBuild.command.1.tlog      |   10 -
+ .../ALL_BUILD.tlog/CustomBuild.read.1.tlog         |   93 -
+ .../ALL_BUILD.tlog/CustomBuild.write.1.tlog        |    2 -
+ .../build/x64/Release/ZERO_CHECK/ZERO_CHECK.recipe |   11 -
+ .../ZERO_CHECK.tlog/CustomBuild.command.1.tlog     |   10 -
+ .../ZERO_CHECK.tlog/CustomBuild.read.1.tlog        |   94 -
+ .../ZERO_CHECK.tlog/CustomBuild.write.1.tlog       |    2 -
+ .../ZERO_CHECK.tlog/ZERO_CHECK.lastbuildstate      |    2 -
+ plug-ins/maya2025/bs_api.pyd                       |  Bin 158720 -> 159744 bytes
+ plug-ins/mayadefault/bs_api.py                     |   14 +-
+ preset.py                                          |    5 +-
+ rigs/__pycache__/__init__.cpython-311.pyc          |  Bin 1080 -> 1081 bytes
+ rigs/__pycache__/brow.cpython-311.pyc              |  Bin 5650 -> 5671 bytes
+ rigs/__pycache__/eye.cpython-311.pyc               |  Bin 16521 -> 33324 bytes
+ rigs/__pycache__/fk.cpython-311.pyc                |  Bin 3869 -> 3959 bytes
+ rigs/__pycache__/joint.cpython-311.pyc             |  Bin 2288 -> 2586 bytes
+ rigs/__pycache__/lip.cpython-311.pyc               |  Bin 22145 -> 22936 bytes
+ rigs/__pycache__/loop.cpython-311.pyc              |  Bin 2729 -> 6158 bytes
+ rigs/__pycache__/nose.cpython-311.pyc              |  Bin 2925 -> 2946 bytes
+ rigs/__pycache__/rig.cpython-311.pyc               |  Bin 13007 -> 15065 bytes
+ rigs/__pycache__/roll.cpython-311.pyc              |  Bin 3183 -> 3258 bytes
+ rigs/__pycache__/surface.cpython-311.pyc           |  Bin 3628 -> 4368 bytes
+ rigs/brow.py                                       |    2 +-
+ rigs/eye.py                                        |  325 ++-
+ rigs/fk.py                                         |    1 +
+ rigs/joint.py                                      |    9 +-
+ rigs/lip.py                                        |  171 +-
+ rigs/loop.py                                       |   94 +-
+ rigs/nose.py                                       |    2 +-
+ rigs/rig.py                                        |   44 +
+ rigs/roll.py                                       |    1 +
+ rigs/surface.py                                    |   43 +-
+ tasks/lessons.md                                   |   15 +
+ tasks/todo.md                                      |    9 +
+ test.py                                            |   56 +-
+ tools.py                                           |   69 +-
+ ui/__init__.py                                     |    7 +-
+ ui/__pycache__/__init__.cpython-311.pyc            |  Bin 798 -> 807 bytes
+ ui/__pycache__/base.cpython-311.pyc                |  Bin 8272 -> 25856 bytes
+ ui/__pycache__/cluster.cpython-311.pyc             |  Bin 21077 -> 25092 bytes
+ ui/__pycache__/facs.cpython-311.pyc                |  Bin 9011 -> 0 bytes
+ ui/__pycache__/facs.cpython-39.pyc                 |  Bin 4214 -> 0 bytes
+ ui/__pycache__/fit.cpython-311.pyc                 |  Bin 8364 -> 8508 bytes
+ ui/__pycache__/main.cpython-311.pyc                |  Bin 5397 -> 5682 bytes
+ ui/__pycache__/preset.cpython-311.pyc              |  Bin 14915 -> 16764 bytes
+ ui/base.py                                         |  277 +-
+ ui/cluster.py                                      |   68 +-
+ ui/facs.py                                         |  105 -
+ ui/facs.py.bak                                     |  190 ++
+ ui/fit.py                                          |    9 +-
+ ui/main.py                                         |   31 +-
+ ui/pose_tool.py                                    |  404 +++
+ ui/preset.py                                       |   38 +-
+ 159 files changed, 6456 insertions(+), 3497 deletions(-)
