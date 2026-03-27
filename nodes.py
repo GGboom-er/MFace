@@ -305,12 +305,52 @@ class BlendWeighted(Node):
 
     def get_elements(self):
         elements = set()
-        for name in cmds.listAttr(self.weight.name, m=1):
+        for name in cmds.listAttr(self.weight.name, m=1) or []:
             if name.endswith("_W"):
                 elements.add(name[:-2])
             elif name.endswith("W"):
                 elements.add(name[:-1])
         return list(elements)
+
+    def clean_orphans(self):
+        """精准清除当前节点身上所有未连线的幽灵输入、断层V槽和空壳W槽，避免影响差值计算"""
+        input_idxs = cmds.getAttr(self.name + ".input", mi=True) or []
+        wt_idxs = cmds.getAttr(self.name + ".weight", mi=True) or []
+        all_indices = set(input_idxs + wt_idxs)
+        if not all_indices:
+            return
+            
+        aliases = cmds.aliasAttr(self.name, q=True) or []
+        alias_map = {aliases[i+1]: aliases[i] for i in range(0, len(aliases), 2)}
+        
+        for i in all_indices:
+            in_plug, wt_plug = "input[%d]" % i, "weight[%d]" % i
+            in_exist, wt_exist = i in input_idxs, i in wt_idxs
+            
+            is_orphan = False
+            if in_exist != wt_exist:
+                is_orphan = True
+            else:
+                if not cmds.listConnections(self.name + "." + wt_plug, s=True, d=False):
+                    is_orphan = True
+                    
+            if is_orphan:
+                in_alias, wt_alias = alias_map.get(in_plug, ""), alias_map.get(wt_plug, "")
+                base_target = in_alias[:-1] if in_alias.endswith("V") else (wt_alias[:-1] if wt_alias.endswith("W") else "")
+                
+                for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:
+                    if exist:
+                        try:
+                            cmds.aliasAttr(self.name + "." + plug, rm=True)
+                            cmds.removeMultiInstance(self.name + "." + plug, b=True)
+                        except Exception:
+                            pass
+                
+                if base_target and cmds.objExists(self.name + "." + base_target + "WW"):
+                    try: 
+                        cmds.deleteAttr(self.name + "." + base_target + "WW")
+                    except Exception: 
+                        pass
 
 
 def rig_express(name, typ, inputs, output):

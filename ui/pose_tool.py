@@ -27,11 +27,11 @@ class ActiveDriverDialog(QDialog):
     def __init__(self, driver_infos, parent=None):
         QDialog.__init__(self, parent or get_app())
         self.setWindowTitle(u"保留选定驱动")
-        self.setMinimumWidth(420)
-        self._checkboxes = {}   # ctrl_attr -> QCheckBox
+        self.setMinimumWidth(450)
+        self.setMinimumHeight(350)
 
         layout = QVBoxLayout()
-        tip = QLabel(u"以下 Pose 驱动当前处于激活状态，勾选的驱动形变将写入目标，未勾选的将被排除（不影响目标）：")
+        tip = QLabel(u"以下 Pose 驱动当前处于激活状态，勾选的驱动形变将被写入并固化到目标中，未勾选的将被排除/剔除（不影响最终组合）：\n【提示：双击列表项可在场景中选中该控制器】")
         tip.setWordWrap(True)
         layout.addWidget(tip)
 
@@ -41,20 +41,36 @@ class ActiveDriverDialog(QDialog):
         self._chk_all.stateChanged.connect(self._on_select_all)
         layout.addWidget(self._chk_all)
 
-        # 分割线
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(line)
-
-        # 驱动列表（每项一个复选框）
+        # 驱动列表（彻底重构为 QListWidget 支持双击及详细取值）
+        self.list_widget = QListWidget()
+        import maya.cmds as cmds
         for info in driver_infos:
-            chk = QCheckBox(info["display_label"])
-            chk.setToolTip(info["ctrl_attr"])
-            chk.setChecked(True)
-            chk.stateChanged.connect(self._sync_select_all)
-            self._checkboxes[info["ctrl_attr"]] = chk
-            layout.addWidget(chk)
+            val = 0.0
+            try: 
+                val = cmds.getAttr(info["ctrl_attr"])
+            except Exception: 
+                pass
+                
+            ctrl_attr = info["ctrl_attr"]
+            parts = ctrl_attr.split('.')
+            ctrl_name = parts[0]
+            attr_name = parts[1] if len(parts) > 1 else ""
+            
+            display_text = u"%s  ---  %s  ---  %.3f" % (ctrl_name, attr_name, val)
+            item = QListWidgetItem(display_text)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            item.setToolTip(ctrl_attr)
+            
+            # 使用 UserRole 存储关键底层名称数据
+            item.setData(Qt.UserRole, ctrl_attr)
+            item.setData(Qt.UserRole + 1, ctrl_name)  # 前缀节点名，用于双击选中
+            
+            self.list_widget.addItem(item)
+            
+        self.list_widget.itemChanged.connect(self._sync_select_all)
+        self.list_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
+        layout.addWidget(self.list_widget)
 
         # 底部按钮
         line2 = QFrame()
@@ -63,7 +79,7 @@ class ActiveDriverDialog(QDialog):
         layout.addWidget(line2)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.button(QDialogButtonBox.Ok).setText(u"确认")
+        btns.button(QDialogButtonBox.Ok).setText(u"确认保留")
         btns.button(QDialogButtonBox.Cancel).setText(u"取消")
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
@@ -71,41 +87,67 @@ class ActiveDriverDialog(QDialog):
         self.setLayout(layout)
 
     def _on_select_all(self, state):
-        checked = (state == 2)  # Qt.Checked == 2
-        for chk in self._checkboxes.values():
-            chk.blockSignals(True)
-            chk.setChecked(checked)
-            chk.blockSignals(False)
+        checked_state = Qt.Checked if state == 2 else Qt.Unchecked
+        self.list_widget.blockSignals(True)
+        for i in range(self.list_widget.count()):
+            self.list_widget.item(i).setCheckState(checked_state)
+        self.list_widget.blockSignals(False)
 
     def _sync_select_all(self):
-        all_checked = all(chk.isChecked() for chk in self._checkboxes.values())
-        none_checked = not any(chk.isChecked() for chk in self._checkboxes.values())
+        checked_count = sum(1 for i in range(self.list_widget.count()) if self.list_widget.item(i).checkState() == Qt.Checked)
         self._chk_all.blockSignals(True)
-        if all_checked:
+        if checked_count == self.list_widget.count():
             self._chk_all.setCheckState(Qt.Checked)
-        elif none_checked:
+        elif checked_count == 0:
             self._chk_all.setCheckState(Qt.Unchecked)
         else:
             self._chk_all.setCheckState(Qt.PartiallyChecked)
         self._chk_all.blockSignals(False)
+        
+    def _on_item_double_clicked(self, item):
+        ctrl_name = item.data(Qt.UserRole + 1)
+        import maya.cmds as cmds
+        if ctrl_name and cmds.objExists(ctrl_name):
+            cmds.select(ctrl_name)
 
     def kept_ctrl_attrs(self):
         u"""返回需要「保留活跃」来将其效果从 delta 中排除的 ctrl_attr 集合。
         数学原理：勾选 = 写入目标 = 重置该驱动（不keep）；不勾选 = 排除 = 保留活跃（keep）。"""
-        return {ca for ca, chk in self._checkboxes.items() if not chk.isChecked()}
+        kept = set()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.checkState() == Qt.Unchecked:
+                kept.add(item.data(Qt.UserRole))
+        return kept
 
 
-def _query_active_drivers(target_names):
-    u"""检查活跃外部 Pose 驱动；若有则弹窗（只针对骨骼姿势驱动，不含模型选择时的操作）。
-    返回 keep set（保留的 ctrl_attr 集合），无活跃驱动时返回空 set，用户取消则返回 None。"""
+active_driver_dialog_instance = None
+
+def _query_active_drivers_async(target_names, callback):
+    u"""检查活跃外部 Pose 驱动；若有则弹窗（异步/非模态）。防止卡死窗口导致无法手动调节。"""
     from .. import facs as facs_module
     infos = facs_module.get_active_other_drivers(target_names)
     if not infos:
-        return set()
+        callback(set())
+        return
+
     dlg = ActiveDriverDialog(infos)
-    if dlg.exec_() == QDialog.Accepted:
-        return dlg.kept_ctrl_attrs()
-    return None
+    dlg.setWindowModality(Qt.NonModal) # 非模态，允许操作底层
+
+    def on_accept():
+        callback(dlg.kept_ctrl_attrs())
+        dlg.deleteLater()
+
+    def on_reject():
+        callback(None)
+        dlg.deleteLater()
+
+    dlg.accepted.connect(on_accept)
+    dlg.rejected.connect(on_reject)
+    
+    global active_driver_dialog_instance
+    active_driver_dialog_instance = dlg
+    dlg.show()
 
 
 class FacePoseTool(QDialog):
@@ -114,7 +156,7 @@ class FacePoseTool(QDialog):
         QDialog.__init__(self, get_app())
         self.list = TargetGrid()
         self.line = QLineEdit()
-        self.but = q_button(u"复制修改", self.apply)
+        self.but = q_button(u"复制 / 修改", self.apply)
         self.btn_reset = q_button(u"还原控制器", tools.restore_controllers)
         self.setWindowTitle(u"姿势工具")
         self.slider = TargetSlider()
@@ -312,12 +354,15 @@ class FacePoseTool(QDialog):
     def edit_target_action(self):
         target = self.list.current_name()
         if not target or target not in tools.get_targets(): return
-        keep = _query_active_drivers([target])
-        if keep is None:
-            return  # 用户取消
-        new_target = tools.edit_target(target, keep_ctrl_attrs=keep)
-        if new_target:
-            self._auto_select([new_target], None)
+        
+        def on_drivers_selected(keep):
+            if keep is None:
+                return  # 用户取消
+            new_target = tools.edit_target(target, keep_ctrl_attrs=keep)
+            if new_target:
+                self._auto_select([new_target], None)
+
+        _query_active_drivers_async([target], on_drivers_selected)
 
     def start_slider_undo(self):
         from maya import cmds
@@ -335,37 +380,40 @@ class FacePoseTool(QDialog):
         targets = [t for t in self.list.selected_names() if t in existing]
         if not targets:
              return
-        keep = _query_active_drivers(targets)
-        if keep is None:
-            return  # 用户取消
-        tools.facs.set_keep_ctrl_attrs(keep)  # 暂存到 facs 模块级变量供 auto_duplicate_edit 使用
-        
-        # Capture strictly resolved/swapped targets from C++ logic
-        resolved_targets = tools.auto_duplicate_edit(targets)
-        tools.facs.set_keep_ctrl_attrs(None)  # 清除暂存
-        if resolved_targets:
-            self._auto_select(resolved_targets, None)
-        else:
-            self._auto_select(targets, None)
-        # Check scene state directly as a fallback
-        import maya.cmds as cmds
-        if cmds.objExists("lush_duplicate_edit"):
-            self.but.setText(u"结束修改")
-            self.but.setStyleSheet("background-color: #ff5555; color: white;")
-            self.but.setContextMenuPolicy(Qt.CustomContextMenu)
-            try:
-                self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-            except (RuntimeError, TypeError):
-                pass
-            self.but.customContextMenuRequested.connect(self.show_cancel_menu)
-        else:
-            self.but.setText(u"复制修改")
-            self.but.setStyleSheet("")
-            self.but.setContextMenuPolicy(Qt.NoContextMenu)
-            try:
-                self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-            except:
-                pass
+             
+        def on_drivers_selected(keep):
+            if keep is None:
+                return  # 用户取消
+            tools.facs.set_keep_ctrl_attrs(keep)  # 暂存到 facs 模块级变量供 auto_duplicate_edit 使用
+            
+            # Capture strictly resolved/swapped targets from C++ logic
+            resolved_targets = tools.auto_duplicate_edit(targets)
+            tools.facs.set_keep_ctrl_attrs(None)  # 清除暂存
+            if resolved_targets:
+                self._auto_select(resolved_targets, None)
+            else:
+                self._auto_select(targets, None)
+            # Check scene state directly as a fallback
+            import maya.cmds as cmds
+            if cmds.objExists("lush_duplicate_edit"):
+                self.but.setText(u"结束修改")
+                self.but.setStyleSheet("background-color: #ff5555; color: white;")
+                self.but.setContextMenuPolicy(Qt.CustomContextMenu)
+                try:
+                    self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
+                except (RuntimeError, TypeError):
+                    pass
+                self.but.customContextMenuRequested.connect(self.show_cancel_menu)
+            else:
+                self.but.setText(u"复制 / 修改")
+                self.but.setStyleSheet("")
+                self.but.setContextMenuPolicy(Qt.NoContextMenu)
+                try:
+                    self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
+                except:
+                    pass
+
+        _query_active_drivers_async(targets, on_drivers_selected)
 
     def show_cancel_menu(self, pos):
         targets = self.list.selected_names()

@@ -11,6 +11,13 @@ class Eye(RigSystem):
                        Eye=dict(pre="Eye", fit="roll", names=["", "A", "B", "C"], rml="RML"))
     fit_kwargs = [(dict(pre="Lid"), dict(cluster2=0, joint=9, degree=2, roll=True, sample="param"))]
 
+def strip_ctrl_prefix(name):
+    short_name = name.split("|")[-1].split(":")[-1]
+    if short_name.startswith("FCtrl"): return short_name[5:]
+    if short_name.startswith("M_FCtrl"): return short_name[7:]
+    if short_name.startswith("Ctrl"): return short_name[4:]
+    return short_name
+
     def build(self):
         aims = [self.rig_rml(fits) for fits in self.fits.group("rml")]
         aims = [aim for aim in aims if aim is not None]
@@ -190,24 +197,27 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
     up_ctrl_name = up_result["ctrl"].name
     dn_ctrl_name = dn_result["ctrl"].name
     
-    old_exp = "Blink" + up_ctrl_name.replace("FCtrl", "")
+    # 安全阀：仅清理预期的数学运算节点，防止字符串匹配误杀 Transform 组和网格实体
+    safe_types = ["multiplyDivide", "plusMinusAverage", "composeMatrix", "multMatrix", "fourByFourMatrix"]
+    
+    old_exp = "Blink" + strip_ctrl_prefix(up_ctrl_name)
     for node in cmds.ls(old_exp + "*") or []:
-        if cmds.objExists(node):
+        if cmds.objExists(node) and cmds.nodeType(node) in safe_types:
             try: cmds.delete(node)
             except Exception: pass
             
-    exp_name = "Blink" + blink_host.name.replace("FCtrl", "")
+    exp_name = "Blink" + strip_ctrl_prefix(blink_host.name)
     blink_exp = Exp(exp_name)
 
     for node in cmds.ls(exp_name + "*") or []:
-        if cmds.objExists(node):
+        if cmds.objExists(node) and cmds.nodeType(node) in safe_types:
             try: cmds.delete(node)
             except Exception: pass
 
     # Fix1: 重置 Inverse/Additive 节点的 offsetParentMatrix，防止 rebuild 时残留值污染 set_matrix
     identity = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
     for ctrl_name in [up_ctrl_name, dn_ctrl_name]:
-        inv_n = "Inverse" + ctrl_name.replace("FCtrl", "")
+        inv_n = "Inverse" + strip_ctrl_prefix(ctrl_name)
         if cmds.objExists(inv_n):
             cmds.setAttr(inv_n + ".offsetParentMatrix", identity, typ="matrix")
     for joints in [up_joints, dn_joints]:
@@ -259,8 +269,8 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
         macro_target_y = (up_pt.y + dn_pt.y) / 2.0
         
         # Sign +1 for Down works precisely to track it upwards toward the equator naturally!
-        for pre, ctrl_node, ratio, sign, start_rest in [("Up", up_ctrl_name.replace("FCtrl", ""), up_ratio_out, -1, up_pt), 
-                                                ("Dn", dn_ctrl_name.replace("FCtrl", ""), dn_ratio_out, 1, dn_pt)]:
+        for pre, ctrl_node, ratio, sign, start_rest in [("Up", strip_ctrl_prefix(up_ctrl_name), up_ratio_out, -1, up_pt), 
+                                                ("Dn", strip_ctrl_prefix(dn_ctrl_name), dn_ratio_out, 1, dn_pt)]:
             md_n = exp_name + "_{}_MacroRot_MD".format(pre)
             cm_n = exp_name + "_{}_MacroRot_CM".format(pre)
             norm_n = md_n + "_Norm"

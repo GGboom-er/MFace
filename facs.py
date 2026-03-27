@@ -15,10 +15,17 @@ def get_keep_ctrl_attrs():
     return _keep_ctrl_attrs
 
 
+def parse_base_name(node_name):
+    # 安全提取剔除 Namespace、层级路径及强加的业务前缀 Core Name
+    short_name = node_name.split("|")[-1].split(":")[-1]
+    if short_name.startswith("FCtrl"): return short_name[5:]
+    if short_name.startswith("M_FCtrl"): return short_name[7:]
+    if short_name.startswith("Ctrl"): return short_name[4:]
+    return short_name
+
 def __get_node_name(attr):
     ctrl_name = attr.split(".", 1)[0]
-    ctrl_name = ctrl_name.split("|")[-1].split(":")[-1]
-    return ctrl_name
+    return parse_base_name(ctrl_name)
 
 
 def get_target_name(attr, default, value):
@@ -245,6 +252,34 @@ def get_targets():
 def rest_ctrl(ctrl):
     cmds.xform(ctrl, ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
 
+    # 扩展：揪出并重置控制器上的所有主要自定义驱动属性
+    custom_attrs = cmds.listAttr(ctrl, k=True, u=True) or []
+    restored_info = []
+    
+    for attr in custom_attrs:
+        plug = ctrl + "." + attr
+        # 忽略锁定的属性，防止在被锁定的大管家节点上报错
+        if cmds.getAttr(plug, lock=True):
+            continue
+            
+        try:
+            # 尝试查询官方默认值，查不到则视其为 0.0
+            default_array = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+            default_val = default_array[0] if default_array else 0.0
+            current_val = cmds.getAttr(plug)
+            
+            # 仅在实际发生偏移时还原，避免写入多余的脏节点事件
+            if abs(current_val - default_val) > 0.0001:
+                cmds.setAttr(plug, default_val)
+                restored_info.append("%s (%.3f -> %.3f)" % (attr, current_val, default_val))
+        except Exception:
+            pass
+
+    # ================== DEBUG INJECTION ==================
+    if restored_info:
+        cmds.warning(u"[DEBUG 属性还原] 捕获附加自定义驱动 -> [%s] | 成功追杀重置关联属性: %s" % (ctrl, ", ".join(restored_info)))
+    # =====================================================
+
 
 def get_active_other_drivers(target_names):
     u"""扫描当前场景中，活跃（值非零）且不属于 target_names 所指定目标驱动的控制器属性。
@@ -301,8 +336,8 @@ def get_active_other_drivers(target_names):
                 display_label=u"%s  (当前=%.3f)" % (ctrl_attr, val),
                 current_value=val
             ))
-        except:
-            pass
+        except Exception as _e:
+                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
     return found
 
 
@@ -393,8 +428,8 @@ def reset_all(ctrls=None, exclude_ctrl_attrs=None):
             if not ctrls:
                 try:
                     cmds.setAttr(bridge + "." + base_target, 0)
-                except:
-                    pass
+                except Exception as _e:
+                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
             continue
         ctrl, attr, default_value, _ = data
         ctrl_attr = ctrl + "." + attr
@@ -416,8 +451,8 @@ def reset_all(ctrls=None, exclude_ctrl_attrs=None):
                     current_weight = cmds.getAttr(bridge + "." + base_target)
                     if abs(current_weight) > 0.001:
                         cmds.setAttr(ctrl + "." + attr, default_value)
-        except:
-            pass
+        except Exception as _e:
+                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
 
 def set_pose_by_target(target_name, ib):
@@ -485,17 +520,17 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
         if data:
             ctrl, attr, _, _ = data
             try: driver_cache.append((ctrl + "." + attr, cmds.getAttr(ctrl + "." + attr)))
-            except: pass
+            except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
     joints = Joint.all()
     matrices = [joint.joint.xform(q=1, ws=1, m=1) for joint in joints]
     
     # 从 "ctrl.attr" 提取纯节点名，用于跳过绑定控制器的 Transform 重置（支持去命名空间以保证强匹配）
-    exclude_ctrl_names = {ca.split(".")[0].split("|")[-1].split(":")[-1] for ca in exclude}
+    exclude_ctrl_names = {parse_base_name(ca.split(".")[0]) for ca in exclude}
 
     # 重置未被「排除」的绑定控制器（捕获直接移动的控制器变换）
     for ctrl in Ctrl.all():
-        short_name = ctrl.ctrl.name.split("|")[-1].split(":")[-1]
+        short_name = parse_base_name(ctrl.ctrl.name)
         if short_name not in exclude_ctrl_names:
             ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
 
@@ -509,7 +544,7 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
             continue
         try:
             cmds.setAttr(attr_val, val)
-        except: pass
+        except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
     # COMB 目标特殊处理：将被排除的组件驱动恢复到 SDK 阈值
     # 数学原理：delta = snapshot - base。如果 base 包含被排除驱动的单独效果，
@@ -523,10 +558,29 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
                 ca = ctrl + "." + attr
                 if ca in exclude:
                     try: cmds.setAttr(ca, threshold)
-                    except: pass
+                    except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
+    cleaned_joints = 0
+    cleaned_bws = 0
+    
     for joint, matrix in zip(joints, matrices):
+        # 1. 在写入前，提前抓取当前复位后的干净底座矩阵，计算运动差值
+        rest_m = joint.joint.xform(q=1, ws=1, m=1)
+        matrix_diff = sum([abs(a - b) for a, b in zip(matrix, rest_m)])
+        
+        # 2. 原版无毒、无损地注入驱动数据（不在此前杀菌以免破坏输出读值）
         joint.add_pose(Face()["Additive"][target_name], matrix)
+
+        # 3. [后置并靶向清查钩子] 仅在这根骨头【真实活动且被注入了差分数据后】，对其进行垃圾清理
+        # 这样既不会影响提取数据时的节点网络评价，也能精准剥除残留在有效骨架上的错位幽灵
+        if matrix_diff > 0.0001:
+            cleaned_joints += 1
+            for bw in joint.bws:
+                cleaned_bws += 1
+                bw.clean_orphans()
+                
+    if cleaned_joints > 0:
+        cmds.warning(u"[DEBUG 净化追踪] 差值录入完毕！本次定位发生真实位移的活动骨骼: %d 根 | 针对性盘查脱节连接点: %d 个。" % (cleaned_joints, cleaned_bws))
 
     # 录制完成后：将被「排除」的驱动归零（即不勾选的那些 pose 驱动）
     # 这样场景最终干净，只有 happy 是激活状态
@@ -544,11 +598,11 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
                     current_weight = cmds.getAttr(bridge + "." + base_target)
                     if abs(current_weight) > 0.001:
                         cmds.setAttr(ctrl_attr, default_value)
-                except:
-                    pass
+                except Exception as _e:
+                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
 
-def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
+def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False):
     if not exist_target(target_name):
         return False, 0.0
     
@@ -559,7 +613,7 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
         updated_any = False
         vals = []
         for base_tgt in get_base_targets([target_name]):
-            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude)
+            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude, prompt=prompt)
             if upd: updated_any = True
             vals.append(val)
         avg_val = (sum(vals)/len(vals)) if vals else 0.0
@@ -578,8 +632,9 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
     
     try:
         value = cmds.getAttr(ctrl + "." + attr)
-    except:
-        return False, 0.0
+    except Exception as _e:
+            cmds.warning("MFace2 FACS Error (Update): %s" % str(_e))
+            return False, 0.0
         
     # Safeguard against cross-axis RuntimeError (Cannot move keys)
     if (value - default_value) * (old_value - default_value) < -0.0001:
@@ -598,6 +653,19 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
                     target_index = i
                     break
             if target_index != -1:
+                if prompt:
+                    msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
+                    res = cmds.confirmDialog(
+                        title=u'极值同步确认',
+                        message=msg,
+                        button=[u'确认更新', u'不更新'],
+                        defaultButton=u'确认更新',
+                        cancelButton=u'不更新',
+                        dismissString=u'不更新'
+                    )
+                    if res != u'确认更新':
+                        return False, old_value
+                        
                 try:
                     cmds.keyframe(uu, edit=True, index=(target_index, target_index), absolute=True, floatChange=value)
                 except RuntimeError:
@@ -605,8 +673,8 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None):
                     return False, old_value
                 try:
                     cmds.setAttr(ctrl + "." + attr, value)
-                except:
-                    pass
+                except Exception as _e:
+                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
                 if not silent:
                     cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">[%s] —— 修改至 —— %.3f</span>' % (target_name, value), pos='midCenter', fade=True)
                 return True, value
@@ -734,7 +802,7 @@ def mirror_targets(target_names):
         auto_mirror_polygon_targets(target_mirrors)
         
     msgs = [u"从 %s 镜像至 -> %s" % (src, dst) for src, dst in target_mirrors]
-    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">姿势镜像完成！%s</span>' % ", ".join(msgs), pos='midCenter', fade=True)
+    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">姿势镜像完成！\n%s</span>' % "\n".join(msgs), pos='midCenter', fade=True)
 
 
 def copy_flip_target(target_names):
@@ -806,7 +874,7 @@ def delete_selected_targets(target_names):
         lambda x: delete_joints_targets(Joint.selected(), x),
         bs.delete_selected_targets,
         target_names)
-    cmds.inViewMessage(amg=u'<span style="color: #FFFF00; font-size: 20px;">所选物体的目标已被删除: %s</span>' % ", ".join(target_names), pos='midCenter', fade=True)
+    cmds.inViewMessage(amg=u'<span style="color: #FFFF00; font-size: 20px;">所选物体的目标已被删除:\n%s</span>' % "\n".join(target_names), pos='midCenter', fade=True)
 
 
 def esc():
@@ -841,7 +909,7 @@ def auto_duplicate_edit(targets):
         if data:
             ctrl, attr, _, _ = data
             try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
-            except: pass
+            except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
     if not polygons and not is_finishing:
         for target in targets:
@@ -849,24 +917,24 @@ def auto_duplicate_edit(targets):
             
         updated_msgs = []
         for target in targets:
-            updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
+            updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
             if updated:
                 updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
                 
         for attr, val in driver_states.items():
             try: cmds.setAttr(attr, val)
-            except: pass
+            except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
             
         if cross_msgs or updated_msgs:
-            cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">%s</span>' % "<br/>".join(cross_msgs + updated_msgs), pos='midCenter', fade=True)
+            cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">%s</span>' % "\n".join(cross_msgs + updated_msgs), pos='midCenter', fade=True)
         else:
-            cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">[%s] —— 修改成功 (极值不变)</span>' % ", ".join(targets), pos='midCenter', fade=True)
+            cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">[%s] —— 修改成功 (极值不变)</span>' % "\n".join(targets), pos='midCenter', fade=True)
         return targets
     else:
         if not is_finishing:
             for target in targets:
                 edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
-                auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
+                auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
 
             def clone_to_pose(t):
                 to_pose(t)
@@ -875,24 +943,24 @@ def auto_duplicate_edit(targets):
             
             for attr, val in driver_states.items():
                 try: cmds.setAttr(attr, val)
-                except: pass
+                except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
         else:
             bs.auto_duplicate_edit(list(map(get_driver_attr, targets)), to_pose)
             updated_msgs = []
             for target in targets:
                 edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
-                updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs())
+                updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
                 if updated:
                     updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
             for attr, val in driver_states.items():
                 try: cmds.setAttr(attr, val)
-                except: pass
+                except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
                 
-            msg = u"[%s] —— 模型修改并应用成功！" % ", ".join(targets)
+            msg = u"[%s] —— 模型修改并应用成功！" % "\n".join(targets)
             if updated_msgs:
-                msg += "<br/>" + "<br/>".join(updated_msgs)
+                msg += "\n" + "\n".join(updated_msgs)
             if cross_msgs:
-                msg += "<br/>" + "<br/>".join(cross_msgs)
+                msg += "\n" + "\n".join(cross_msgs)
             cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">%s</span>' % msg, pos='midCenter', fade=True)
         return targets
 
@@ -908,13 +976,13 @@ def cancel_duplicate_edit(targets):
             if data:
                 ctrl, attr, _, _ = data
                 try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
-                except: pass
+                except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
                 
         bs.cancel_duplicate_edit(clone_to_pose)
         
         for attr, val in driver_states.items():
             try: cmds.setAttr(attr, val)
-            except: pass
+            except Exception as _e: cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
         cmds.inViewMessage(amg=u'<span style="color: #FFFF00; font-size: 20px;">已放弃修改，恢复原始模型状态</span>', pos='midCenter', fade=True)
 
 

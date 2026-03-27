@@ -80,11 +80,25 @@ def mirror_cluster_weights():
     for cluster in Cluster.selected():
         cluster.mirror_weights()
         if cluster.name.endswith(("_R", "_L")):
-            msgs.append(u"从 %s 镜像至 -> %s" % (cluster.name, Fmt.mirror_name(cluster.name)))
+            msgs.append(u"%s -> %s" % (cluster.name, Fmt.mirror_name(cluster.name)))
         else:
-            msgs.append(u"%s 自身对称完成" % cluster.name)
+            msgs.append(u"%s 自身完成" % cluster.name)
+            
     if msgs:
-        cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 18px;">Cluster 权重镜像！%s</span>' % ", ".join(msgs), pos='midCenter', fade=True)
+        # 返璞归真：放弃任何 HTML 结构性排版标签！
+        # 经查，Maya 的 inViewMessage 计算外围灰色半透明背景条的高度和排版时，
+        # 如果遇到 <br> 或 <table> 会算错长宽。
+        # 必须使用原生的纯文本换行符 '\n' 拼接，它才能正确算出屏幕居中的边界并拉伸背景。
+        display_text = u"\n".join(msgs)
+        
+        # 只保留最外层的 <span> 改色，里面只包含纯文本和 \n
+        html_str = u'<span style="color:#00FF00; font-size:16px;"><b>[Cluster 镜像列表]</b>\n\n<span style="color:#E0E0E0; font-size:14px;">%s</span></span>' % display_text
+            
+        cmds.inViewMessage(
+            amg=html_str, 
+            pos='midCenter', 
+            fade=True
+        )
 
 
 def save_cluster_weights(path):
