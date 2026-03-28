@@ -273,7 +273,7 @@ class TargetGrid(QTableWidget):
         row_count = len(attrs)
         self.setRowCount(row_count)
         
-        ctrl_base_name = ctrl.split("|")[-1].split(":")[-1]
+        ctrl_base_name = tools.facs.parse_base_name(ctrl)
         self._target_items = {}
         
         for i, attr in enumerate(attrs):

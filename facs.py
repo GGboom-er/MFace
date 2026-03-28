@@ -48,25 +48,41 @@ def find_add_sdk_data(ctrls=None):
         ctrls = [c for c in ctrls if cmds.objExists(c) and cmds.objectType(c) == "transform"]
         
     for ctrl in ctrls:
+        max_delta = 0.001
+        best_data = None
+        
         for trs in "trs":
             for xyz in "xyz":
                 attr = ctrl + '.' + trs + xyz
-                value = cmds.getAttr(attr)
-                default = dict(t=0, r=0, s=1)[trs]
-                if abs(default-value) < 0.001:
+                try:
+                    value = cmds.getAttr(attr)
+                except:
                     continue
-                target_name = get_target_name(attr, default, value)
-                data.append(dict(attr=attr, value=value, default_value=default, target_name=target_name))
+                default = dict(t=0, r=0, s=1)[trs]
+                delta = abs(default - value)
+                if delta > max_delta:
+                    max_delta = delta
+                    target_name = get_target_name(attr, default, value)
+                    best_data = dict(attr=attr, value=value, default_value=default, target_name=target_name)
+                    
         for attr in cmds.listAttr(ctrl, ud=1, sn=1) or []:
             node_attr = ctrl+"."+attr
-            if cmds.getAttr(node_attr, type=1) != "double":
+            try:
+                if cmds.getAttr(node_attr, type=1) != "double":
+                    continue
+                default = cmds.addAttr(node_attr, q=1, dv=1)
+                value = cmds.getAttr(node_attr)
+            except:
                 continue
-            default = cmds.addAttr(node_attr, q=1, dv=1)
-            value = cmds.getAttr(node_attr)
-            if abs(default - value) < 0.001:
-                continue
-            target_name = get_target_name(node_attr, default, value)
-            data.append(dict(attr=ctrl+"."+attr, value=value, default_value=default, target_name=target_name))
+            delta = abs(default - value)
+            if delta > max_delta:
+                max_delta = delta
+                target_name = get_target_name(node_attr, default, value)
+                best_data = dict(attr=node_attr, value=value, default_value=default, target_name=target_name)
+                
+        if best_data:
+            data.append(best_data)
+            
     return data
 
 
