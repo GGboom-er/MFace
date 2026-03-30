@@ -284,6 +284,7 @@ class TargetGrid(QTableWidget):
             item_min.setFlags(item_min.flags() & ~Qt.ItemIsEditable)
             item_min.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             item_min.setData(Qt.UserRole, min_target)
+            item_min.setData(Qt.UserRole + 2, ctrl + "." + attr)
             if min_target in all_existing:
                 item_min.setForeground(QColor("#79dc7f"))
                 item_min.setData(Qt.UserRole + 1, True)
@@ -297,6 +298,7 @@ class TargetGrid(QTableWidget):
             item_max.setFlags(item_max.flags() & ~Qt.ItemIsEditable)
             item_max.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             item_max.setData(Qt.UserRole, max_target)
+            item_max.setData(Qt.UserRole + 2, ctrl + "." + attr)
             if max_target in all_existing:
                 item_max.setForeground(QColor("#79dc7f"))
                 item_max.setData(Qt.UserRole + 1, True)

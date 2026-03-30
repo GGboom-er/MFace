@@ -314,6 +314,37 @@ class BlendWeighted(Node):
 
     def clean_orphans(self):
         """精准清除当前节点身上所有未连线的幽灵输入、断层V槽和空壳W槽，避免影响差值计算"""
+        # [第一道安全锁]：严格验证节点自身名称是否符合内部骨骼修形阵列命名前缀 (Point/YAxis/ZAxis/Scale)
+        # 如果不是我们工具自建的辅助 BlendWeighted 节点，这层直接返回，不侵犯外来节点！
+        node_name = self.name.split("|")[-1]
+        valid_prefixes = (
+            "PointX", "PointY", "PointZ", 
+            "YAxisX", "YAxisY", "YAxisZ", 
+            "ZAxisX", "ZAxisY", "ZAxisZ", 
+            "ScaleX", "ScaleY", "ScaleZ"
+        )
+        if not node_name.startswith(valid_prefixes):
+            return
+
+        # [终极拓扑防线]：强化上下游专属节点鉴定！！
+        # 顺藤摸瓜寻找下游目标：对于 MFace 骨骼系统，这些 blendWeighted 必须将 output 输出到专属的 Additive 偏移行列节点！
+        # 如果下游不是我们的 Additive 接收器，即便名字和别名全对上也算外来货，直接跳过保平安！
+        outputs = cmds.listConnections(self.name + ".output", s=False, d=True) or []
+        is_exclusive = False
+        for out in outputs:
+            out_name = out.split("|")[-1]
+            out_type = cmds.objectType(out)
+            # MFace骨骼系统的三种下游终端形态：
+            # 1. Additive* : 接收 Point 平移信息
+            # 2. Rot*      : rotateHelper节点，接收 YAxis/ZAxis 的矢量转向信息
+            # 3. joint 类型: 真实的骨骼自身，接收 Scale 原生缩放信息
+            if out_name.startswith("Additive") or out_name.startswith("Rot") or out_type == 'joint':
+                is_exclusive = True
+                break
+                
+        if not is_exclusive:
+            return
+
         input_idxs = cmds.getAttr(self.name + ".input", mi=True) or []
         wt_idxs = cmds.getAttr(self.name + ".weight", mi=True) or []
         all_indices = set(input_idxs + wt_idxs)
@@ -336,6 +367,12 @@ class BlendWeighted(Node):
                     
             if is_orphan:
                 in_alias, wt_alias = alias_map.get(in_plug, ""), alias_map.get(wt_plug, "")
+                
+                # [第二道安全锁]：深度验证属性别名
+                # 如果既没有找到以 'V' 结尾的输入信号，也没有以 'W' 结尾的权重别名，证明这是非 MFace 生成的裸槽位，跳过！
+                if not (in_alias.endswith("V") or wt_alias.endswith("W")):
+                    continue
+                    
                 base_target = in_alias[:-1] if in_alias.endswith("V") else (wt_alias[:-1] if wt_alias.endswith("W") else "")
                 
                 for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:

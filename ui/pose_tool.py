@@ -331,10 +331,43 @@ class FacePoseTool(QDialog):
             self.set_slider_pose(set_weight)
 
     def add_driver_action(self):
-        ctrl = self.line.text().strip()
-        if not ctrl: return
-        targets = tools.add_sdk_by_selected([ctrl])
-        if not targets: return
+        sel_items = self.list.selectedItems()
+        targets = []
+        if sel_items:
+            import maya.cmds as cmds
+            
+            cmds.undoInfo(openChunk=True)
+            try:
+                for item in sel_items:
+                    target_name = item.data(Qt.UserRole)
+                    ctrl_attr = item.data(Qt.UserRole + 2)
+                    if target_name and ctrl_attr:
+                        try:
+                            val = cmds.getAttr(ctrl_attr)
+                            try:
+                                default = cmds.addAttr(ctrl_attr, q=True, dv=True)
+                            except:
+                                default = 0.0
+                            
+                            if abs(val - default) > 0.001:
+                                tools.facs.add_sdk(ctrl_attr, target_name, default, val)
+                                targets.append(target_name)
+                            else:
+                                cmds.warning(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
+                        except Exception as e:
+                            print(str(e))
+            finally:
+                cmds.undoInfo(closeChunk=True)
+
+        if not targets:
+            ctrl = self.line.text().strip()
+            if not ctrl: return
+            try:
+                # Fallback directly
+                targets = tools.facs.add_sdk_by_selected([ctrl])
+            except:
+                pass
+            if not targets: return
         
         if len(targets) > 1:
             self._auto_select([], None)

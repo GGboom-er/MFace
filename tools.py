@@ -132,6 +132,7 @@ def get_face_pose_filter():
 # face poses
 get_targets = facs.get_targets
 add_sdk_by_selected = undo(facs.add_sdk_by_selected)
+add_sdk_by_explicit_targets = undo(facs.add_sdk_by_explicit_targets)
 add_comb = undo(facs.add_comb)
 add_ib = undo(facs.add_ib)
 set_pose_by_targets = undo(facs.set_pose_by_targets)

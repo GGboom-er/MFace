@@ -75,7 +75,8 @@ def find_add_sdk_data(ctrls=None):
             except:
                 continue
             delta = abs(default - value)
-            if delta > max_delta:
+            # Give priority to custom attributes if deltas are equal
+            if delta >= max_delta:
                 max_delta = delta
                 target_name = get_target_name(node_attr, default, value)
                 best_data = dict(attr=node_attr, value=value, default_value=default, target_name=target_name)
@@ -131,15 +132,21 @@ def add_sdk(attr, target_name, default_value, value):
         if not data: return
         _, _, _, old_value = data
         if abs(value - old_value) > 0.001:
+            try:
+                ctrl, ch_attr = attr.split('.', 1)
+                msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, ch_attr, old_value, value)
+            except:
+                msg = u'%s\n%.3f ===》》》=== %.3f' % (attr, old_value, value)
+                
             res = cmds.confirmDialog(
-                title=u"覆盖触发阈值？",
-                message=u"驱动姿势 [%s] 已存在！\n原本设置的触发值为: %.3f\n当前控制器的值为: %.3f\n\n是否将触发阈值平移更新为当前值？\n(此操作安全，不会破坏您已刷好的任何模型形变及权重极值)" % (target_name, old_value, value),
-                button=[u"修改", u"保持原样"],
-                defaultButton=u"修改",
-                cancelButton=u"保持原样",
-                dismissString=u"保持原样"
+                title=u'极值同步确认',
+                message=msg,
+                button=[u'确认更新', u'不更新'],
+                defaultButton=u'确认更新',
+                cancelButton=u'不更新',
+                dismissString=u'不更新'
             )
-            if res == u"修改":
+            if res == u'确认更新':
                 uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
                 if uu_list:
                     uu = uu_list[0]
@@ -169,6 +176,17 @@ def add_sdk_by_selected(ctrls=None):
     """
     added = []
     for kwargs in find_add_sdk_data(ctrls):
+        add_sdk(**kwargs)
+        added.append(kwargs["target_name"])
+    return added
+
+
+def add_sdk_by_explicit_targets(kwargs_list):
+    u"""
+    根据UI等处显式的传参，直接精确添加指定的所有驱动目标，跳过查找和猜测。
+    """
+    added = []
+    for kwargs in kwargs_list:
         add_sdk(**kwargs)
         added.append(kwargs["target_name"])
     return added
@@ -598,25 +616,6 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
     if cleaned_joints > 0:
         cmds.warning(u"[DEBUG 净化追踪] 差值录入完毕！本次定位发生真实位移的活动骨骼: %d 根 | 针对性盘查脱节连接点: %d 个。" % (cleaned_joints, cleaned_bws))
 
-    # 录制完成后：将被「排除」的驱动归零（即不勾选的那些 pose 驱动）
-    # 这样场景最终干净，只有 happy 是激活状态
-    if exclude:
-        bridge = get_bridge()
-        for base_target in get_base_targets(get_targets()):
-            data = get_base_sdk_data(base_target)
-            if not data:
-                continue
-            ctrl, attr, default_value, _ = data
-            ctrl_attr = ctrl + "." + attr
-            if ctrl_attr in exclude:
-                try:
-                    rest_ctrl(ctrl)
-                    current_weight = cmds.getAttr(bridge + "." + base_target)
-                    if abs(current_weight) > 0.001:
-                        cmds.setAttr(ctrl_attr, default_value)
-                except Exception as _e:
-                    cmds.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-
 
 def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False):
     if not exist_target(target_name):
@@ -746,14 +745,32 @@ def edit_target(target_name, keep_ctrl_attrs=None):
     return target_name
 
 
+def __force_update_threshold(target_name, value):
+    bridge = get_bridge()
+    uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
+    if uu_list:
+        uu = uu_list[0]
+        count = cmds.keyframe(uu, q=True, keyframeCount=True)
+        for i in range(count):
+            v = cmds.keyframe(uu, index=(i,i), q=True, vc=True)[0]
+            if abs(v - 1.0) < 0.001:
+                try:
+                    cmds.keyframe(uu, edit=True, index=(i, i), absolute=True, floatChange=value)
+                except Exception:
+                    pass
+                break
+
 def mirror_base_drive_target(target_name):
     ctrl, attr, default_value, value = get_base_sdk_data(target_name)
     mirror_ctrl = Fmt.mirror_name(ctrl)
-    attr = mirror_ctrl + "." + attr
-    target_name = get_target_name(attr, default_value, value)
-    if not exist_target(target_name):
-        add_sdk(attr, target_name, default_value, value)
-    return target_name
+    attr_full = mirror_ctrl + "." + attr
+    dst_target_name = get_target_name(attr_full, default_value, value)
+    if not exist_target(dst_target_name):
+        add_sdk(attr_full, dst_target_name, default_value, value)
+    else:
+        # 当被镜像的目标驱动已存在时，强制将其阈值横向跨越拉平对齐源侧，不再置之不理！
+        __force_update_threshold(dst_target_name, value)
+    return dst_target_name
 
 
 def mirror_drive_target(target_name):
