@@ -729,10 +729,15 @@ class Weight(Hierarchy):
 
     def set(self, weight):
         if weight < 0.00001:
+            if not self.weight:
+                return
             self.delete()
         else:
-            self.get()
-            self.weight.set(weight)
+            if self.weight:
+                self.weight.set(weight)
+            else:
+                self.get()
+                self.weight.set(weight)
 
     def value(self):
         if self.weight:
