@@ -4,6 +4,7 @@ from .core import *
 from . import facs
 from . import preset
 from . import fastPin
+from .logger import logger
 
 
 def undo(fun):
@@ -90,15 +91,7 @@ def mirror_cluster_weights():
         # 如果遇到 <br> 或 <table> 会算错长宽。
         # 必须使用原生的纯文本换行符 '\n' 拼接，它才能正确算出屏幕居中的边界并拉伸背景。
         display_text = u"\n".join(msgs)
-        
-        # 只保留最外层的 <span> 改色，里面只包含纯文本和 \n
-        html_str = u'<span style="color:#00FF00; font-size:16px;"><b>[Cluster 镜像列表]</b>\n\n<span style="color:#E0E0E0; font-size:14px;">%s</span></span>' % display_text
-            
-        cmds.inViewMessage(
-            amg=html_str, 
-            pos='midCenter', 
-            fade=True
-        )
+        logger.hud(u"[Cluster 镜像列表]\n\n%s" % display_text)
 
 
 def save_cluster_weights(path):
@@ -190,8 +183,8 @@ delete_preset_skin_weights = undo(preset.delete_preset_skin_weights)
 def ctrl_follow_to_selected_polygon():
     polygon = fastPin.get_selected_polygon()
     if not polygon:
-        cmds.warning(u"请先选择要跟随的目标模型！")
+        logger.warning(u"请先选择要跟随的目标模型！")
         return
     pins = Ctrl.add_pins()
     fastPin.create_pins(polygon, pins)
-    cmds.inViewMessage(amg=u'<span style="color: #00FF00; font-size: 20px;">已成功绑定控制器跟随！</span>', pos='midCenter', fade=True)
+    logger.hud(u"已成功绑定控制器跟随！")

@@ -5,6 +5,7 @@ import os
 from maya import cmds
 from maya.api.OpenMaya import *
 from .api_lib import bs_api
+from .logger import logger
 
 
 class Shape(object):
@@ -451,6 +452,9 @@ def load_targets(polygons, path):
 def get_selected_bs_data(targets, path):
     path = path.replace(".json", ".cbs")
     polygons = get_selected_polygons()
+    if not polygons:
+        logger.warning(u"未选中任何模型网格，本次导出的融合变形(BlendShape)数据将为空（不影响骨骼与驱动配置导出）。")
+        return []
     data = get_connect_data(polygons, targets)
     export_targets(polygons, targets, path)
     return data

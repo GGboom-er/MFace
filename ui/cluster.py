@@ -1,6 +1,7 @@
 # coding:utf-8
 from .base import *
 from .. import tools
+from ..logger import logger
 from .. core import *
 
 
@@ -273,7 +274,7 @@ class ClusterTool(QDialog):
             self.but.setContextMenuPolicy(Qt.NoContextMenu)
             try:
                 self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-            except:
+            except Exception:
                 pass
 
     def show_cancel_menu(self, pos):
@@ -291,14 +292,14 @@ class ClusterTool(QDialog):
         if not is_editing_before:
             clusters = tools.Cluster.selected()
             if len(clusters) != 1:
-                cmds.inViewMessage(amg='<span style="color: #FF0000; font-size: 20px;">请先在场景中选择一个需要修改权重的 Cluster 控制器！</span>', pos='midCenter', fade=True)
+                logger.hud(u"请先在场景中选择一个需要修改权重的 Cluster 控制器！", color="#FF0000")
                 return
         result = tools.cluster_weight_apply()
         self.update_button_text()
         if result:
             success, msg = result
             color = "#00FF00" if success else "#FF0000"
-            cmds.inViewMessage(amg='<span style="color: {}; font-size: 20px;">{}</span>'.format(color, msg), pos='midCenter', fade=True)
+            logger.hud(msg, color=color)
 
     @staticmethod
     def save_weight():

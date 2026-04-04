@@ -17,6 +17,7 @@ suf: suffix后缀，有的创建定位器会创建多个节点。用于区分.
 from maya import cmds
 from maya.api.OpenMaya import *
 from . import data
+from .logger import logger
 
 ROOT = "MFaceFits"
 
@@ -156,7 +157,7 @@ def polygon_to_curve(side_length):
     # 获取所有选择的边
     edges = [sel for sel in cmds.ls(sl=1, fl=1) if ".e[" in sel]
     if len(edges) < 2:
-        return cmds.warning("please select edge")
+        return logger.warning(u"请先选择边(Edge)！")
     # 获取选择边的id,与临接边的id
     indexes = set()
     connects = []
@@ -173,7 +174,7 @@ def polygon_to_curve(side_length):
     # 相邻边为1的, 为两端的边
     sides = [es for es in connects if len(es)==1]
     if len(sides) != side_length:
-        return cmds.warning("please select edge")
+        return logger.warning(u"请先选择边(Edge)！")
     f = 0 if side_length else 1
     return cmds.polyToCurve(degree=1, ch=0, usm=0, f=f)[0]
 

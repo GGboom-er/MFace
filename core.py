@@ -146,7 +146,10 @@ class Face(Hierarchy):
         Hierarchy.__init__(self, "MFace@s")
 
     def get(self):
-        self.build("Fit", "Joint", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
+        if cmds.objExists("Head_M"):
+            self.build("Fit", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
+        else:
+            self.build("Fit", "Joint", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
         self.add_radius()
         self.add_ctrl_fmt()
         self.add_joint_fmt()
@@ -496,7 +499,8 @@ class Joint(Hierarchy):
 
     def __init__(self, name):
         Hierarchy.__init__(self, name, Face()["Additive"])
-        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint")
+        joint_parent = "Head_M" if cmds.objExists("Head_M") else Face()["Joint"].name
+        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), joint_parent, "joint")
         self.additive, self.port = self["Additive"], self["Port"]
         self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
 

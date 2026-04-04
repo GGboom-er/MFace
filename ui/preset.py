@@ -161,21 +161,27 @@ class CreatePreset(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent)
         self.line = QLineEdit()
+        self.full_save_checkbox = QCheckBox(u"是否全量备份 (包含控制器、驱动动作、簇等，不包含表面修形BS)")
+        self.full_save_checkbox.setChecked(True)
         self.setWindowTitle(u"预设")
         self.setLayout(q_add(
             QVBoxLayout(),
             q_add(QHBoxLayout(), q_prefix(u"名称：", 60), self.line),
+            self.full_save_checkbox,
             q_add(QHBoxLayout(), q_button(u"创建", self.apply), q_button(u"取消", self.close))
         ))
-        font = QFont(u"楷体", 12)
-        if not font.exactMatch():
-            font = QFont("Arial", 10)
-        self.setFont(font)
+        Theme.apply_fonts(self)
 
     def apply(self):
         preset = self.line.text()
         if preset:
             tools.create_preset(preset)
+            if self.full_save_checkbox.isChecked():
+                tools.save_preset_plane(preset)
+                tools.save_preset_ctrl(preset)
+                tools.save_preset_cluster_weight(preset)
+                tools.save_preset_face_sdk(preset)
+                tools.save_preset_joint_additive(preset)
             self.presetCreated.emit(preset)
         self.close()
 

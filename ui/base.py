@@ -56,7 +56,8 @@ except ImportError:
         from PySide.QtCore import *
 import re
 from .. import tools
-
+from ..logger import logger
+from .theme import Theme
 
 def get_app():
     top = QApplication.activeWindow()
@@ -89,7 +90,7 @@ def save_json(fun):
         path = get_save_path(tools.default_scene_json(), "json")
         if path:
             fun(path)
-            QMessageBox.about(get_app(), u"提示", u"导出成功！")
+            logger.hud(u"导出成功！")
     return run
 
 
@@ -98,7 +99,7 @@ def load_json(fun):
         path = get_open_path(tools.default_scene_json(), "json")
         if path:
             fun(path)
-            QMessageBox.about(get_app(), u"提示", u"导入！")
+            logger.hud(u"导入成功！")
     return run
 
 
@@ -158,22 +159,7 @@ class List(QListWidget):
         return [item.text() for item in self.selectedItems()]
 
 
-box_qss = """
-QWidget{
-    font-size: 14px;
-    font-family: 楷体;
-}
-QGroupBox{
-    border: 2px solid #242424;
-    font-size: 16x;
-    margin-top: 8px;
-    padding-top: 4px;
-}
-QGroupBox::title{
-    subcontrol-origin: margin;
-    subcontrol-position: top center;
-}
-"""
+box_qss = Theme.GLOBAL_BOX_QSS
 
 
 def q_box(label, lay, *children):
@@ -189,7 +175,7 @@ class ColorDelegate(QStyledItemDelegate):
         super(ColorDelegate, self).initStyleOption(option, index)
         has_driver = index.data(Qt.UserRole + 1)
         if option.state & getattr(QStyle, 'State_Selected', 1):
-            option.palette.setColor(QPalette.HighlightedText, QColor("yellow") if has_driver else QColor("white"))
+            option.palette.setColor(QPalette.HighlightedText, QColor(Theme.COLOR_SELECTED) if has_driver else QColor(Theme.COLOR_DEFAULT_TEXT))
 
 
 class TargetGrid(QTableWidget):
@@ -220,7 +206,7 @@ class TargetGrid(QTableWidget):
                 if not item: continue
                 has_driver = item.data(Qt.UserRole + 1)
                 # Regardless of the selection, set Foreground, the delegate will override HighlightedText!
-                item.setForeground(QColor("#79dc7f") if has_driver else QColor("gray"))
+                item.setForeground(QColor(Theme.COLOR_ACTIVE) if has_driver else QColor(Theme.COLOR_INACTIVE))
 
     def contextMenuEvent(self, event):
         if hasattr(self.menu, "exec"):
@@ -286,10 +272,10 @@ class TargetGrid(QTableWidget):
             item_min.setData(Qt.UserRole, min_target)
             item_min.setData(Qt.UserRole + 2, ctrl + "." + attr)
             if min_target in all_existing:
-                item_min.setForeground(QColor("#79dc7f"))
+                item_min.setForeground(QColor(Theme.COLOR_ACTIVE))
                 item_min.setData(Qt.UserRole + 1, True)
             else:
-                item_min.setForeground(QColor("gray"))
+                item_min.setForeground(QColor(Theme.COLOR_INACTIVE))
                 item_min.setData(Qt.UserRole + 1, False)
             self.setItem(i, 0, item_min)
             self._target_items[min_target] = item_min
@@ -300,10 +286,10 @@ class TargetGrid(QTableWidget):
             item_max.setData(Qt.UserRole, max_target)
             item_max.setData(Qt.UserRole + 2, ctrl + "." + attr)
             if max_target in all_existing:
-                item_max.setForeground(QColor("#79dc7f"))
+                item_max.setForeground(QColor(Theme.COLOR_ACTIVE))
                 item_max.setData(Qt.UserRole + 1, True)
             else:
-                item_max.setForeground(QColor("gray"))
+                item_max.setForeground(QColor(Theme.COLOR_INACTIVE))
                 item_max.setData(Qt.UserRole + 1, False)
             self.setItem(i, 1, item_max)
             self._target_items[max_target] = item_max
@@ -332,7 +318,7 @@ class TargetGrid(QTableWidget):
                       
                   item.setData(Qt.UserRole, t)
                   item.setData(Qt.UserRole + 1, True)
-                  item.setForeground(QColor("#79dc7f"))
+                  item.setForeground(QColor(Theme.COLOR_ACTIVE))
                   self.setItem(r, c, item)
                   self._target_items[t] = item
                   
@@ -344,9 +330,9 @@ class TargetGrid(QTableWidget):
                 header.setSectionResizeMode(QHeaderView.Stretch)
             else:
                 header.setStretchLastSection(True)
-        except:
+        except Exception:
              try: header.setResizeMode(QHeaderView.Stretch)
-             except: pass
+             except Exception: pass
 
     def build_flat_list(self, search_text, all_existing):
         self.clear()
@@ -371,7 +357,7 @@ class TargetGrid(QTableWidget):
              item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
              item.setData(Qt.UserRole, t)
              item.setData(Qt.UserRole + 1, True)  # <-- Give it the driver boolean tag
-             item.setForeground(QColor("#79dc7f"))
+             item.setForeground(QColor(Theme.COLOR_ACTIVE))
              self.setItem(i, 0, item)
              self._target_items[t] = item
              
@@ -381,7 +367,7 @@ class TargetGrid(QTableWidget):
                 header.setSectionResizeMode(QHeaderView.Stretch)
             else:
                 header.setStretchLastSection(True)
-        except:
+        except Exception:
              try: header.setResizeMode(QHeaderView.Stretch)
-             except: pass
+             except Exception: pass
 

@@ -1,6 +1,7 @@
 # coding:utf-8
 from .base import *
 from .. import tools
+from ..logger import logger
 
 
 class TargetSlider(QHBoxLayout):
@@ -186,6 +187,7 @@ class FacePoseTool(QDialog):
         self.list.menu.addAction(u"删除", self.run_targets(tools.delete_targets))
         self.list.menu.addAction(u"删除选择点/骨骼/模型", self.run_targets(tools.delete_selected_targets, False))
         self.list.menu.addAction(u"导出pose", save_json(tools.save_face_pose_data))
+        self.list.menu.addAction(u"导入pose", load_json(tools.facs.load_face_pose_data))
         self.line.textChanged.connect(self.reload)
         self.list.itemDoubleClicked.connect(self.double_click_item)
         # Remove high frequency valueChanged constraint, bind to safe evaluation
@@ -239,8 +241,8 @@ class FacePoseTool(QDialog):
         try:
             import tools.bs
             tools.bs.cancel_duplicate_edit()
-        except:
-            pass
+        except Exception as e:
+            logger.warning(u"关闭窗口时取消编辑修形失败: %s" % str(e))
             
         super(FacePoseTool, self).closeEvent(event)
 
@@ -346,14 +348,14 @@ class FacePoseTool(QDialog):
                             val = cmds.getAttr(ctrl_attr)
                             try:
                                 default = cmds.addAttr(ctrl_attr, q=True, dv=True)
-                            except:
+                            except Exception:
                                 default = 0.0
                             
                             if abs(val - default) > 0.001:
                                 tools.facs.add_sdk(ctrl_attr, target_name, default, val)
                                 targets.append(target_name)
                             else:
-                                cmds.warning(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
+                                logger.warning(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
                         except Exception as e:
                             print(str(e))
             finally:
@@ -365,8 +367,8 @@ class FacePoseTool(QDialog):
             try:
                 # Fallback directly
                 targets = tools.facs.add_sdk_by_selected([ctrl])
-            except:
-                pass
+            except Exception as e:
+                logger.warning(u"从选择项添加驱动失败: %s" % str(e))
             if not targets: return
         
         if len(targets) > 1:
@@ -443,7 +445,7 @@ class FacePoseTool(QDialog):
                 self.but.setContextMenuPolicy(Qt.NoContextMenu)
                 try:
                     self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-                except:
+                except Exception:
                     pass
 
         _query_active_drivers_async(targets, on_drivers_selected)
@@ -471,7 +473,7 @@ class FacePoseTool(QDialog):
             self.but.setContextMenuPolicy(Qt.NoContextMenu)
             try:
                 self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-            except:
+            except Exception:
                 pass
 
 

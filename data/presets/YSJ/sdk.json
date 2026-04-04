@@ -1,0 +1,1134 @@
+[
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLidUp_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.1358251571655273,
+        "target_name": "FCtrlBLidUp_L_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLidUp_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.1358251571655273,
+        "target_name": "FCtrlBLidUp_R_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLidDn_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0702195167541504,
+        "target_name": "FCtrlBLidDn_L_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLidDn_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0702195167541504,
+        "target_name": "FCtrlBLidDn_R_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_L",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.5614984035491943,
+        "target_name": "FCtrlALipM_L_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0309697389602661,
+        "target_name": "FCtrlALipM_L_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.031997799873352,
+        "target_name": "FCtrlALipM_L_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_R",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.5614984035491943,
+        "target_name": "FCtrlALipM_R_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0309697389602661,
+        "target_name": "FCtrlALipM_R_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.031997799873352,
+        "target_name": "FCtrlALipM_R_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_L",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": -1.273545742034912,
+        "target_name": "FCtrlALipM_L_tz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlALipM_R",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": -1.273545742034912,
+        "target_name": "FCtrlALipM_R_tz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBrow_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "FCtrlBrow_L_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBrow_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "FCtrlBrow_R_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBrow_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 0.800000011920929,
+        "target_name": "FCtrlBrow_L_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBrow_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "FCtrlBrow_R_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlCheck_BoneCluster_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 0.800000011920929,
+        "target_name": "FCtrlCheck_BoneCluster_L_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlCheck_BoneCluster_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 0.800000011920929,
+        "target_name": "FCtrlCheck_BoneCluster_R_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlLip_M",
+        "attr": "ry",
+        "default_value": 0.0,
+        "value": -20.0,
+        "target_name": "FCtrlLip_M_ry_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlLip_M",
+        "attr": "ry",
+        "default_value": 0.0,
+        "value": 20.0,
+        "target_name": "FCtrlLip_M_ry_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlLip_M",
+        "attr": "ry",
+        "default_value": 0.0,
+        "value": 20.0,
+        "target_name": "FCtrlLip_M_real_ry_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_UpLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -0.9995079636573792,
+        "target_name": "L_UpLid_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_UpLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_UpLid_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_UpLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_UpLid_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLidUp_L",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.5,
+        "target_name": "FCtrlBLidUp_L_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_UpLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_UpLid_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_UpLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -0.9995079636573792,
+        "target_name": "R_UpLid_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_UpLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_UpLid_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_UpLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_UpLid_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_UpLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_UpLid_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_Mouth_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_Mouth_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_Mouth_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_Mouth_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_Mouth_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_Mouth_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_Mouth_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Mouth_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_Mouth_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_LoLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_LoLid_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_LoLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_LoLid_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_LoLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_LoLid_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_LoLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_LoLid_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_LoLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_LoLid_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_LoLid_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_LoLid_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_LoLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_LoLid_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_LoLid_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_LoLid_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_UpLip_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_LoLip_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_UpLip_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_LoLip_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "pupilScale",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "L_Eyeball_A_a_ctrl_pupilScale_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlJaw_M",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -3.0,
+        "target_name": "FCtrlJaw_M_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "pupilScale",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "L_Eyeball_A_a_ctrl_pupilScale_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "pupilScale",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "R_Eyeball_A_a_ctrl_pupilScale_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "pupilScale",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "R_Eyeball_A_a_ctrl_pupilScale_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "irisScale",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "L_Eyeball_A_a_ctrl_irisScale_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "irisScale",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "L_Eyeball_A_a_ctrl_irisScale_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "irisScale",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "R_Eyeball_A_a_ctrl_irisScale_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "irisScale",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "R_Eyeball_A_a_ctrl_irisScale_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLipMUp_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 2.0,
+        "target_name": "FCtrlBLipMUp_L_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLipMUp_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 2.0,
+        "target_name": "FCtrlBLipMUp_R_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLipMDn_L",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.5,
+        "target_name": "FCtrlBLipMDn_L_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlBLipMDn_R",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.5,
+        "target_name": "FCtrlBLipMDn_R_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "blink",
+        "default_value": 7.0861676526590145e-09,
+        "value": 1.0,
+        "target_name": "L_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "blink",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_UpLip_A_ctrl_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_LoLip_A_ctrl_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_UpLip_A_ctrl_tz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_LoLip_A_ctrl_tz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "roll",
+        "default_value": 0.0,
+        "value": 40.0,
+        "target_name": "M_UpLip_A_ctrl_roll_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "roll",
+        "default_value": 0.0,
+        "value": 40.0,
+        "target_name": "M_LoLip_A_ctrl_roll_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "roll",
+        "default_value": 0.0,
+        "value": -40.0,
+        "target_name": "M_UpLip_A_ctrl_roll_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "roll",
+        "default_value": 0.0,
+        "value": -40.0,
+        "target_name": "M_LoLip_A_ctrl_roll_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "thicknessY",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_UpLip_A_ctrl_thicknessY_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "thicknessY",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "M_UpLip_A_ctrl_thicknessY_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "thicknessY",
+        "default_value": 0.0,
+        "value": -10.0,
+        "target_name": "M_LoLip_A_ctrl_thicknessY_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "thicknessY",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_LoLip_A_ctrl_thicknessY_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "puff",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_UpLip_A_ctrl_puff_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "puff",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_LoLip_A_ctrl_puff_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_Mouth_A_ctrl_tz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "tz",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_Mouth_A_ctrl_tz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_UpLip_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_UpLip_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_UpLip_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "M_LoLip_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_LoLip_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_LoLip_A_ctrl_tx_min"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Mouth_A_ctrl_tx_min",
+            "R_Mouth_A_ctrl_tx_min"
+        ],
+        "target_name": "L_Mouth_A_ctrl_tx_min_COMB_R_Mouth_A_ctrl_tx_min"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Mouth_A_ctrl_ty_max",
+            "R_Mouth_A_ctrl_ty_max"
+        ],
+        "target_name": "L_Mouth_A_ctrl_ty_max_COMB_R_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Mouth_A_ctrl_tx_max",
+            "R_Mouth_A_ctrl_tx_max"
+        ],
+        "target_name": "L_Mouth_A_ctrl_tx_max_COMB_R_Mouth_A_ctrl_tx_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Mouth_A_ctrl_tx_max",
+            "L_Mouth_A_ctrl_ty_max"
+        ],
+        "target_name": "L_Mouth_A_ctrl_tx_max_COMB_L_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "R_Mouth_A_ctrl_tx_max",
+            "R_Mouth_A_ctrl_ty_max"
+        ],
+        "target_name": "R_Mouth_A_ctrl_tx_max_COMB_R_Mouth_A_ctrl_ty_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Mouth_A_ctrl_tx_max",
+            "L_Mouth_A_ctrl_ty_min"
+        ],
+        "target_name": "L_Mouth_A_ctrl_tx_max_COMB_L_Mouth_A_ctrl_ty_min"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "R_Mouth_A_ctrl_tx_max",
+            "R_Mouth_A_ctrl_ty_min"
+        ],
+        "target_name": "R_Mouth_A_ctrl_tx_max_COMB_R_Mouth_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_EyeCornerOut_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_EyeCornerOut_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_EyeCornerOut_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_EyeCornerOut_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_EyeCornerOut_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_EyeCornerOut_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_EyeCornerOut_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_EyeCornerOut_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Mouth_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "M_Mouth_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_EyeCornerInn_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_EyeCornerInn_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_EyeCornerInn_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_EyeCornerInn_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_EyeCornerInn_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_EyeCornerInn_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_EyeCornerInn_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_EyeCornerInn_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "blinkHeight",
+        "default_value": 0.75,
+        "value": 1.0,
+        "target_name": "L_Eyeball_A_a_ctrl_blinkHeight_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Eyeball_A_a_ctrl_blinkHeight_max",
+            "L_Eyeball_A_a_ctrl_blink_max"
+        ],
+        "target_name": "L_Eyeball_A_a_ctrl_blinkHeight_max_COMB_L_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Eyeball_A_a_ctrl",
+        "attr": "blinkHeight",
+        "default_value": 0.75,
+        "value": 0.0,
+        "target_name": "L_Eyeball_A_a_ctrl_blinkHeight_min"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "L_Eyeball_A_a_ctrl_blinkHeight_min",
+            "L_Eyeball_A_a_ctrl_blink_max"
+        ],
+        "target_name": "L_Eyeball_A_a_ctrl_blinkHeight_min_COMB_L_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "blinkHeight",
+        "default_value": 0.75,
+        "value": 1.0,
+        "target_name": "R_Eyeball_A_a_ctrl_blinkHeight_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Eyeball_A_a_ctrl",
+        "attr": "blinkHeight",
+        "default_value": 0.75,
+        "value": 0.0,
+        "target_name": "R_Eyeball_A_a_ctrl_blinkHeight_min"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "R_Eyeball_A_a_ctrl_blinkHeight_max",
+            "R_Eyeball_A_a_ctrl_blink_max"
+        ],
+        "target_name": "R_Eyeball_A_a_ctrl_blinkHeight_max_COMB_R_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "R_Eyeball_A_a_ctrl_blinkHeight_min",
+            "R_Eyeball_A_a_ctrl_blink_max"
+        ],
+        "target_name": "R_Eyeball_A_a_ctrl_blinkHeight_min_COMB_R_Eyeball_A_a_ctrl_blink_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_Brow_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_Brow_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "L_Brow_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "L_Brow_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_Brow_A_ctrl_tx_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_Brow_A_ctrl_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": -1.0,
+        "target_name": "R_Brow_A_ctrl_ty_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "ty",
+        "default_value": 0.0,
+        "value": 1.0,
+        "target_name": "R_Brow_A_ctrl_ty_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": -30.0,
+        "target_name": "R_Brow_A_ctrl_rz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": -30.0,
+        "target_name": "L_Brow_A_ctrl_rz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": -30.0,
+        "target_name": "L_Brow_A_ctrl_real_rz_min"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": 30.0,
+        "target_name": "L_Brow_A_ctrl_rz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "L_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": 30.0,
+        "target_name": "L_Brow_A_ctrl_real_rz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "R_Brow_A_ctrl",
+        "attr": "rz",
+        "default_value": 0.0,
+        "value": 30.0,
+        "target_name": "R_Brow_A_ctrl_rz_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlCheckCluster_L",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 2.0,
+        "target_name": "FCtrlCheckCluster_L_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlCheckCluster_R",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": 2.0,
+        "target_name": "FCtrlCheckCluster_R_tx_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "FCtrlCheckCluster_L_tx_max",
+            "FCtrlCheckCluster_R_tx_max"
+        ],
+        "target_name": "FCtrlCheckCluster_L_tx_max_COMB_FCtrlCheckCluster_R_tx_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "AA",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_AA_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "EE",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_EE_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "FF",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_FF_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "MM",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_MM_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "OO",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_OO_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "SH",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_SH_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "UU",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_UU_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlCheckCluster_L",
+        "attr": "tx",
+        "default_value": 0.0,
+        "value": -0.5,
+        "target_name": "CheckCluster_L_tx_min"
+    },
+    {
+        "typ": "ib",
+        "target_name": "M_Phoneme_A_ctrl_MM_max_IB18"
+    },
+    {
+        "typ": "ib",
+        "target_name": "M_LoLip_A_ctrl_roll_min_IB13"
+    },
+    {
+        "typ": "ib",
+        "target_name": "M_Mouth_A_ctrl_tz_min_IB19"
+    },
+    {
+        "typ": "base",
+        "ctrl": "FCtrlJaw_M",
+        "attr": "ZipL",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "Jaw_M_ZipL_max"
+    },
+    {
+        "typ": "comb",
+        "target_names": [
+            "FCtrlJaw_M_ty_min",
+            "Jaw_M_ZipL_max"
+        ],
+        "target_name": "FCtrlJaw_M_ty_min_COMB_Jaw_M_ZipL_max"
+    },
+    {
+        "typ": "base",
+        "ctrl": "M_Phoneme_A_ctrl",
+        "attr": "SS",
+        "default_value": 0.0,
+        "value": 10.0,
+        "target_name": "M_Phoneme_A_ctrl_SS_max"
+    }
+]

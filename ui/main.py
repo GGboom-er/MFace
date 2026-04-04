@@ -22,10 +22,7 @@ class MFaceMain(QDialog):
         self.tab.addTab(self.fit, u"绑定")
         self.tab.addTab(self.cluster, u"跟随")
         self.tab.addTab(self.facePose, u"姿势")
-        font = QFont(u"楷体", 12)
-        if not font.exactMatch():
-            font = QFont("Arial", 10)
-        self.setFont(font)
+        Theme.apply_fonts(self)
         self.update_presets()
         self.tab.currentChanged.connect(self.change_tab)
         self.change_tab(0)
