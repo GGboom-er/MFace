@@ -6,17 +6,19 @@ from ..nodes import Exp, Node
 from maya import cmds
 
 
-class Eye(RigSystem):
-    fit_configs = dict(Lid=dict(pre="Lid", fit="loop_curve", names=["", "A", "B", "C"], rml="RML"),
-                       Eye=dict(pre="Eye", fit="roll", names=["", "A", "B", "C"], rml="RML"))
-    fit_kwargs = [(dict(pre="Lid"), dict(cluster2=0, joint=9, degree=2, roll=True, sample="param"))]
-
 def strip_ctrl_prefix(name):
     short_name = name.split("|")[-1].split(":")[-1]
     if short_name.startswith("FCtrl"): return short_name[5:]
     if short_name.startswith("M_FCtrl"): return short_name[7:]
     if short_name.startswith("Ctrl"): return short_name[4:]
     return short_name
+
+
+class Eye(RigSystem):
+    fit_configs = dict(Lid=dict(pre="Lid", fit="loop_curve", names=["", "A", "B", "C"], rml="RML"),
+                       Eye=dict(pre="Eye", fit="roll", names=["", "A", "B", "C"], rml="RML"))
+    fit_kwargs = [(dict(pre="Lid"), dict(cluster2=0, joint=9, degree=2, roll=True, sample="param"))]
+
 
     def build(self):
         aims = [self.rig_rml(fits) for fits in self.fits.group("rml")]
