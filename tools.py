@@ -10,8 +10,10 @@ from .logger import logger
 def undo(fun):
     def undo_fun(*args, **kwargs):
         cmds.undoInfo(openChunk=1)
-        res = fun(*args, **kwargs)
-        cmds.undoInfo(closeChunk=1)
+        try:
+            res = fun(*args, **kwargs)
+        finally:
+            cmds.undoInfo(closeChunk=1)
         return res
     return undo_fun
 

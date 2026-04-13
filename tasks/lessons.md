@@ -31,3 +31,5 @@
 
 - [触发条件]重新生成完整绑定时，面板导入但控制器无任何驱动与连接 -> [根因]原先的生成逻辑未销毁 MFaceAdditives 桥接节点。因该节点遗留存在，重建流程dd_sdk函数发生误判（exist_target=True）从而全部跳过了连接驱动动作（setDrivenKeyframe），导致全盘失控！ -> [正确方案]已在 preset.load_preset() 函数顶端强行插入针对 MFaceAdditives 的自动销毁语句。 -> [避坑规则]预设重建系统(Bind/Rebuild)必须保证彻底的环境清洁，切忌遗留桥接级中间节点。
 - [触发条件]调整外眼角UI面板控制器FCtrlBLidOutDn_L无反应 -> [根因]因眼球Fit骨架曾丢失，后续误点【保存预设】时，由于系统抓取不到眼角骨骼输入导致将所有外眼角 ClusterWeight 双规为 0 并覆写了 clusterWeight.json，且 sdk.json 中也遗失了该拉杆的姿势记录。 -> [正确方案]重新在UI面板分配眼角 Cluster 权重，或重新框选记录外眼角骨骼偏移（Base Pose）。 -> [避坑规则]骨架生成不完整时，绝对不要点击【保存预设】，否则残缺的读取结果会格式化覆盖掉原本正确的 JSON 数据库。
+- [触发条件]每次生成绑定时，用户自行移动过的控制面板(MFacePlanes)位置被重置 -> [根因]原先的 load_preset_plane 会暴力删除 MFacePlanes 组并重新从位于坐标原点的 plane.ma 导入。 -> [正确方案]在删除面板前，获取其 worldMatrix 并缓存；等新的面板导入后，再次将其 worldMatrix 恢复回去。 -> [避坑规则]重构 UI 系资产时，务必注意保护用户的位移状态。
+- [触发条件]绑定后，控制器无法完全驱动骨架（如下嘴唇），必须进出一次 Weight 模式才恢复正常 -> [根因]后台高速密集连接 BlendWeighted 属性时，Maya 2025 并行求值网等出现了 DG 变脏（Dirty）不充分或缓存滞后现象。进出 Weight 触发的大规模连接插拔动作意外唤醒了求值树。 -> [正确方案]在生成环境（load_preset）执行结尾强制注入全局脏查 cmds.dgdirty(a=True)，并直接顺带触发一次静默的 insh_edit_weights 重装载连线操作。 -> [避坑规则]对于底层依赖大网节点的系统构建，最终总线出口处必须显式调用刷新 API。

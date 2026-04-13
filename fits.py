@@ -359,7 +359,7 @@ def fit_fk(name):
     children.sort(key=lambda x: x.count("|"), reverse=True)
     for i, child in enumerate(children):
         cmds.rename(child, name+"%02d" % (len(children)-i+1))
-    joints = [joint] + cmds.listRelatives(joint, ad=1, f=1)
+    joints = [joint] + (cmds.listRelatives(joint, ad=1) or [])
     list(map(joint_as_local, joints))
     for joint in joints:
         if not cmds.listRelatives(joint, s=0, type="joint"):
@@ -460,11 +460,16 @@ class Fits(object):
         # 避免 MFaceFits 有位移/旋转时，曲线、surface、joint 的局部坐标计算出现偏移
         cmds.createNode("transform", n=group, ss=1)
         nodes = globals()["fit_" + fit](group)
+        nodes = nodes if isinstance(nodes, tuple) else [nodes]
+        uuids = cmds.ls(list(nodes), uuid=True)
+        
         # fit 完成后再 parent 进 ROOT，保留世界位置
         cmds.parent(group, ROOT)
-        nodes = nodes if isinstance(nodes, tuple) else [nodes]
-        for node in nodes:
-            save_data(node, fit=fit, rig=rig, pre=pre, classify=classify, name=name, rml=rml, suf=node[len(group):])
+        
+        resolved_nodes = [cmds.ls(u)[0] for u in uuids]
+        for node in resolved_nodes:
+            short_name = node.split("|")[-1]
+            save_data(node, fit=fit, rig=rig, pre=pre, classify=classify, name=name, rml=rml, suf=short_name[len(group):])
         for query, _data in kwargs:
             for row in Fits().all().finds(rig=rig, name=name, **query):
                 save_data(row["node"], **_data)

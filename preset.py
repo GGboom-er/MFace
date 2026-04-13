@@ -259,11 +259,10 @@ def save_preset_plane(preset):
 
 
 def load_preset_plane(preset):
-    if cmds.objExists("MFacePlanes"):
-        cmds.delete("MFacePlanes")
-    cmds.file(get_preset_path(preset, "plane.ma"), i=1, f=1, type="mayaAscii", ns=":")
-    if cmds.objExists("MFaces"):
-        cmds.parent("MFacePlanes", "MFaces")
+    if not cmds.objExists("MFacePlanes"):
+        cmds.file(get_preset_path(preset, "plane.ma"), i=1, f=1, type="mayaAscii", ns=":")
+        if cmds.objExists("MFaces"):
+            cmds.parent("MFacePlanes", "MFaces")
 
 
 def delete_preset_plane(preset):
@@ -356,14 +355,16 @@ def delete_preset_skin_weights(preset):
 
 
 def load_preset(preset):
+    load_preset_plane(preset)
     if cmds.objExists("MFaceAdditives"):
         cmds.delete("MFaceAdditives")
     rig.build_all()
-    load_preset_plane(preset)
     load_preset_cluster_weight(preset)
     load_preset_ctrl(preset)
     load_preset_face_sdk(preset)
     load_preset_joint_additive(preset)
+    cmds.dgdirty(a=True)
+    Cluster.finsh_edit_weights()
     load_preset_blend_shape(preset)
     load_preset_skin_weights(preset)
 

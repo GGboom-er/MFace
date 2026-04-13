@@ -547,6 +547,8 @@ class Joint(Hierarchy):
             attr.get_node()["bindPreMatrix"][attr.index()].set(inverse)
 
     def add_pose(self, weight, matrix):
+        if not self.bws[0]:
+            return
         x, y, z, p = [matrix[i: i + 3] for i in range(0, 16, 4)]
         s = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [x, y, z]]
         values = [matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
@@ -554,9 +556,13 @@ class Joint(Hierarchy):
             bw.add_pose(weight, value)
 
     def get_additive(self, name):
+        if not self.bws[0]:
+            return [0] * 12
         return [bw.get_additive(name) for bw in self.bws]
 
     def set_additive(self, weight, values):
+        if not self.bws[0]:
+            return
         for bw, value in zip(self.bws, values):
             bw.set_additive(weight, value)
 
@@ -856,7 +862,7 @@ class Cluster(Hierarchy):
     def set_weight_data(self, data):
         for name, value in data.items():
             joint = Joint(name)
-            if not joint.joint:
+            if not joint.joint or not joint.bws[0]:
                 continue
             self.weight(joint).set(value)
 

@@ -1109,22 +1109,6 @@
     },
     {
         "typ": "base",
-        "ctrl": "FCtrlJaw_M",
-        "attr": "ZipL",
-        "default_value": 0.0,
-        "value": 10.0,
-        "target_name": "Jaw_M_ZipL_max"
-    },
-    {
-        "typ": "comb",
-        "target_names": [
-            "FCtrlJaw_M_ty_min",
-            "Jaw_M_ZipL_max"
-        ],
-        "target_name": "FCtrlJaw_M_ty_min_COMB_Jaw_M_ZipL_max"
-    },
-    {
-        "typ": "base",
         "ctrl": "M_Phoneme_A_ctrl",
         "attr": "SS",
         "default_value": 0.0,
