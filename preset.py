@@ -356,7 +356,10 @@ def delete_preset_skin_weights(preset):
 
 
 def load_preset(preset):
+    if cmds.objExists("MFaceAdditives"):
+        cmds.delete("MFaceAdditives")
     rig.build_all()
+    load_preset_plane(preset)
     load_preset_cluster_weight(preset)
     load_preset_ctrl(preset)
     load_preset_face_sdk(preset)
