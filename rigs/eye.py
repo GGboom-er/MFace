@@ -277,7 +277,6 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
             cm_n = exp_name + "_{}_MacroRot_CM".format(pre)
             norm_n = md_n + "_Norm"
             inv_n = "Inverse" + ctrl_node
-            fctrl_n = "FCtrl" + ctrl_node
             
             for n in [md_n, cm_n, norm_n]:
                 if cmds.objExists(n): cmds.delete(n)
