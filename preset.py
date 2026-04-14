@@ -355,14 +355,29 @@ def delete_preset_skin_weights(preset):
 
 
 def load_preset(preset):
+    from .ui import snapshot
+    settings = snapshot.ask_snapshot_settings()
+    if settings is None:
+        from .logger import logger
+        logger.warning(u"加载预设已取消。")
+        return
+
+    snap = RigSnapshot.capture(**settings)
     load_preset_plane(preset)
     if cmds.objExists("MFaceAdditives"):
         cmds.delete("MFaceAdditives")
     rig.build_all()
-    load_preset_cluster_weight(preset)
-    load_preset_ctrl(preset)
-    load_preset_face_sdk(preset)
-    load_preset_joint_additive(preset)
+    snap.restore()
+
+    if not settings.get("keep_cluster"):
+        load_preset_cluster_weight(preset)
+    if not settings.get("keep_ctrl"):
+        load_preset_ctrl(preset)
+    if not settings.get("keep_sdk"):
+        load_preset_face_sdk(preset)
+    if not settings.get("keep_additive"):
+        load_preset_joint_additive(preset)
+
     cmds.dgdirty(a=True)
     Cluster.finsh_edit_weights()
     load_preset_blend_shape(preset)
