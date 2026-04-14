@@ -267,9 +267,6 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
         deg_up = math.degrees(math.atan2(up_pt.y, up_pt.z))
         deg_dn = math.degrees(math.atan2(dn_pt.y, dn_pt.z))
         
-        # Determine Equator Y-intercept for the UI controllers based directly on the Mid-joints
-        macro_target_y = (up_pt.y + dn_pt.y) / 2.0
-        
         # Sign +1 for Down works precisely to track it upwards toward the equator naturally!
         for pre, ctrl_node, ratio, sign, start_rest in [("Up", strip_ctrl_prefix(up_ctrl_name), up_ratio_out, -1, up_pt), 
                                                 ("Dn", strip_ctrl_prefix(dn_ctrl_name), dn_ratio_out, 1, dn_pt)]:
@@ -287,16 +284,17 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 cmds.createNode("multiplyDivide", n=norm_n)
                 
                 # Use exact analytical Z-axis pitch solver based strictly on the 3D Eyeball Geometry (NOT the 2D panel!)
-                start_pos = start_rest
-                start_ls = start_pos * roll_inv
-                best_val = get_exact_z_rotation(start_ls.x, start_ls.y, macro_target_y)
+                # FIX 1: start_rest (up_pt/dn_pt) is already multiplied by roll_inv! Do not apply twice!
+                start_ls = start_rest
+                # FIX 2: Target the actual opposite eyelid Y to handle non-symmetric placement natively (without * 2.0 hack)
+                target_y = dn_pt.y if pre == "Up" else up_pt.y
+                # FIX 3: Use Z (depth) and Y (height) for Pitch calculation, not X (width)!
+                best_val = get_exact_z_rotation(start_ls.z, start_ls.y, target_y)
                 best_axis = "Z"
                 
                 cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
-                # best_val represents the angle simply to the equator (half the eye distance).
-                # But the ratio is out of the ENTIRE eye closure (1.0 = full close).
-                # The trigononal absolute angle is opposite to Maya's composeMatrix handedness, so we negate it.
-                cmds.setAttr("{}.input2X".format(md_n), -best_val * 2.0)
+                # best_val represents the exact relative angle for full travel (ratio 0->1.0).
+                cmds.setAttr("{}.input2X".format(md_n), -best_val)
                 
                 cmds.connectAttr("{}.outputX".format(md_n), "{}.input1X".format(norm_n))
                 orig_norm_out = blink_norm_out if isinstance(blink_norm_out, str) else str(blink_norm_out)
