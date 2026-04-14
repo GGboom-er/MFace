@@ -288,8 +288,8 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 start_ls = start_rest
                 # FIX 2: Target the actual opposite eyelid Y to handle non-symmetric placement natively (without * 2.0 hack)
                 target_y = dn_pt.y if pre == "Up" else up_pt.y
-                # FIX 3: Use Z (depth) and Y (height) for Pitch calculation, not X (width)!
-                best_val = get_exact_z_rotation(start_ls.z, start_ls.y, target_y)
+                # FIX 3: Use X (depth) and Y (height) for Pitch calculation! (LookAt matrices in MFace use X forward)
+                best_val = get_exact_z_rotation(start_ls.x, start_ls.y, target_y)
                 best_axis = "Z"
                 
                 cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
