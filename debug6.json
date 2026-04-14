@@ -1,0 +1,19 @@
+{
+    "Controllers": [
+        "FCtrlTongue01_M"
+    ],
+    "BlendWeighted": [
+        "PointXTongue01_M",
+        "PointYTongue01_M",
+        "PointZTongue01_M",
+        "ScaleXTongue01_M",
+        "ScaleYTongue01_M",
+        "ScaleZTongue01_M",
+        "YAxisXTongue01_M",
+        "YAxisYTongue01_M",
+        "YAxisZTongue01_M",
+        "ZAxisXTongue01_M",
+        "ZAxisYTongue01_M",
+        "ZAxisZTongue01_M"
+    ]
+}

@@ -367,6 +367,8 @@ def load_preset(preset):
     Cluster.finsh_edit_weights()
     load_preset_blend_shape(preset)
     load_preset_skin_weights(preset)
+    from . import setmgr
+    setmgr.rebuild_sets()           # 刷新 Set 树
 
 
 # ────────────────────────────────────────────────

@@ -4,6 +4,7 @@ from .core import *
 from . import facs
 from . import preset
 from . import fastPin
+from . import setmgr
 from .logger import logger
 
 
@@ -28,6 +29,7 @@ def with_snapshot(build_fn):
         finally:
             cmds.undoInfo(closeChunk=1)
         snap.restore()                        # 2. 重建完毕后原地恢复
+        setmgr.rebuild_sets()                    # 3. 刷新 Set 树
         return result
     return wrapped
 

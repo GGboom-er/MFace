@@ -1,0 +1,16 @@
+{
+    "length": 1,
+    "data": [
+        {
+            "node": "|Group|MotionSystem|MainSystem|MainExtra3Oft|MainExtra3|MainExtra2Oft|MainExtra2|MainExtra1Oft|MainExtra1|MainOft|Main|FacialSystem|MFaces|MFaceFits|FitTongue_M|FitTongue_M01",
+            "mirror": false,
+            "fit": "fk",
+            "rig": "Lip",
+            "pre": "Tongue",
+            "classify": "",
+            "name": "Tongue",
+            "rml": "M",
+            "suf": "01"
+        }
+    ]
+}

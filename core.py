@@ -212,6 +212,7 @@ class Ctrl(Hierarchy):
         self.mirror, self.flip = self["Mirror"], self["Flip"]
         self.ctrl = Node(Fmt.fmt_name(Face().ctrl_fmt(), name))
         self.nodes["FCtrl"] = self.ctrl
+        self.anim = self["Anim"]                              # 动画组节点：纯 transform，无 Shape
         self.output = self["NoFlip"] if self.is_flip() else self.ctrl
 
     def __bool__(self):
@@ -234,9 +235,9 @@ class Ctrl(Hierarchy):
 
     def get(self):
         Face.build_callable(self)
-        self.build(("Follow", "FCtrl"))
+        self.build(("Follow", "Anim", "FCtrl"))
         if self.is_follow():
-            self.build(("Follow", "Inverse", "FCtrl"))
+            self.build(("Follow", "Inverse", "Anim", "FCtrl"))
         parent = "Inverse" if self.is_follow() else "Follow"
         if self.is_flip():
             self.build((parent, "NoFlip"))
@@ -248,7 +249,7 @@ class Ctrl(Hierarchy):
         elif self.follow_translate:
             exp.mul3(self.output["t"], [-1, -1, -1]).connect(self.inverse["t"])
         if self.is_flip():
-            names = (parent, "Mirror", "Flip", "FCtrl") if self.is_left() else (parent, "Flip", "FCtrl")
+            names = (parent, "Mirror", "Flip", "Anim", "FCtrl") if self.is_left() else (parent, "Flip", "Anim", "FCtrl")
             self.build(names)
             sm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
             matrices = [sm, self.ctrl["matrix"], self.flip["matrix"]]

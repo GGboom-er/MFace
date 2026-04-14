@@ -1,0 +1,34 @@
+{
+    "FitTongue_M01": {
+        "has_rig": true,
+        "attrs": [
+            "fit",
+            "rig",
+            "pre",
+            "classify",
+            "name",
+            "rml",
+            "suf"
+        ]
+    },
+    "FitTongue_M02": {
+        "has_rig": false,
+        "attrs": null
+    },
+    "FitTongue_M03": {
+        "has_rig": false,
+        "attrs": null
+    },
+    "FitTongue_M04": {
+        "has_rig": false,
+        "attrs": null
+    },
+    "FitTongue_M05": {
+        "has_rig": false,
+        "attrs": null
+    },
+    "FitTongue_M06": {
+        "has_rig": false,
+        "attrs": null
+    }
+}

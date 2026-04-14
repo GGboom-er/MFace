@@ -10,6 +10,7 @@ from . import facs
 from . import fastPin
 from . import preset
 from . import tools
+from . import setmgr
 from . import ui
 from . import test
 
@@ -25,6 +26,7 @@ def reload_modules():
     reload(fastPin)
     reload(preset)
     reload(tools)
+    reload(setmgr)
     reload(ui)
     reload(test)
 
