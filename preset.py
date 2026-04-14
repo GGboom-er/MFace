@@ -473,11 +473,16 @@ class RigSnapshot(object):
     def _restore_ctrl(data):
         for kwargs in data:
             try:
-                if not cmds.objExists(kwargs.get("t", "")):
-                    continue
+                t_name = kwargs.get("t", "")
+                if t_name:
+                    short_name = t_name.split("|")[-1]
+                    if not cmds.objExists(short_name):
+                        continue
+                    kwargs["t"] = short_name
                 Control(**kwargs)
-            except Exception:
-                pass
+            except Exception as e:
+                from .logger import logger
+                logger.error(u"RigSnapshot._restore_ctrl error on {}: {}".format(kwargs.get("t"), str(e)))
 
     @staticmethod
     def _restore_cluster(data):
