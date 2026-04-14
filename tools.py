@@ -22,9 +22,12 @@ def undo(fun):
 def with_snapshot(build_fn):
     """绑定前自动快照，绑定后原地无损还原控制器/权重/驱动。"""
     def wrapped(*args, **kwargs):
-        from .ui import snapshot
-        settings = snapshot.ask_snapshot_settings()
-        if settings is None:
+        if not preset.RigSnapshot.has_existing_rig():
+            settings = {}
+        else:
+            from .ui import snapshot
+            settings = snapshot.ask_snapshot_settings()
+            if settings is None:
             # 弹窗被取消，阻断构建流程
             from .logger import logger
             logger.warning(u"绑定构建已取消。")

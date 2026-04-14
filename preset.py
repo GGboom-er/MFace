@@ -355,12 +355,16 @@ def delete_preset_skin_weights(preset):
 
 
 def load_preset(preset):
-    from .ui import snapshot
-    settings = snapshot.ask_snapshot_settings()
-    if settings is None:
-        from .logger import logger
-        logger.warning(u"加载预设已取消。")
-        return
+    if not RigSnapshot.has_existing_rig():
+        # Fallback to loading all preset info and skip Snapshot Prompt
+        settings = {}
+    else:
+        from .ui import snapshot
+        settings = snapshot.ask_snapshot_settings()
+        if settings is None:
+            from .logger import logger
+            logger.warning(u"加载预设已取消。")
+            return
 
     snap = RigSnapshot.capture(**settings)
     load_preset_plane(preset)
@@ -406,6 +410,17 @@ class RigSnapshot(object):
 
     # ── 快照 ──────────────────────────────────
 
+    @classmethod
+    def has_existing_rig(cls):
+        from .core import Ctrl, Cluster
+        from maya import cmds
+        if list(Ctrl.all()) or list(Cluster.all()) or cmds.objExists("MFaceAdditives"):
+            return True
+        # Additional fast-fail checks
+        if cmds.objExists("MFace_CTRL") or cmds.objExists("MFaceJoints"):
+            return True
+        return False
+        
     @classmethod
     def capture(cls, keep_ctrl=True, keep_cluster=True, keep_sdk=True, keep_additive=True):
         snap = cls()
