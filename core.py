@@ -252,7 +252,7 @@ class Ctrl(Hierarchy):
             names = (parent, "Mirror", "Flip", "Anim", "FCtrl") if self.is_left() else (parent, "Flip", "Anim", "FCtrl")
             self.build(names)
             sm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-            matrices = [sm, self.ctrl["matrix"], self.flip["matrix"]]
+            matrices = [sm, self.ctrl["matrix"], self.anim["matrix"], self.flip["matrix"]]
             if self.is_dn():
                 sm[5] = -1
                 self.flip["sy"] = -1
