@@ -287,8 +287,8 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 cmds.createNode("composeMatrix", n=cm_n)
                 cmds.createNode("multiplyDivide", n=norm_n)
                 
-                # Use exact analytical Z-axis pitch solver
-                start_pos = MPoint(*cmds.xform(fctrl_n, q=1, ws=1, t=1))
+                # Use exact analytical Z-axis pitch solver based strictly on the 3D Eyeball Geometry (NOT the 2D panel!)
+                start_pos = start_rest
                 start_ls = start_pos * roll_inv
                 best_val = get_exact_z_rotation(start_ls.x, start_ls.y, macro_target_y)
                 best_axis = "Z"
@@ -296,7 +296,8 @@ def rig_blink_facs(blink_host, up_result, dn_result, roll_matrix):
                 cmds.connectAttr(str(ratio), "{}.input1X".format(md_n))
                 # best_val represents the angle simply to the equator (half the eye distance).
                 # But the ratio is out of the ENTIRE eye closure (1.0 = full close).
-                cmds.setAttr("{}.input2X".format(md_n), best_val * 2.0)
+                # The trigononal absolute angle is opposite to Maya's composeMatrix handedness, so we negate it.
+                cmds.setAttr("{}.input2X".format(md_n), -best_val * 2.0)
                 
                 cmds.connectAttr("{}.outputX".format(md_n), "{}.input1X".format(norm_n))
                 orig_norm_out = blink_norm_out if isinstance(blink_norm_out, str) else str(blink_norm_out)
