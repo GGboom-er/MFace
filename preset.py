@@ -392,12 +392,16 @@ class RigSnapshot(object):
     # ── 快照 ──────────────────────────────────
 
     @classmethod
-    def capture(cls):
+    def capture(cls, keep_ctrl=True, keep_cluster=True, keep_sdk=True, keep_additive=True):
         snap = cls()
-        snap.ctrl_data     = cls._capture_ctrl()
-        snap.cluster_data  = cls._capture_cluster()
-        snap.sdk_data      = cls._capture_sdk()
-        snap.additive_data = cls._capture_additive()
+        if keep_ctrl:
+            snap.ctrl_data     = cls._capture_ctrl()
+        if keep_cluster:
+            snap.cluster_data  = cls._capture_cluster()
+        if keep_sdk:
+            snap.sdk_data      = cls._capture_sdk()
+        if keep_additive:
+            snap.additive_data = cls._capture_additive()
         return snap
 
     @staticmethod
