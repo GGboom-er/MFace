@@ -368,3 +368,118 @@ def load_preset(preset):
     load_preset_blend_shape(preset)
     load_preset_skin_weights(preset)
 
+
+# ────────────────────────────────────────────────
+#  绑定保护层：内存快照（Rig Snapshot）
+#  在 build_selected / build_all 前后自动保存/恢复：
+#    1. 控制器（轴向、颜色、形状）
+#    2. Cluster 权重
+#    3. SDK / FACS pose 驱动
+#    4. Joint Additive 位移数据
+# ────────────────────────────────────────────────
+
+class RigSnapshot(object):
+    """在绑定前快照场景状态，绑定后无损恢复。"""
+
+    def __init__(self):
+        self.ctrl_data      = []
+        self.cluster_data   = {}
+        self.sdk_data       = []
+        self.additive_data  = {}
+
+    # ── 快照 ──────────────────────────────────
+
+    @classmethod
+    def capture(cls):
+        snap = cls()
+        snap.ctrl_data     = cls._capture_ctrl()
+        snap.cluster_data  = cls._capture_cluster()
+        snap.sdk_data      = cls._capture_sdk()
+        snap.additive_data = cls._capture_additive()
+        return snap
+
+    @staticmethod
+    def _capture_ctrl():
+        """扫描全部 Ctrl 节点，保存 shape / color / transform。"""
+        data = []
+        for ctrl in Ctrl.all():
+            try:
+                c = Control(t=ctrl.ctrl.name)
+                data.append(dict(
+                    t=c.get_transform(),
+                    s=c.get_shape(),
+                    c=c.get_color(),
+                ))
+            except Exception:
+                pass
+        return data
+
+    @staticmethod
+    def _capture_cluster():
+        """保存全部 Cluster 的权重字典。"""
+        try:
+            return {cluster.name: cluster.get_weight_data() for cluster in Cluster.all()}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _capture_sdk():
+        """保存全部 FACS SDK 驱动定义。"""
+        try:
+            return facs.get_sdk_data()
+        except Exception:
+            return []
+
+    @staticmethod
+    def _capture_additive():
+        """保存全部 Joint Additive 偏移数据。"""
+        try:
+            return Joint.get_additive_data(facs.get_targets())
+        except Exception:
+            return {}
+
+    # ── 恢复 ──────────────────────────────────
+
+    def restore(self):
+        self._restore_ctrl(self.ctrl_data)
+        self._restore_cluster(self.cluster_data)
+        self._restore_sdk(self.sdk_data)
+        self._restore_additive(self.additive_data)
+        cmds.dgdirty(a=True)
+        Cluster.finsh_edit_weights()
+
+    @staticmethod
+    def _restore_ctrl(data):
+        for kwargs in data:
+            try:
+                if not cmds.objExists(kwargs.get("t", "")):
+                    continue
+                Control(**kwargs)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _restore_cluster(data):
+        if data:
+            try:
+                Cluster.load_weight_data(data)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _restore_sdk(data):
+        if data:
+            try:
+                facs.set_sdk_data(data)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _restore_additive(data):
+        if data:
+            try:
+                Joint.set_additive_data(data)
+            except Exception:
+                pass
+
+

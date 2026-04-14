@@ -18,10 +18,24 @@ def undo(fun):
     return undo_fun
 
 
+def with_snapshot(build_fn):
+    """绑定前自动快照，绑定后原地无损还原控制器/权重/驱动。"""
+    def wrapped(*args, **kwargs):
+        snap = preset.RigSnapshot.capture()   # 1. 保存当前状态
+        cmds.undoInfo(openChunk=1)
+        try:
+            result = build_fn(*args, **kwargs)
+        finally:
+            cmds.undoInfo(closeChunk=1)
+        snap.restore()                        # 2. 重建完毕后原地恢复
+        return result
+    return wrapped
+
+
 #  build
-create_fit = undo(rig.create_fit)
-build_selected = undo(rig.build_selected)
-build_all = undo(rig.build_all)
+create_fit     = undo(rig.create_fit)
+build_selected = with_snapshot(rig.build_selected)
+build_all      = with_snapshot(rig.build_all)
 delete_selected = undo(rig.delete_selected)
 
 
