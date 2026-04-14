@@ -4,3 +4,8 @@ __pycache__/
 .vscode/
 .claude/
 .gemini/
+debug*.json
+debug*.txt
+lid_joints.txt
+uplid_joints.txt
+*_rigMaster_*.json

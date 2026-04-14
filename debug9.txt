@@ -1,5 +1,0 @@
-('FitTest_M01', '|FitTest_M|FitTest_M01|FitTest_M02')
-trying node: FitTest_M01
-SUCCESS on FitTest_M01
-trying node: |FitTest_M|FitTest_M01|FitTest_M02
-FAILED on |FitTest_M|FitTest_M01|FitTest_M02: No object matches name: |FitTest_M|FitTest_M01|FitTest_M02
