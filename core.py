@@ -269,13 +269,16 @@ class Ctrl(Hierarchy):
         self.follow.xform(ws=1, m=matrix)
         self.follow["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if self.is_left():
-            self.mirror.xform(ws=0, m=list(MMatrix(matrix).inverse()))
+            # 使用 Follow 的局部矩阵（已被 Maya 正确处理缩放）而非世界矩阵
+            # 避免在缩放环境下 inverse(world_matrix) 引入 1/S 缩放污染
+            local = self.follow.xform(q=1, m=1)
+            self.mirror.xform(ws=0, m=list(MMatrix(local).inverse()))
             self.mirror["sx"] = -1
-            matrix = matrix[:]
+            local = local[:]
             for i in range(4):
-                matrix[i * 4 + 0] *= -1
-                matrix[0 * 4 + i] *= -1
-            self.flip.xform(ws=0, m=matrix)
+                local[i * 4 + 0] *= -1
+                local[0 * 4 + i] *= -1
+            self.flip.xform(ws=0, m=local)
         if self.is_dn():
             self.flip["sy"] = -1
         return self
