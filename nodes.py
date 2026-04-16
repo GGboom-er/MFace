@@ -369,14 +369,21 @@ class BlendWeighted(Node):
                 in_alias, wt_alias = alias_map.get(in_plug, ""), alias_map.get(wt_plug, "")
                 
                 # [第二道安全锁]：深度验证属性别名
-                # 如果既没有找到以 'V' 结尾的输入信号，也没有以 'W' 结尾的权重别名，证明这是非 MFace 生成的裸槽位，跳过！
-                if not (in_alias.endswith("V") or wt_alias.endswith("W")):
+                # 有别名但不以 V/W 结尾 → 外来系统借居的槽，跳过保护
+                # 无别名（纯裸槽） → MFace 自身废弃残留，坚决清除
+                has_any_alias = bool(in_alias or wt_alias)
+                if has_any_alias and not (in_alias.endswith("V") or wt_alias.endswith("W")):
                     continue
                     
-                base_target = in_alias[:-1] if in_alias.endswith("V") else (wt_alias[:-1] if wt_alias.endswith("W") else "")
+                base_target = ""
+                if in_alias.endswith("V"):
+                    base_target = in_alias[:-1]
+                elif wt_alias.endswith("W"):
+                    base_target = wt_alias[:-1]
                 
                 for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:
                     if exist:
+                        # 拆分异常捕获：别名删除失败不得阻断实体删除
                         try:
                             cmds.aliasAttr(self.name + "." + plug, rm=True)
                         except Exception:
