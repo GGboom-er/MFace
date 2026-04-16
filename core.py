@@ -288,7 +288,15 @@ class Ctrl(Hierarchy):
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
         joint = Joint(self.name)
         if joint.joint:
-            joint.set_matrix(matrix)
+            # 仅更新位移 BW default（0-2）和 bindPreMatrix
+            # 方向向量 BW（3-8）驱动 aimConstraint 的基准朝向，
+            # 在冻结变换/匹配旋转时不应被更新，否则会导致旋转双重施加
+            root_ws_inv = list(MMatrix(cmds.xform(joint.root.name, q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+            for i, j in enumerate([12, 13, 14]):
+                joint.bws[i].set_default(local_matrix[j])
+            joint.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
+            joint.re_skin()
         cluster = Cluster(self.name)
         if cluster.cluster:
             cluster.set_matrix(matrix)
