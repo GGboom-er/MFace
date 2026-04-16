@@ -18,6 +18,7 @@ from maya import cmds
 from maya.api.OpenMaya import *
 from . import data
 from .logger import logger
+from .shared import api_ls
 
 ROOT = "MFaceFits"
 
@@ -228,11 +229,7 @@ def fit_loop_curve(name):
     return up_curve, dn_curve
 
 
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+# api_ls 已在头部从 shared 导入
 
 
 def get_surface_matrices(polygon, points, mirror, close):
@@ -333,8 +330,11 @@ def fit_roll(name="Jaw"):
     if is_mirror(name):
         aim_vector = [-1, 0,  0]
     cmds.aimConstraint(aim, roll, aim=aim_vector, u=[0, 1, 0], wu=[0, 1, 0], wuo=aim, wut="objectrotation")
+    cycle_state = cmds.cycleCheck(q=True, e=True)
+    cmds.cycleCheck(e=False)
     tmp_orient = cmds.orientConstraint(roll, aim, mo=False)[0]
     cmds.delete(tmp_orient)
+    cmds.cycleCheck(e=cycle_state)
     distance = cmds.createNode("distanceBetween", n=name+"Distance")
     cmds.connectAttr(roll+'.t', distance + ".point1")
     cmds.connectAttr(aim+'.t', distance + ".point2")

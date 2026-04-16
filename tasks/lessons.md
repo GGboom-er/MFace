@@ -33,3 +33,14 @@
 - [触发条件]调整外眼角UI面板控制器FCtrlBLidOutDn_L无反应 -> [根因]因眼球Fit骨架曾丢失，后续误点【保存预设】时，由于系统抓取不到眼角骨骼输入导致将所有外眼角 ClusterWeight 双规为 0 并覆写了 clusterWeight.json，且 sdk.json 中也遗失了该拉杆的姿势记录。 -> [正确方案]重新在UI面板分配眼角 Cluster 权重，或重新框选记录外眼角骨骼偏移（Base Pose）。 -> [避坑规则]骨架生成不完整时，绝对不要点击【保存预设】，否则残缺的读取结果会格式化覆盖掉原本正确的 JSON 数据库。
 - [触发条件]每次生成绑定时，用户自行移动过的控制面板(MFacePlanes)位置被重置 -> [根因]原先的 load_preset_plane 会暴力删除 MFacePlanes 组并重新从位于坐标原点的 plane.ma 导入。 -> [正确方案]在删除面板前，获取其 worldMatrix 并缓存；等新的面板导入后，再次将其 worldMatrix 恢复回去。 -> [避坑规则]重构 UI 系资产时，务必注意保护用户的位移状态。
 - [触发条件]绑定后，控制器无法完全驱动骨架（如下嘴唇），必须进出一次 Weight 模式才恢复正常 -> [根因]后台高速密集连接 BlendWeighted 属性时，Maya 2025 并行求值网等出现了 DG 变脏（Dirty）不充分或缓存滞后现象。进出 Weight 触发的大规模连接插拔动作意外唤醒了求值树。 -> [正确方案]在生成环境（load_preset）执行结尾强制注入全局脏查 cmds.dgdirty(a=True)，并直接顺带触发一次静默的 insh_edit_weights 重装载连线操作。 -> [避坑规则]对于底层依赖大网节点的系统构建，最终总线出口处必须显式调用刷新 API。
+---
+
+### [2026-04-15] tools.py IndentationError 修复
+- [触发条件] import MFace2 时抛出 IndentationError: expected an indented block after 'if' statement
+- [根因] with_snapshot 函数中 if settings is None: 块体（注释+logger.warning+return）未缩进，与 if 语句平级导致语法错误；同时存在冗余的重复 logger 导入
+- [正确方案] 将注释、logger.warning()、return 统一向右缩进一级（8空格）至 if 块体内，删除冗余的 from .logger import logger
+- [避坑规则] if 块体内禁止将注释行顶格写，注释必须与业务代码保持相同缩进层级
+
+[触发条件]MFace带缩放时取pose -> [根因]提取Target时使用的是世界坐标，未按当前Additives父级予以消解 -> [正确方案]提取的目标世界矩阵必须乘以此组的逆矩阵转为局部 -> [避坑规则]谨记：任何Additive差值数据录入时，如果源是世界矩阵，必须先执行局部空间逆转换。
+
+[触发条件]UI滑条不跟手 -> [根因]滑动漫游期间产生海量 cmds.keyframe 单独查询 -> [正确方案]提取所有关键帧(fc=1,vc=1)，并在拖拽生命周期构建 dict 极速缓存 -> [避坑规则]严禁在滑条的高频回调执行循环级的 Maya 节点查询

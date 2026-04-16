@@ -8,6 +8,16 @@ from .logger import logger
 # 模块级变量：UI 弹窗确认后暂存 keep_ctrl_attrs，供 auto_duplicate_edit 取用
 _keep_ctrl_attrs = None
 
+_sdk_cache = None
+
+def begin_pose_cache():
+    global _sdk_cache
+    _sdk_cache = {}
+
+def end_pose_cache():
+    global _sdk_cache
+    _sdk_cache = None
+
 def set_keep_ctrl_attrs(value):
     global _keep_ctrl_attrs
     _keep_ctrl_attrs = value
@@ -379,6 +389,10 @@ def get_base_targets(targets):
 
 
 def get_base_sdk_data(target_name):
+    global _sdk_cache
+    if _sdk_cache is not None and target_name in _sdk_cache:
+        return _sdk_cache[target_name]
+        
     bridge = get_bridge()
     attr_path = bridge + '.' + target_name
     if not cmds.objExists(attr_path):
@@ -415,10 +429,9 @@ def get_base_sdk_data(target_name):
     value = 0.0
     found_default = False
     
-    for i in range(count):
-        t = cmds.keyframe(uu, index=(i,i), q=1, fc=1)[0] # Driver Value
-        v = cmds.keyframe(uu, index=(i,i), q=1, vc=1)[0] # Driven Value (Weight)
-        
+    times = cmds.keyframe(uu, q=1, fc=1) or []
+    values = cmds.keyframe(uu, q=1, vc=1) or []
+    for t, v in zip(times, values):
         if abs(v) < 0.001: # Weight is 0 -> Default
             default_value = t
             found_default = True
@@ -435,8 +448,11 @@ def get_base_sdk_data(target_name):
              # Default assumption (like _max)
              default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
              value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
-
-    return ctrl, attr_name, default_value, value
+             
+    res = (ctrl, attr_name, default_value, value)
+    if _sdk_cache is not None:
+        _sdk_cache[target_name] = res
+    return res
 
 
 def reset_all(ctrls=None, exclude_ctrl_attrs=None):
@@ -1021,7 +1037,10 @@ def get_sdk_data():
                 target_name=target_name
             ))
         else:
-            ctrl, attr, default_value, value = get_base_sdk_data(target_name)
+            base_data = get_base_sdk_data(target_name)
+            if not base_data:
+                continue
+            ctrl, attr, default_value, value = base_data
             data.append(dict(
                 typ="base",
                 ctrl=ctrl,

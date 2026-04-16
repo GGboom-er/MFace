@@ -19,37 +19,27 @@ def undo(fun):
     return undo_fun
 
 
-def with_snapshot(build_fn):
-    """绑定前自动快照，绑定后原地无损还原控制器/权重/驱动。"""
+def build_and_snapshot(build_fn):
+    """undo 包裹 + 构建后刷新 Set。快照逻辑已下沉到 rig.py 逐模块处理。"""
     def wrapped(*args, **kwargs):
-        if not preset.RigSnapshot.has_existing_rig():
-            settings = {}
-        else:
-            from .ui import snapshot
-            settings = snapshot.ask_snapshot_settings()
-            if settings is None:
-            # 弹窗被取消，阻断构建流程
-            from .logger import logger
-            logger.warning(u"绑定构建已取消。")
-            return
-
-        snap = preset.RigSnapshot.capture(**settings)   # 1. 保存当前状态 (按需选择)
         cmds.undoInfo(openChunk=1)
         try:
             result = build_fn(*args, **kwargs)
+            setmgr.rebuild_sets()
         finally:
             cmds.undoInfo(closeChunk=1)
-        snap.restore()                        # 2. 重建完毕后原地恢复
-        setmgr.rebuild_sets()                    # 3. 刷新 Set 树
         return result
     return wrapped
 
 
 #  build
 create_fit     = undo(rig.create_fit)
-build_selected = with_snapshot(rig.build_selected)
-build_all      = with_snapshot(rig.build_all)
-delete_selected = undo(rig.delete_selected)
+build_selected = build_and_snapshot(rig.build_selected)
+build_all      = build_and_snapshot(rig.build_all)
+def _delete_and_refresh():
+    rig.delete_selected()
+    setmgr.rebuild_sets()
+delete_selected = undo(_delete_and_refresh)
 
 
 # cluster
@@ -136,7 +126,56 @@ def load_cluster_weights(path):
 
 ctrl_mirror_selected_matrix = undo(Ctrl.mirror_selected_matrix)
 ctrl_edit_selected_matrix = undo(Ctrl.edit_selected_matrix)
-ctrl_delete_selected = undo(Ctrl.delete_selected)
+def _ctrl_delete_and_refresh():
+    Ctrl.delete_selected()
+    setmgr.rebuild_sets()
+ctrl_delete_selected = undo(_ctrl_delete_and_refresh)
+
+def __match_selected_rotation():
+    import maya.cmds as cmds
+    from .core import Face, Fmt, Ctrl, Joint, Cluster
+    from maya.api.OpenMaya import MMatrix
+    
+    # 拿到有序选择列表 (os=True 保留选择顺序，最后一个为 Target)
+    sel = cmds.ls(os=True, type="transform")
+    
+    fmt = Face().ctrl_fmt()
+    valid_sel = []
+    
+    for name in sel:
+        core_rml = Fmt.restore_core_rml(fmt, name)
+        if core_rml:
+            valid_sel.append((name, core_rml))
+            
+    if len(valid_sel) < 2:
+        return logger.warning(u"请按顺序选择至少两个以上控制器！（系统会将前面选中的所有控制器旋转匹配并冻结至最后一个选中的位目标）")
+        
+    target_node, target_core = valid_sel[-1]
+    target_rot = cmds.xform(target_node, q=True, ws=True, ro=True)
+    
+    for node_name, core_name in valid_sel[:-1]:
+        # 1. 匹配世界旋转
+        cmds.xform(node_name, ws=True, ro=target_rot)
+        
+        # 2. 对它进行 MFace 专属的冻结变换塌陷打桩
+        ctrl = Ctrl(core_name)
+        joint = Joint(core_name)
+        cluster = Cluster(core_name)
+        
+        if joint.joint:
+            matrix = joint.joint.xform(q=1, ws=1, m=1)
+        elif cluster.cluster:
+            matrix = cluster.cluster.xform(q=1, ws=1, m=1)
+        elif ctrl.output:
+            matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"]))
+        else:
+            continue
+            
+        ctrl.edit_matrix(matrix)
+        
+    logger.hud(u"已成功将 %d 个控制器的旋转完全匹配并冻结至最后所选: %s" % (len(valid_sel)-1, target_node))
+
+ctrl_match_selected_rotation = undo(__match_selected_rotation)
 
 
 def default_scene_json():

@@ -6,37 +6,7 @@ from maya import cmds
 from maya.api.OpenMaya import *
 from .api_lib import bs_api
 from .logger import logger
-
-
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
-
-
-def find_bs(polygon):
-    # 查找 模型 blend shape
-    shapes = set(cmds.listRelatives(polygon, s=1, f=1))
-    for bs in cmds.ls(cmds.listHistory(polygon), type="blendShape"):
-        if cmds.ls(cmds.blendShape(bs, q=1, g=1), l=1)[0] in shapes:
-            return bs
+from .shared import Shape, is_shape, find_bs
 
 
 def rebuild_target(bs_name, target_name):

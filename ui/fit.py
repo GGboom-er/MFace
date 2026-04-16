@@ -43,6 +43,10 @@ class FitCreateTool(QDialog):
                     ),
                     q_add(
                         QHBoxLayout(),
+                        q_button(u"匹配旋转", tools.ctrl_match_selected_rotation),
+                    ),
+                    q_add(
+                        QHBoxLayout(),
                         q_button(u"跟随模型", tools.ctrl_follow_to_selected_polygon),
                         q_button(u"删除选择", tools.ctrl_delete_selected),
                     ),

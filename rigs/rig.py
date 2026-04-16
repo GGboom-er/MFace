@@ -146,13 +146,43 @@ def create_fit(rig, typ, name, rml):
 def build_all():
     rig_cls = get_rig_name_cls()
     for fits in Fits().all().group("rig", "classify"):
+        _build_one_module(rig_cls, fits)
+
+
+def build_all_raw():
+    """纯粹构建，不触发模块级快照弹窗。供 load_preset 等外部流程调用。"""
+    rig_cls = get_rig_name_cls()
+    for fits in Fits().all().group("rig", "classify"):
         rig_cls[fits["rig"]](fits).rebuild()
 
 
 def build_selected():
     rig_cls = get_rig_name_cls()
     for fits in Fits().selected().group("rig", "classify"):
-        rig_cls[fits["rig"]](Fits().all().filter(rig=fits["rig"], classify=fits["classify"])).rebuild()
+        full_fits = Fits().all().filter(rig=fits["rig"], classify=fits["classify"])
+        _build_one_module(rig_cls, full_fits)
+
+
+def _build_one_module(rig_cls, fits):
+    """单模块的 快照判定→构建→恢复 流程。"""
+    from ..preset import RigSnapshot
+    rig_name = fits["rig"]
+
+    # 1. 判定该模块是否已有绑定
+    snap = None
+    if RigSnapshot.has_module_rig(rig_name):
+        from ..ui.snapshot import ask_snapshot_settings
+        settings = ask_snapshot_settings(rig_name)
+        if settings is None:
+            return  # 用户取消该模块的绑定
+        snap = RigSnapshot.capture(**settings)
+
+    # 2. 执行该模块的 rebuild
+    rig_cls[rig_name](fits).rebuild()
+
+    # 3. 恢复快照（如有）
+    if snap:
+        snap.restore()
 
 
 def delete_selected():

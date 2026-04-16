@@ -550,9 +550,11 @@ class Joint(Hierarchy):
     def add_pose(self, weight, matrix):
         if not self.bws[0]:
             return
-        x, y, z, p = [matrix[i: i + 3] for i in range(0, 16, 4)]
+        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+        x, y, z, p = [local_matrix[i: i + 3] for i in range(0, 16, 4)]
         s = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [x, y, z]]
-        values = [matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
+        values = [local_matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
         for bw, value in zip(self.bws, values):
             bw.add_pose(weight, value)
 
@@ -771,6 +773,8 @@ class Cluster(Hierarchy):
 
     @staticmethod
     def weight_names():
+        if not cmds.objExists("MFaceClusters"):
+            return []
         return cmds.listAttr("MFaceClusters", ud=1) or []
 
     def get(self):

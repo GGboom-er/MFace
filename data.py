@@ -6,13 +6,7 @@
 """
 from maya.api.OpenMaya import *
 from maya import cmds
-
-
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import api_ls, Shape, is_shape
 
 
 def get_points_by_curve(curve, number):
@@ -115,27 +109,7 @@ def get_fit_cv_points(node, mirror, **kwargs):
 # ----------- follicle matrix ------------
 
 
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
+# Shape / is_shape / api_ls 已提取到 shared.py
 
 
 def create_follicle(geometry=None, name="follicle", parent=None, u=0.5, v=0.5):

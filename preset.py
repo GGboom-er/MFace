@@ -9,6 +9,7 @@ from .rigs import rig
 from . import facs
 from . import bs
 from . import wts
+from .shared import Shape, is_shape
 
 
 def get_preset_path(preset, name):
@@ -62,27 +63,7 @@ def delete_preset_path(preset, name):
         os.remove(path)
 
 
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
+# Shape / is_shape 已在头部从 shared 导入
 
 
 def get_radius():
@@ -368,9 +349,7 @@ def load_preset(preset):
 
     snap = RigSnapshot.capture(**settings)
     load_preset_plane(preset)
-    if cmds.objExists("MFaceAdditives"):
-        cmds.delete("MFaceAdditives")
-    rig.build_all()
+    rig.build_all_raw()   # 纯粹构建，不触发模块级弹窗（预设有自己的全局弹窗）
     snap.restore()
 
     if not settings.get("keep_cluster"):
@@ -412,18 +391,31 @@ class RigSnapshot(object):
 
     @classmethod
     def has_existing_rig(cls):
+        """判断场景中是否存在已生成的绑定产物。"""
         from .core import Ctrl, Cluster
-        from maya import cmds
-        if list(Ctrl.all()) or list(Cluster.all()) or cmds.objExists("MFaceAdditives"):
-            return True
-        # Additional fast-fail checks
-        if cmds.objExists("MFace_CTRL") or cmds.objExists("MFaceJoints"):
+        if list(Ctrl.all()) or list(Cluster.all()):
             return True
         return False
+
+    @classmethod
+    def has_module_rig(cls, rig_name):
+        """判断指定 rig 模块是否已有绑定产物。
+
+        通过检查 MFaceRigs 下的 Rig{rig_name} 组是否有子节点来判定。
+        """
+        from maya import cmds
+        rig_group = "Rig{}".format(rig_name)
+        if not cmds.objExists(rig_group):
+            return False
+        return bool(cmds.listRelatives(rig_group, c=True))
         
     @classmethod
     def capture(cls, keep_ctrl=True, keep_cluster=True, keep_sdk=True, keep_additive=True):
         snap = cls()
+        snap.keep_ctrl = keep_ctrl
+        snap.keep_cluster = keep_cluster
+        snap.keep_sdk = keep_sdk
+        snap.keep_additive = keep_additive
         if keep_ctrl:
             snap.ctrl_data     = cls._capture_ctrl()
         if keep_cluster:
@@ -436,15 +428,21 @@ class RigSnapshot(object):
 
     @staticmethod
     def _capture_ctrl():
-        """扫描全部 Ctrl 节点，保存 shape / color / transform。"""
+        """扫描全部 Ctrl 节点，保存 shape / color / transform 以及预设矩阵。"""
+        from maya import cmds
         data = []
         for ctrl in Ctrl.all():
             try:
                 c = Control(t=ctrl.ctrl.name)
+                # 捕获其背皮 Pre 层产生的偏移行位矩阵
+                m = None
+                if cmds.objExists(ctrl.follow.name + ".bindPreMatrix"):
+                    m = cmds.getAttr(ctrl.follow.name + ".bindPreMatrix")
                 data.append(dict(
                     t=c.get_transform(),
                     s=c.get_shape(),
                     c=c.get_color(),
+                    m=m
                 ))
             except Exception:
                 pass
@@ -477,15 +475,33 @@ class RigSnapshot(object):
     # ── 恢复 ──────────────────────────────────
 
     def restore(self):
-        self._restore_ctrl(self.ctrl_data)
-        self._restore_cluster(self.cluster_data)
-        self._restore_sdk(self.sdk_data)
-        self._restore_additive(self.additive_data)
+        from maya import cmds
+        
+        if self.keep_ctrl:
+            self._restore_ctrl(self.ctrl_data)
+            
+        if self.keep_cluster:
+            self._restore_cluster(self.cluster_data)
+            
+        if self.keep_sdk:
+            self._restore_sdk(self.sdk_data)
+        # 不保留 SDK 时无需额外清理：build_all 已从零重建，不恢复即为干净状态
+            
+        if self.keep_additive:
+            self._restore_additive(self.additive_data)
+        # 不保留 Additive 时无需删除：build_all 新建的 MFaceAdditives 是骨架的一部分，删除会断链
+                
         cmds.dgdirty(a=True)
         Cluster.finsh_edit_weights()
 
     @staticmethod
     def _restore_ctrl(data):
+        """恢复控制器的外观（形状/颜色）。
+
+        注意：绝不能在此处调用 edit_matrix！
+        build_all 已根据 Fit 定位器精确计算了正确的矩阵和约束网络，
+        用旧矩阵覆盖会破坏刚构建好的整个骨架拓扑。
+        """
         for kwargs in data:
             try:
                 t_name = kwargs.get("t", "")
@@ -494,10 +510,12 @@ class RigSnapshot(object):
                     if not cmds.objExists(short_name):
                         continue
                     kwargs["t"] = short_name
+                # 仅恢复形状和颜色，不触碰矩阵
+                kwargs.pop("m", None)
                 Control(**kwargs)
             except Exception as e:
                 from .logger import logger
-                logger.error(u"RigSnapshot._restore_ctrl error on {}: {}".format(kwargs.get("t"), str(e)))
+                logger.warning(u"RigSnapshot._restore_ctrl 跳过 {}: {}".format(kwargs.get("t"), str(e)))
 
     @staticmethod
     def _restore_cluster(data):

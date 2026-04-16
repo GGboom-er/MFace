@@ -2,55 +2,7 @@
 from .nodes import *
 from maya.api.OpenMaya import *
 from maya.api.OpenMayaAnim import *
-
-
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
-
-
-def get_skin_cluster(polygon_name):
-    if not is_shape(polygon_name, Shape.mesh):
-        return
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    for skin_cluster in cmds.ls(cmds.listHistory(polygon_name), type="skinCluster"):
-        for shape in cmds.skinCluster(skin_cluster, q=1, geometry=1):
-            for long_shape in cmds.ls(shape, l=1):
-                if long_shape in shapes:
-                    return skin_cluster
-
-
-def find_bs(polygon):
-    # 查找 模型 blend shape
-    shapes = set(cmds.listRelatives(polygon, s=1))
-    for bs in cmds.ls(cmds.listHistory(polygon), type="blendShape"):
-        if cmds.blendShape(bs, q=1, g=1)[0] in shapes:
-            return bs
-
-
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import Shape, is_shape, get_skin_cluster, find_bs, api_ls
 
 
 def get_ids_points(bs, index):
@@ -199,7 +151,6 @@ def create_pin(pin, bs_data, weights):
 def create_pins(polygon, pins):
     bs_data = get_bs_data(polygon)
     joints, weights = get_weight_data(polygon)
-    get_weight_data(polygon)
     fn_mesh = MFnMesh(api_ls(polygon).getDagPath(0))
     for pin in pins:
         iws = get_near_id_weights(fn_mesh, MPoint(cmds.xform(pin, q=1, ws=1, t=1)))

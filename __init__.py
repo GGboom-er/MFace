@@ -1,4 +1,5 @@
 from importlib import reload
+from . import shared
 from . import control
 from . import nodes
 from . import data
@@ -15,6 +16,7 @@ from . import ui
 from . import test
 
 def reload_modules():
+    reload(shared)
     reload(control)
     reload(data)
     reload(nodes)

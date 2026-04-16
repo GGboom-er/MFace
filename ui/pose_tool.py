@@ -402,9 +402,11 @@ class FacePoseTool(QDialog):
     def start_slider_undo(self):
         from maya import cmds
         cmds.undoInfo(openChunk=True)
+        tools.facs.begin_pose_cache()
 
     def end_slider_undo(self):
         from maya import cmds
+        tools.facs.end_pose_cache()
         cmds.undoInfo(closeChunk=True)
 
     def set_slider_pose(self, value):

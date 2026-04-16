@@ -30,10 +30,18 @@ _RIG_TYPE_LABEL = {
     "Brow":   "Brow",
     "Lip":    "Lip",
     "Jaw":    "Lip",       # Jaw 归入 Lip 大类
+    "Jaw_line": "Lip",     # 下颌线属于 Lip 或者新建一类，统一给到 Lip/Jaw
     "Nose":   "Nose",
+    "NoseMid": "Nose",
+    "Nose_sec": "Nose",
     "Check":  "Cheek",
     "Tongue": "Tongue",
     "Tooth":  "Tooth",
+    "Pupil":  "Eye",
+    "Iris":   "Eye",
+    "squint": "Eye",
+    "LidOut": "Eye",
+    "LipOut": "Lip",
 }
 
 # ── 骨骼名称关键字直接匹配 ─────────────────────────────────────────
@@ -72,9 +80,10 @@ def _ensure_set(name, parent=None):
 
 def _get_rig_label_from_root(rig_root_name):
     """从 RigRoot 节点名（如 RigEyeA）提取人类可读标签。"""
-    # 去掉 "Rig" 前缀，再去掉末尾单字母 classify 后缀
-    core = re.sub(r'^Rig', '', rig_root_name)      # "EyeA" 或 "LipB"
-    core = re.sub(r'[A-Z]$', '',  core)             # "Eye" 或 "Lip"
+    # 去掉 "Rig" 前缀，去掉诸如 Joint/Surface/Loop 组件前缀，再去掉末尾单字母 classify 后缀
+    core = re.sub(r'^Rig', '', rig_root_name)
+    core = re.sub(r'^(Joint|Surface|Loop)', '', core)
+    core = re.sub(r'[A-Z]$', '',  core)
     return _RIG_TYPE_LABEL.get(core, core)          # 找不到则原样返回
 
 
