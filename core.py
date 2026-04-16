@@ -794,7 +794,7 @@ class Cluster(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
-        # bindPreMatrix 通过 decomposeMatrix 直接驱动 Pre 的 local translate/rotate
+        # bindPreMatrix 通过 decomposeMatrix 间接驱动 Pre 的 local translate/rotate（A 类）
         # 因此需要存相对于 Pre 父级的局部矩阵，而非世界矩阵
         parent = cmds.listRelatives(self.pre.name, parent=True)
         if parent:
@@ -803,6 +803,8 @@ class Cluster(Hierarchy):
         else:
             local_matrix = matrix
         self.pre["bindPreMatrix"].add(dt="matrix").set(local_matrix, typ="matrix")
+        # 同时用 xform(ws=1) 设 Pre 位置（B 类无 DeMat 驱动时直接生效）
+        self.pre.xform(ws=1, m=matrix)
         return self
 
     def parent_to(self, other):
