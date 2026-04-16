@@ -798,8 +798,15 @@ class Cluster(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
-        self.pre["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-        self.pre.xform(ws=1, m=matrix)
+        # bindPreMatrix 通过 decomposeMatrix 直接驱动 Pre 的 local translate/rotate
+        # 因此需要存相对于 Pre 父级的局部矩阵，而非世界矩阵
+        parent = cmds.listRelatives(self.pre.name, parent=True)
+        if parent:
+            parent_ws_inv = list(MMatrix(cmds.xform(parent[0], q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(parent_ws_inv))
+        else:
+            local_matrix = matrix
+        self.pre["bindPreMatrix"].add(dt="matrix").set(local_matrix, typ="matrix")
         return self
 
     def parent_to(self, other):
