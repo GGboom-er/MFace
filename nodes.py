@@ -367,37 +367,39 @@ class BlendWeighted(Node):
                     
             if is_orphan:
                 in_alias, wt_alias = alias_map.get(in_plug, ""), alias_map.get(wt_plug, "")
+                has_alias = bool(in_alias or wt_alias)
                 
-                # [第二道安全锁]：深度验证属性别名
-                # 有别名但不以 V/W 结尾 → 外来系统借居的槽，跳过保护
-                # 无别名（纯裸槽） → MFace 自身废弃残留，坚决清除
-                has_any_alias = bool(in_alias or wt_alias)
-                if has_any_alias and not (in_alias.endswith("V") or wt_alias.endswith("W")):
-                    continue
+                if has_alias:
+                    # [有别名路径]：正规 MFace 废弃槽，走官方的 alias 反查 + removeMultiInstance 销毁
+                    if not (in_alias.endswith("V") or wt_alias.endswith("W")):
+                        continue  # 别名不符合 MFace 命名规范，属于外来借居，跳过
                     
-                base_target = ""
-                if in_alias.endswith("V"):
-                    base_target = in_alias[:-1]
-                elif wt_alias.endswith("W"):
-                    base_target = wt_alias[:-1]
-                
-                for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:
-                    if exist:
-                        # 拆分异常捕获：别名删除失败不得阻断实体删除
-                        try:
-                            cmds.aliasAttr(self.name + "." + plug, rm=True)
-                        except Exception:
-                            pass
-                        try:
-                            cmds.removeMultiInstance(self.name + "." + plug, b=True)
-                        except Exception:
-                            pass
-                
-                if base_target and cmds.objExists(self.name + "." + base_target + "WW"):
-                    try: 
-                        cmds.deleteAttr(self.name + "." + base_target + "WW")
-                    except Exception: 
-                        pass
+                    base_target = in_alias[:-1] if in_alias.endswith("V") else (wt_alias[:-1] if wt_alias.endswith("W") else "")
+                    
+                    for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:
+                        if exist:
+                            try: cmds.aliasAttr(self.name + "." + plug, rm=True)
+                            except Exception: pass
+                            try: cmds.removeMultiInstance(self.name + "." + plug, b=True)
+                            except Exception: pass
+                    
+                    if base_target and cmds.objExists(self.name + "." + base_target + "WW"):
+                        try: cmds.deleteAttr(self.name + "." + base_target + "WW")
+                        except Exception: pass
+                else:
+                    # [无别名路径]：别名完全丢失的僵尸裸槽（如 Weight[24]）
+                    # 先给它补一个临时别名，让 Maya 认为它是合法有名属性
+                    # 然后走正规的 aliasAttr(rm) + removeMultiInstance 路径彻底物理删除
+                    temp_name = "_orphan_%d" % i
+                    for exist, plug, suffix in [(in_exist, in_plug, "V"), (wt_exist, wt_plug, "W")]:
+                        if exist:
+                            full_plug = self.name + "." + plug
+                            try: cmds.aliasAttr(temp_name + suffix, full_plug)
+                            except Exception: pass
+                            try: cmds.aliasAttr(full_plug, rm=True)
+                            except Exception: pass
+                            try: cmds.removeMultiInstance(full_plug, b=True)
+                            except Exception: pass
 
 
 def rig_express(name, typ, inputs, output):
