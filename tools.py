@@ -186,21 +186,31 @@ def __clear_all_bw_orphans():
     if not bws:
         return
     
+    print(u"\n" + "="*50)
+    print(u"[清理废弃权重] 扫描全场 %d 个 blendWeighted 节点..." % len(bws))
+    
     cleaned_total = 0
     for node in bws:
         try:
             bw = BlendWeighted(node)
-            ins_before = len(cmds.getAttr(node + ".input", mi=True) or [])
+            ins_before = set(cmds.getAttr(node + ".input", mi=True) or [])
             bw.clean_orphans()
-            ins_after = len(cmds.getAttr(node + ".input", mi=True) or [])
-            cleaned_total += (ins_before - ins_after)
+            ins_after = set(cmds.getAttr(node + ".input", mi=True) or [])
+            removed = sorted(ins_before - ins_after)
+            if removed:
+                cleaned_total += len(removed)
+                print(u"  [✔] %s: 清除索引 %s (共 %d 个)" % (node, removed, len(removed)))
         except Exception:
             pass
             
+    print(u"-"*50)
     if cleaned_total > 0:
+        print(u"  总计清除 %d 个废弃幽灵属性。" % cleaned_total)
         logger.hud(u"已清除全场景 BlendWeighted 中 %d 个废弃幽灵属性。" % cleaned_total)
     else:
+        print(u"  全场景无废弃属性。")
         logger.hud(u"全场景的 BW 属性非常干净，无废弃隔离槽位！")
+    print("="*50 + u"\n")
 
 clear_all_bw_orphans = undo(__clear_all_bw_orphans)
 def default_scene_json():

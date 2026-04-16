@@ -529,9 +529,12 @@ class Joint(Hierarchy):
 
     def set_matrix(self, matrix):
         # matrix 为世界矩阵，bws default 驱动 Additive 节点的局部 translate/rotate
-        # 需先转换为相对于 self.root 的局部矩阵，否则 MFace 组有偏移时产生双重偏移
-        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
-        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+        # 借助临时节点让 Maya 原生变换系统处理缩放空间的矩阵分解
+        # 避免手工 world * root_inv 在父级有缩放时产生精度偏差
+        temp = cmds.createNode("transform", n="_mface_temp_probe_", p=self.root.name)
+        cmds.xform(temp, ws=1, m=matrix)
+        local_matrix = cmds.xform(temp, q=1, m=1)
+        cmds.delete(temp)
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
             self.bws[i].set_default(local_matrix[j])
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
