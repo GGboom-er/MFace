@@ -379,6 +379,9 @@ class BlendWeighted(Node):
                     if exist:
                         try:
                             cmds.aliasAttr(self.name + "." + plug, rm=True)
+                        except Exception:
+                            pass
+                        try:
                             cmds.removeMultiInstance(self.name + "." + plug, b=True)
                         except Exception:
                             pass
