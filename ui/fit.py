@@ -44,6 +44,7 @@ class FitCreateTool(QDialog):
                     q_add(
                         QHBoxLayout(),
                         q_button(u"匹配旋转", tools.ctrl_match_selected_rotation),
+                        q_button(u"清理废弃权重", tools.clear_all_bw_orphans),
                     ),
                     q_add(
                         QHBoxLayout(),

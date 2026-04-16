@@ -177,7 +177,33 @@ def __match_selected_rotation():
 
 ctrl_match_selected_rotation = undo(__match_selected_rotation)
 
+def __clear_all_bw_orphans():
+    import maya.cmds as cmds
+    from .nodes import BlendWeighted
+    from .logger import logger
+    
+    bws = cmds.ls(type="blendWeighted")
+    if not bws:
+        return
+        
+    cleaned_total = 0
+    for node in bws:
+        try:
+            bw = BlendWeighted(node)
+            # 根据前缀和链路双重判断，清空纯裸槽或废弃槽
+            ins_before = len(cmds.getAttr(node + ".input", mi=True) or [])
+            bw.clean_orphans()
+            ins_after = len(cmds.getAttr(node + ".input", mi=True) or [])
+            cleaned_total += (ins_before - ins_after)
+        except Exception:
+            pass
+            
+    if cleaned_total > 0:
+        logger.hud(u"已深度回收全场景 BlendWeighted 中 %d 个废弃连线/裸槽属性。" % cleaned_total)
+    else:
+        logger.hud(u"全场景的 BW 属性非常干净，无废弃隔离槽位！")
 
+clear_all_bw_orphans = undo(__clear_all_bw_orphans)
 def default_scene_json():
     path = cmds.file(q=1, sn=1)
     if path:
