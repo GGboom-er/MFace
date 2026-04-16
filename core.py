@@ -281,13 +281,11 @@ class Ctrl(Hierarchy):
         return self
 
     def edit_matrix(self, matrix):
-        joint = Joint(self.name)
-        # 先采集：在控制器归零前，直接读取 Additive 的局部矩阵（Maya 原生处理缩放）
-        additive_local = cmds.xform(joint.additive.name, q=1, m=1) if joint.joint else None
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        joint = Joint(self.name)
         if joint.joint:
-            joint.set_matrix(matrix, local_matrix=additive_local)
+            joint.set_matrix(matrix)
         cluster = Cluster(self.name)
         if cluster.cluster:
             cluster.set_matrix(matrix)
@@ -303,7 +301,11 @@ class Ctrl(Hierarchy):
             now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
             old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
+            # pointConstraint offset 工作在约束节点的局部空间
+            # 当父级有缩放 S 时，世界空间差值需除以 S 才能正确补偿
+            parent = cmds.listRelatives(self.follow.name, parent=True)
+            ws_scale = cmds.xform(parent[0], q=1, ws=1, s=1) if parent else [1, 1, 1]
+            new_offset = [(o+b-n) / s for n, b, o, s in zip(now_point, bind_point, old_offset, ws_scale)]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
@@ -529,12 +531,11 @@ class Joint(Hierarchy):
         self.bws[11].output.cnt(self.joint["scaleZ"])
         return self
 
-    def set_matrix(self, matrix, local_matrix=None):
-        # local_matrix：直接传入的局部矩阵（冻结变换路径，缩放安全）
-        # 当未传入时，走旧的 world * root_inv 计算（预设加载等路径保持兼容）
-        if local_matrix is None:
-            root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
-            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+    def set_matrix(self, matrix):
+        # matrix 为世界矩阵，bws default 驱动 Additive 节点的局部 translate/rotate
+        # 需先转换为相对于 self.root 的局部矩阵，否则 MFace 组有偏移时产生双重偏移
+        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
             self.bws[i].set_default(local_matrix[j])
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
