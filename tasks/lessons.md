@@ -44,3 +44,13 @@
 [触发条件]MFace带缩放时取pose -> [根因]提取Target时使用的是世界坐标，未按当前Additives父级予以消解 -> [正确方案]提取的目标世界矩阵必须乘以此组的逆矩阵转为局部 -> [避坑规则]谨记：任何Additive差值数据录入时，如果源是世界矩阵，必须先执行局部空间逆转换。
 
 [触发条件]UI滑条不跟手 -> [根因]滑动漫游期间产生海量 cmds.keyframe 单独查询 -> [正确方案]提取所有关键帧(fc=1,vc=1)，并在拖拽生命周期构建 dict 极速缓存 -> [避坑规则]严禁在滑条的高频回调执行循环级的 Maya 节点查询
+
+### [2026-04-16] 代码库去重与系统重构
+- [触发条件]使用 shared.py 统一底层常驻函数时，重新 reload(MFace2) 发现代码不生效 -> [根因] 在 __init__.py 的 reload_modules() 中缺少了新增 shared 模块的导入与 reload，且未将其放置在被依赖模块的最前方 -> [正确方案] 必须在 reload_modules 的起始位置紧跟 from . import shared 后加入 reload(shared) -> [避坑规则] Maya模块热更机制中，所有被底层强依赖的基石模块(Utility)必须保证最早被 reload！
+- [触发条件]模块级绑定删除 (delete_selected) 后，大纲视图里 MFACE_SET 结构没有及时更新空节点 -> [根因] 原删除底层仅包含动作未包含组件树刷新逻辑 -> [正确方案] 在 tools 工具包装层(Wrapper)或清理块的 undoInfo 末尾加入 setmgr.rebuild_sets() 强制回刷 -> [避坑规则] 对于自带自定义层级大纲系统(MFACE_SET)的工具，所有涉及节点增删的动作终点必须显式呼叫树刷新 API。
+- [触发条件]脚本加载骨骼蒙皮权重报错 -> [根因] 使用 cmds.ls(polygon) != 1 直接比较列表和整数（Python语法通过但逻辑恒等） -> [正确方案] 必须包裹 len(cmds.ls(polygon)) != 1 才能判断场景物体存在数量 -> [避坑规则] Python 弱类型下与 API 返回 List 的比较必须强制加 len()，严禁直接对比数字！
+
+### [2026-04-16] 代码库去重与系统重构
+- [触发条件]使用 shared.py 统一底层常驻函数时，重新 reload(MFace2) 发现代码不生效 -> [根因] 在 __init__.py 的 reload_modules() 中缺少了新增 shared 模块的导入与 reload，且未将其放置在被依赖模块的最前方 -> [正确方案] 必须在 reload_modules 的起始位置紧跟 from . import shared 后加入 reload(shared) -> [避坑规则] Maya模块热更机制中，所有被底层强依赖的基石模块(Utility)必须保证最早被 reload！
+- [触发条件]模块级绑定删除 (delete_selected) 后，大纲视图里 MFACE_SET 结构没有及时更新空节点 -> [根因] 原删除底层仅包含动作未包含组件树刷新逻辑 -> [正确方案] 在 tools 工具包装层(Wrapper)或清理块的 undoInfo 末尾加入 setmgr.rebuild_sets() 强制回刷 -> [避坑规则] 对于自带自定义层级大纲系统(MFACE_SET)的工具，所有涉及节点增删的动作终点必须显式呼叫树刷新 API。
+- [触发条件]脚本加载骨骼蒙皮权重报错 -> [根因] 使用 cmds.ls(polygon) != 1 直接比较列表和整数（Python语法通过但逻辑恒等） -> [正确方案] 必须包裹 len(cmds.ls(polygon)) != 1 才能判断场景物体存在数量 -> [避坑规则] Python 弱类型下与 API 返回 List 的比较必须强制加 len()，严禁直接对比数字！
