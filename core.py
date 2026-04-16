@@ -281,11 +281,13 @@ class Ctrl(Hierarchy):
         return self
 
     def edit_matrix(self, matrix):
+        joint = Joint(self.name)
+        # 先采集：在控制器归零前，直接读取 Additive 的局部矩阵（Maya 原生处理缩放）
+        additive_local = cmds.xform(joint.additive.name, q=1, m=1) if joint.joint else None
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        joint = Joint(self.name)
         if joint.joint:
-            joint.set_matrix(matrix)
+            joint.set_matrix(matrix, local_matrix=additive_local)
         cluster = Cluster(self.name)
         if cluster.cluster:
             cluster.set_matrix(matrix)
@@ -527,14 +529,12 @@ class Joint(Hierarchy):
         self.bws[11].output.cnt(self.joint["scaleZ"])
         return self
 
-    def set_matrix(self, matrix):
-        # matrix 为世界矩阵，bws default 驱动 Additive 节点的局部 translate/rotate
-        # 借助临时节点让 Maya 原生变换系统处理缩放空间的矩阵分解
-        # 避免手工 world * root_inv 在父级有缩放时产生精度偏差
-        temp = cmds.createNode("transform", n="_mface_temp_probe_", p=self.root.name)
-        cmds.xform(temp, ws=1, m=matrix)
-        local_matrix = cmds.xform(temp, q=1, m=1)
-        cmds.delete(temp)
+    def set_matrix(self, matrix, local_matrix=None):
+        # local_matrix：直接传入的局部矩阵（冻结变换路径，缩放安全）
+        # 当未传入时，走旧的 world * root_inv 计算（预设加载等路径保持兼容）
+        if local_matrix is None:
+            root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
             self.bws[i].set_default(local_matrix[j])
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
