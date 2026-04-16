@@ -286,12 +286,16 @@ class Ctrl(Hierarchy):
     def edit_matrix(self, matrix):
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        # ctrl 归零后 SDK 消失，骨骼/Cluster 回到 rest 位置
+        # 此时重新获取世界矩阵作为基准，避免 SDK 偏移烘入 default/Pre
         joint = Joint(self.name)
-        if joint.joint:
-            joint.set_matrix(matrix)
         cluster = Cluster(self.name)
+        if joint.joint:
+            rest_matrix = joint.joint.xform(q=1, ws=1, m=1)
+            joint.set_matrix(rest_matrix)
         if cluster.cluster:
-            cluster.set_matrix(matrix)
+            rest_matrix = cluster.cluster.xform(q=1, ws=1, m=1)
+            cluster.set_matrix(rest_matrix)
         self.reset_constraint_offset()
 
     def reset_constraint_offset(self):
