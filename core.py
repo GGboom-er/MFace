@@ -269,8 +269,6 @@ class Ctrl(Hierarchy):
         self.follow.xform(ws=1, m=matrix)
         self.follow["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if self.is_left():
-            # 使用 Follow 的局部矩阵（已被 Maya 正确处理缩放）而非世界矩阵
-            # 避免在缩放环境下 inverse(world_matrix) 引入 1/S 缩放污染
             local = self.follow.xform(q=1, m=1)
             self.mirror.xform(ws=0, m=list(MMatrix(local).inverse()))
             self.mirror["sx"] = -1
@@ -284,19 +282,13 @@ class Ctrl(Hierarchy):
         return self
 
     def edit_matrix(self, matrix):
+        joint = Joint(self.name)
+        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        joint = Joint(self.name)
         if joint.joint:
-            # 仅更新位移 BW default（0-2）和 bindPreMatrix
-            # 方向向量 BW（3-8）驱动 aimConstraint 的基准朝向，
-            # 在冻结变换/匹配旋转时不应被更新，否则会导致旋转双重施加
-            root_ws_inv = list(MMatrix(cmds.xform(joint.root.name, q=1, ws=1, m=1)).inverse())
-            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
-            for i, j in enumerate([12, 13, 14]):
-                joint.bws[i].set_default(local_matrix[j])
-            joint.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-            joint.re_skin()
+            joint.set_matrix(matrix, old_world=old_world)
         cluster = Cluster(self.name)
         if cluster.cluster:
             cluster.set_matrix(matrix)
@@ -312,11 +304,7 @@ class Ctrl(Hierarchy):
             now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
             old_offset = cmds.getAttr(con + ".offset")[0]
-            # pointConstraint offset 工作在约束节点的局部空间
-            # 当父级有缩放 S 时，世界空间差值需除以 S 才能正确补偿
-            parent = cmds.listRelatives(self.follow.name, parent=True)
-            ws_scale = cmds.xform(parent[0], q=1, ws=1, s=1) if parent else [1, 1, 1]
-            new_offset = [(o+b-n) / s for n, b, o, s in zip(now_point, bind_point, old_offset, ws_scale)]
+            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
@@ -542,25 +530,31 @@ class Joint(Hierarchy):
         self.bws[11].output.cnt(self.joint["scaleZ"])
         return self
 
-    def set_matrix(self, matrix):
-        # matrix 为世界矩阵，bws default 驱动 Additive 节点的局部 translate/rotate
-        # 需先转换为相对于 self.root 的局部矩阵，否则 MFace 组有偏移时产生双重偏移
-        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
-        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+    def set_matrix(self, matrix, local_matrix=None, reskin=True, old_world=None):
+        if local_matrix is None:
+            root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
-            self.bws[i].set_default(local_matrix[j])
+            input_sum = cmds.getAttr(self.bws[i].name + ".output") - self.bws[i].get_default()
+            self.bws[i].set_default(local_matrix[j] - input_sum)
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-        self.re_skin()
+        if reskin:
+            self.re_skin(old_world)
         return self
 
 
-    def re_skin(self):
+    def re_skin(self, old_world=None):
         for attr in self.joint["worldMatrix[0]"].connects(s=0, d=1, p=1):
             attr = Attr.from_name(attr)
             if cmds.objectType(attr.node) != "skinCluster":
                 continue
-            inverse = list(MMatrix(self.additive["bindPreMatrix"].get()).inverse())
-            attr.get_node()["bindPreMatrix"][attr.index()].set(inverse)
+            if old_world is not None:
+                old_bpm = MMatrix(attr.get_node()["bindPreMatrix"][attr.index()].get())
+                actual_world = MMatrix(cmds.getAttr(self.joint.name + ".worldMatrix[0]"))
+                new_bpm = list(old_bpm * MMatrix(old_world) * actual_world.inverse())
+            else:
+                new_bpm = list(MMatrix(self.additive["bindPreMatrix"].get()).inverse())
+            attr.get_node()["bindPreMatrix"][attr.index()].set(new_bpm)
 
     def add_pose(self, weight, matrix):
         if not self.bws[0]:
@@ -803,7 +797,7 @@ class Cluster(Hierarchy):
 
     def set_matrix(self, matrix):
         # bindPreMatrix 通过 decomposeMatrix 间接驱动 Pre 的 local translate/rotate（A 类）
-        # 因此需要存相对于 Pre 父级的局部矩阵，而非世界矩阵
+        # 需存相对于 Pre 父级的局部矩阵，而非世界矩阵，否则缩放下通道值偏移
         parent = cmds.listRelatives(self.pre.name, parent=True)
         if parent:
             parent_ws_inv = list(MMatrix(cmds.xform(parent[0], q=1, ws=1, m=1)).inverse())

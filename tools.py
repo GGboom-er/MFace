@@ -134,7 +134,7 @@ ctrl_delete_selected = undo(_ctrl_delete_and_refresh)
 def __match_selected_rotation():
     import maya.cmds as cmds
     from .core import Face, Fmt, Ctrl, Joint, Cluster
-    from maya.api.OpenMaya import MMatrix
+    from maya.api.OpenMaya import MMatrix, MTransformationMatrix
     
     # 拿到有序选择列表 (os=True 保留选择顺序，最后一个为 Target)
     sel = cmds.ls(os=True, type="transform")
@@ -151,27 +151,49 @@ def __match_selected_rotation():
         return logger.warning(u"请按顺序选择至少两个以上控制器！（系统会将前面选中的所有控制器旋转匹配并冻结至最后一个选中的位目标）")
         
     target_node, target_core = valid_sel[-1]
-    target_rot = cmds.xform(target_node, q=True, ws=True, ro=True)
+    
+    # 取目标骨骼/Cluster 的世界矩阵（旋转来源）
+    tgt_joint = Joint(target_core)
+    tgt_cluster = Cluster(target_core)
+    tgt_ctrl = Ctrl(target_core)
+    if tgt_joint.joint:
+        tgt_matrix = MMatrix(tgt_joint.joint.xform(q=1, ws=1, m=1))
+    elif tgt_cluster.cluster:
+        tgt_matrix = MMatrix(tgt_cluster.cluster.xform(q=1, ws=1, m=1))
+    elif tgt_ctrl.output:
+        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(tgt_ctrl.follow["bindPreMatrix"])
+    else:
+        return
+    
+    # 提取目标的旋转四元数（纯旋转，不含缩放/位移）
+    tgt_rot_q = MTransformationMatrix(tgt_matrix).rotation(asQuaternion=True)
     
     for node_name, core_name in valid_sel[:-1]:
-        # 1. 匹配世界旋转
-        cmds.xform(node_name, ws=True, ro=target_rot)
-        
-        # 2. 对它进行 MFace 专属的冻结变换塌陷打桩
         ctrl = Ctrl(core_name)
         joint = Joint(core_name)
         cluster = Cluster(core_name)
         
+        # 取源骨骼/Cluster 的当前世界矩阵
         if joint.joint:
-            matrix = joint.joint.xform(q=1, ws=1, m=1)
+            src_matrix = MMatrix(joint.joint.xform(q=1, ws=1, m=1))
         elif cluster.cluster:
-            matrix = cluster.cluster.xform(q=1, ws=1, m=1)
+            src_matrix = MMatrix(cluster.cluster.xform(q=1, ws=1, m=1))
         elif ctrl.output:
-            matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"]))
+            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"])
         else:
             continue
-            
-        ctrl.edit_matrix(matrix)
+        
+        # 构造新矩阵：目标旋转 + 源位移
+        src_xform = MTransformationMatrix(src_matrix)
+        src_pos = src_xform.translation(4)  # kWorld = 4
+        src_scale = src_xform.scale(4)
+        
+        new_xform = MTransformationMatrix()
+        new_xform.setScale(src_scale, 4)
+        new_xform.setRotation(tgt_rot_q)
+        new_xform.setTranslation(src_pos, 4)
+        
+        ctrl.edit_matrix(list(new_xform.asMatrix()))
         
     logger.hud(u"已成功将 %d 个控制器的旋转完全匹配并冻结至最后所选: %s" % (len(valid_sel)-1, target_node))
 
