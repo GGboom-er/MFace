@@ -98,3 +98,62 @@ class MFaceLogger(object):
         return True
 
 logger = MFaceLogger
+
+
+class MFaceProgress(object):
+    """百分比驱动的统一进度条（cmds.progressWindow）。
+
+    用法::
+
+        with MFaceProgress(u"MFace - Eye 绑定") as prog:
+            prog.advance(10, u"Eye - 采集控制器")
+            do_capture_ctrl()
+            prog.advance(30, u"Eye - 采集骨骼偏移")
+            do_capture_additive()
+    """
+
+    _WIN_WIDTH = 450
+
+    def __init__(self, title):
+        self._title = title
+        self._pct = 0
+
+    def __enter__(self):
+        if _IS_MAYA:
+            cmds.progressWindow(
+                title=self._title,
+                progress=0,
+                maxValue=100,
+                status=u"准备中...".ljust(50),
+                isInterruptable=False,
+                minValue=0,
+            )
+            cmds.refresh()
+        return self
+
+    def advance(self, pct, status=""):
+        """将进度推进 pct 个百分点（累计不超过 100），并更新状态文字。"""
+        self._pct = min(self._pct + pct, 100)
+        if _IS_MAYA:
+            cmds.progressWindow(
+                e=True,
+                progress=int(self._pct),
+                status=(status or u"处理中...").ljust(50),
+            )
+            cmds.refresh()
+
+    def set(self, pct, status=""):
+        """直接设置到指定百分比。"""
+        self._pct = min(pct, 100)
+        if _IS_MAYA:
+            cmds.progressWindow(
+                e=True,
+                progress=int(self._pct),
+                status=(status or u"处理中...").ljust(50),
+            )
+            cmds.refresh()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if _IS_MAYA:
+            cmds.progressWindow(endProgress=True)
+        return False

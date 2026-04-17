@@ -67,10 +67,15 @@ def add_joint_ctrl(name, matrix):
     return joint, ctrl
 
 
-def add_joint_ctrls(names, matrices):
+def _batch_add(single_fn, names, matrices, **kwargs):
+    """通用批量创建函数，single_fn 为单体创建函数。"""
     if len(matrices) < 1:
         return [[], []]
-    return list(zip(*[add_joint_ctrl(name, mat) for name, mat in zip(names, matrices)]))
+    return list(zip(*[single_fn(name, mat, **kwargs) for name, mat in zip(names, matrices)]))
+
+
+def add_joint_ctrls(names, matrices):
+    return _batch_add(add_joint_ctrl, names, matrices)
 
 
 def add_cluster_ctrl(name, matrix, typ="cluster"):
@@ -82,9 +87,7 @@ def add_cluster_ctrl(name, matrix, typ="cluster"):
 
 
 def add_cluster_ctrls(names, matrices, typ="cluster"):
-    if len(matrices) < 1:
-        return [[], []]
-    return list(zip(*[add_cluster_ctrl(name, mat, typ) for name, mat in zip(names, matrices)]))
+    return _batch_add(add_cluster_ctrl, names, matrices, typ=typ)
 
 
 def ctrls_follow_joints(ctrls, joints, close=False, us=None):
@@ -125,11 +128,17 @@ def get_rig_names():
 
 
 def get_rig_fit_config_names(rig_name):
-    return list(sorted(get_rig_name_cls()[rig_name].fit_configs.keys()))
+    cls = get_rig_name_cls().get(rig_name)
+    if cls is None:
+        return []
+    return list(sorted(cls.fit_configs.keys()))
 
 
 def get_rig_fit_config(rig_name, typ_name):
-    return get_rig_name_cls()[rig_name].fit_configs[typ_name]
+    cls = get_rig_name_cls().get(rig_name)
+    if cls is None:
+        return {}
+    return cls.fit_configs.get(typ_name, {})
 
 
 def create_fit(rig, typ, name, rml):
@@ -144,31 +153,29 @@ def create_fit(rig, typ, name, rml):
 
 
 def build_all():
-    from ..preset import RigSnapshot
     rig_cls = get_rig_name_cls()
-    all_fits = [fits for fits in Fits().all().group("rig", "classify")]
-
-    # 只弹一次全局窗，不再逐模块弹窗
-    snap = None
-    if RigSnapshot.has_existing_rig():
-        from ..ui.snapshot import ask_snapshot_settings
-        settings = ask_snapshot_settings()  # 全局模式，显示全部四个勾选项
-        if settings is None:
-            return
-        snap = RigSnapshot.capture(**settings)
-
-    for fits in all_fits:
-        rig_cls[fits["rig"]](fits).rebuild()
-
-    if snap:
-        snap.restore()
+    for fits in Fits().all().group("rig", "classify"):
+        _build_one_module(rig_cls, fits)
 
 
 def build_all_raw():
     """纯粹构建，不触发模块级快照弹窗。供 load_preset 等外部流程调用。"""
+    from ..preset import run_module_with_progress
     rig_cls = get_rig_name_cls()
     for fits in Fits().all().group("rig", "classify"):
-        rig_cls[fits["rig"]](fits).rebuild()
+        display = fits["classify"] or fits["rig"]
+        rig_group = "Rig{}{}".format(fits["rig"], fits["classify"])
+        rebuild_fn = lambda r=fits["rig"], f=fits: rig_cls[r](f).rebuild()
+        run_module_with_progress(display, rig_group, None, rebuild_fn)
+
+
+def build_module_raw(mod):
+    """按指定模块信息执行单模块 rebuild，不触发弹窗。
+    mod: dict，包含 "rig" 和 "classify" 字段。
+    """
+    rig_cls = get_rig_name_cls()
+    fits = Fits().all().filter(rig=mod["rig"], classify=mod["classify"])
+    rig_cls[mod["rig"]](fits).rebuild()
 
 
 def build_selected():
@@ -180,24 +187,21 @@ def build_selected():
 
 def _build_one_module(rig_cls, fits):
     """单模块的 快照判定→构建→恢复 流程。"""
-    from ..preset import RigSnapshot
+    from ..preset import RigSnapshot, run_module_with_progress
     rig_name = fits["rig"]
+    display = fits["classify"] or rig_name
+    rig_group = "Rig{}{}".format(rig_name, fits["classify"])
 
-    # 1. 判定该模块是否已有绑定
-    snap = None
-    if RigSnapshot.has_module_rig(rig_name):
+    # 快照弹窗（进度条之前）
+    settings = None
+    if RigSnapshot.has_module_rig(rig_group):
         from ..ui.snapshot import ask_snapshot_settings
-        settings = ask_snapshot_settings(rig_name)
+        settings = ask_snapshot_settings(rig_group)
         if settings is None:
-            return  # 用户取消该模块的绑定
-        snap = RigSnapshot.capture(**settings)
+            return
 
-    # 2. 执行该模块的 rebuild
-    rig_cls[rig_name](fits).rebuild()
-
-    # 3. 恢复快照（如有）
-    if snap:
-        snap.restore()
+    rebuild_fn = lambda: rig_cls[rig_name](fits).rebuild()
+    run_module_with_progress(display, rig_group, settings, rebuild_fn)
 
 
 def delete_selected():
