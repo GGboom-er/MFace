@@ -144,9 +144,24 @@ def create_fit(rig, typ, name, rml):
 
 
 def build_all():
+    from ..preset import RigSnapshot
     rig_cls = get_rig_name_cls()
-    for fits in Fits().all().group("rig", "classify"):
-        _build_one_module(rig_cls, fits)
+    all_fits = [fits for fits in Fits().all().group("rig", "classify")]
+
+    # 只弹一次全局窗，不再逐模块弹窗
+    snap = None
+    if RigSnapshot.has_existing_rig():
+        from ..ui.snapshot import ask_snapshot_settings
+        settings = ask_snapshot_settings()  # 全局模式，显示全部四个勾选项
+        if settings is None:
+            return
+        snap = RigSnapshot.capture(**settings)
+
+    for fits in all_fits:
+        rig_cls[fits["rig"]](fits).rebuild()
+
+    if snap:
+        snap.restore()
 
 
 def build_all_raw():
