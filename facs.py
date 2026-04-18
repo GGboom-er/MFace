@@ -1,6 +1,7 @@
 # coding:utf-8
 import json
 import re
+from contextlib import contextmanager
 from .core import *
 from . import bs
 from .logger import logger
@@ -17,6 +18,15 @@ def begin_pose_cache():
 def end_pose_cache():
     global _sdk_cache
     _sdk_cache = None
+
+@contextmanager
+def pose_cache():
+    u"""安全的 SDK 缓存上下文，异常时自动清理。"""
+    begin_pose_cache()
+    try:
+        yield
+    finally:
+        end_pose_cache()
 
 def set_keep_ctrl_attrs(value):
     global _keep_ctrl_attrs

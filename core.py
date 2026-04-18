@@ -341,13 +341,10 @@ class Ctrl(Hierarchy):
     def edit_selected_matrix(cls):
         for ctrl in cls.selected():
             joint = Joint(ctrl.name)
-            cluster = Cluster(ctrl.name)
             if joint.joint:
                 matrix = joint.joint.xform(q=1, ws=1, m=1)
-            elif cluster.cluster:
-                matrix = cluster.cluster.xform(q=1, ws=1, m=1)
             elif ctrl.output:
-                matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(ctrl.follow["bindPreMatrix"]))
+                matrix = ctrl.output.xform(q=1, ws=1, m=1)
             else:
                 continue
             ctrl.edit_matrix(matrix)

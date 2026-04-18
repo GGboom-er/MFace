@@ -10,6 +10,7 @@ from . import facs
 from . import bs
 from . import wts
 from .shared import Shape, is_shape
+from .logger import logger
 
 
 def get_preset_path(preset, name):
@@ -251,7 +252,7 @@ def load_preset_plane(preset):
 
 
 def delete_preset_plane(preset):
-    delete_preset_path(preset, "clusterWeight.json")
+    delete_preset_path(preset, "plane.ma")
 
 
 # ctrl
@@ -646,8 +647,8 @@ class RigSnapshot(object):
                     c=c.get_color(),
                     m=m
                 ))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(u"RigSnapshot: 采集控制器 {} 失败: {}".format(ctrl.name, e))
         return data
 
     @staticmethod
@@ -659,7 +660,8 @@ class RigSnapshot(object):
             return {cluster.name: cluster.get_weight_data()
                     for cluster in Cluster.all()
                     if module_names is None or ("Cluster" + cluster.name) in module_names}
-        except Exception:
+        except Exception as e:
+            logger.warning(u"RigSnapshot: 采集 Cluster 权重失败: {}".format(e))
             return {}
 
     @staticmethod
@@ -672,7 +674,8 @@ class RigSnapshot(object):
             # 过滤：只保留 ctrl 名在 module_names 中的 SDK 条目
             return [d for d in all_data
                     if ("Ctrl" + d.get("ctrl", "")) in module_names]
-        except Exception:
+        except Exception as e:
+            logger.warning(u"RigSnapshot: 采集 SDK 数据失败: {}".format(e))
             return []
 
     @staticmethod
@@ -701,7 +704,8 @@ class RigSnapshot(object):
                 if remainder > 0:
                     progress_cb(remainder)
             return data
-        except Exception:
+        except Exception as e:
+            logger.warning(u"RigSnapshot: 采集 Additive 数据失败: {}".format(e))
             return []
 
     # ── 恢复 ──────────────────────────────────
@@ -757,16 +761,16 @@ class RigSnapshot(object):
         if data:
             try:
                 Cluster.load_weight_data(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(u"RigSnapshot: 恢复 Cluster 权重失败: {}".format(e))
 
     @staticmethod
     def _restore_sdk(data):
         if data:
             try:
                 facs.set_sdk_data(data)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(u"RigSnapshot: 恢复 SDK 数据失败: {}".format(e))
 
     @staticmethod
     def _restore_additive(data):
@@ -800,7 +804,7 @@ class RigSnapshot(object):
                 remainder = (n % batch) / n if n % batch else 0
                 if remainder > 0:
                     progress_cb(remainder)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(u"RigSnapshot: 恢复 Additive 数据失败: {}".format(e))
 
 

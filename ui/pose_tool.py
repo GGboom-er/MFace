@@ -19,7 +19,7 @@ class TargetSlider(QHBoxLayout):
         self.box.valueChanged.connect(self.slider.setValue)
         self.button = QPushButton(u">>>")
         self.button.setFixedWidth(40)
-        q_add(self, q_prefix(u"控制：", 50), self.slider, self.box, self.button)
+        q_add(self, q_prefix(u"控制：", 60), self.slider, self.box, self.button)
 
 
 class ActiveDriverDialog(QDialog):
@@ -173,7 +173,7 @@ class FacePoseTool(QDialog):
         self.setLayout(q_add(
             QVBoxLayout(),
             self.slider,
-            q_add(QHBoxLayout(), q_prefix(u"搜索：", 50), self.line, load),
+            q_add(QHBoxLayout(), q_prefix(u"搜索：", 60), self.line, load),
             self.list,
             btn_lay
         ))
@@ -215,7 +215,7 @@ class FacePoseTool(QDialog):
             self._slider_timer = None
             self.set_slider_pose(self._slider_val_cache)
         else:
-            super(FacePoseTool, self).timerEvent(event)
+            super().timerEvent(event)
 
     def _sync_ui_on_undo_redo(self, *args):
         import maya.utils
@@ -227,7 +227,7 @@ class FacePoseTool(QDialog):
             self._undo_cb = om.MEventMessage.addEventCallback("Undo", self._sync_ui_on_undo_redo)
         if not self._redo_cb:
             self._redo_cb = om.MEventMessage.addEventCallback("Redo", self._sync_ui_on_undo_redo)
-        super(FacePoseTool, self).showEvent(event)
+        super().showEvent(event)
 
     def closeEvent(self, event):
         from maya.api import OpenMaya as om
@@ -244,7 +244,7 @@ class FacePoseTool(QDialog):
         except Exception as e:
             logger.warning(u"关闭窗口时取消编辑修形失败: %s" % str(e))
             
-        super(FacePoseTool, self).closeEvent(event)
+        super().closeEvent(event)
 
     def double_click_item(self, item):
         target = item.data(Qt.UserRole)
@@ -406,8 +406,11 @@ class FacePoseTool(QDialog):
 
     def end_slider_undo(self):
         from maya import cmds
-        tools.facs.end_pose_cache()
-        cmds.undoInfo(closeChunk=True)
+        try:
+            pass
+        finally:
+            tools.facs.end_pose_cache()
+            cmds.undoInfo(closeChunk=True)
 
     def set_slider_pose(self, value):
         tools.facs.set_pose_by_targets(self.list.selected_names(), value, False)

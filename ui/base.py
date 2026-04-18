@@ -185,7 +185,7 @@ def q_box(label, lay, *children):
 
 class ColorDelegate(QStyledItemDelegate):
     def initStyleOption(self, option, index):
-        super(ColorDelegate, self).initStyleOption(option, index)
+        super().initStyleOption(option, index)
         has_driver = index.data(Qt.UserRole + 1)
         if option.state & getattr(QStyle, 'State_Selected', 1):
             option.palette.setColor(QPalette.HighlightedText, QColor(Theme.COLOR_SELECTED) if has_driver else QColor(Theme.COLOR_DEFAULT_TEXT))

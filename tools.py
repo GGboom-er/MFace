@@ -133,7 +133,7 @@ ctrl_delete_selected = undo(_ctrl_delete_and_refresh)
 
 def __match_selected_rotation():
     import maya.cmds as cmds
-    from .core import Face, Fmt, Ctrl, Joint, Cluster
+    from .core import Face, Fmt, Ctrl, Joint
     from maya.api.OpenMaya import MMatrix, MTransformationMatrix
     
     # 拿到有序选择列表 (os=True 保留选择顺序，最后一个为 Target)
@@ -152,16 +152,13 @@ def __match_selected_rotation():
         
     target_node, target_core = valid_sel[-1]
     
-    # 取目标骨骼/Cluster 的世界矩阵（旋转来源）
+    # 取目标骨骼/Output 的世界矩阵（旋转来源）
     tgt_joint = Joint(target_core)
-    tgt_cluster = Cluster(target_core)
     tgt_ctrl = Ctrl(target_core)
     if tgt_joint.joint:
         tgt_matrix = MMatrix(tgt_joint.joint.xform(q=1, ws=1, m=1))
-    elif tgt_cluster.cluster:
-        tgt_matrix = MMatrix(tgt_cluster.cluster.xform(q=1, ws=1, m=1))
     elif tgt_ctrl.output:
-        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(tgt_ctrl.follow["bindPreMatrix"])
+        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=1))
     else:
         return
     
@@ -171,15 +168,12 @@ def __match_selected_rotation():
     for node_name, core_name in valid_sel[:-1]:
         ctrl = Ctrl(core_name)
         joint = Joint(core_name)
-        cluster = Cluster(core_name)
         
-        # 取源骨骼/Cluster 的当前世界矩阵
+        # 取源骨骼/Output 的当前世界矩阵
         if joint.joint:
             src_matrix = MMatrix(joint.joint.xform(q=1, ws=1, m=1))
-        elif cluster.cluster:
-            src_matrix = MMatrix(cluster.cluster.xform(q=1, ws=1, m=1))
         elif ctrl.output:
-            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(ctrl.follow["bindPreMatrix"])
+            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=1))
         else:
             continue
         
