@@ -146,6 +146,25 @@ def check_swing_twist(attr):
     return attr.name
 
 
+def __set_sdk_threshold(target_name, new_value):
+    u"""将指定目标的 SDK 触发阈值（animCurve 中 weight=1 的 key）移到 new_value。
+    返回 True 表示修改成功，False 表示未找到或移动失败。"""
+    bridge = get_bridge()
+    uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
+    if not uu_list:
+        return False
+    uu = uu_list[0]
+    for i in range(cmds.keyframe(uu, q=True, keyframeCount=True)):
+        v = cmds.keyframe(uu, index=(i, i), q=True, vc=True)[0]
+        if abs(v - 1.0) < 0.001:
+            try:
+                cmds.keyframe(uu, edit=True, index=(i, i), absolute=True, floatChange=new_value)
+                return True
+            except RuntimeError:
+                return False
+    return False
+
+
 def add_sdk(attr, target_name, default_value, value):
     bridge = get_bridge()
     if exist_target(target_name):
@@ -160,19 +179,8 @@ def add_sdk(attr, target_name, default_value, value):
                 msg = u'%s\n%.3f ===》》》=== %.3f' % (attr, old_value, value)
                 
             if logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
-                uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
-                if uu_list:
-                    uu = uu_list[0]
-                    count = cmds.keyframe(uu, q=True, keyframeCount=True)
-                    target_index = -1
-                    for i in range(count):
-                        v = cmds.keyframe(uu, index=(i,i), q=True, vc=True)[0]
-                        if abs(v - 1.0) < 0.001:
-                            target_index = i
-                            break
-                    if target_index != -1:
-                        cmds.keyframe(uu, edit=True, index=(target_index, target_index), absolute=True, floatChange=value)
-                        logger.hud(u"已将 %s 触发阈值更新为 %.3f" % (target_name, value))
+                if __set_sdk_threshold(target_name, value):
+                    logger.hud(u"已将 %s 触发阈值更新为 %.3f" % (target_name, value))
         return
     if not cmds.objExists(attr):
         return
@@ -322,10 +330,7 @@ def rest_ctrl(ctrl):
         except Exception:
             pass
 
-    # ================== DEBUG INJECTION ==================
-    if restored_info:
-        logger.warning(u"[DEBUG 属性还原] 捕获附加自定义驱动 -> [%s] | 成功追杀重置关联属性: %s" % (ctrl, ", ".join(restored_info)))
-    # =====================================================
+
 
 
 def get_active_other_drivers(target_names):
@@ -389,11 +394,13 @@ def get_active_other_drivers(target_names):
 
 
 def get_base_targets(targets):
+    seen = set()
     base_targets = []
     for target in targets:
         comb_name, _ = target_to_base_ib(target)
         for target_name in comb_name.split("_COMB_"):
-            if target_name not in base_targets:
+            if target_name not in seen:
+                seen.add(target_name)
                 base_targets.append(target_name)
     return base_targets
 
@@ -632,8 +639,7 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
                 cleaned_bws += 1
                 bw.clean_orphans()
                 
-    if cleaned_joints > 0:
-        logger.warning(u"[DEBUG 净化追踪] 差值录入完毕！本次定位发生真实位移的活动骨骼: %d 根 | 针对性盘查脱节连接点: %d 个。" % (cleaned_joints, cleaned_bws))
+
 
 
 def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False):
@@ -675,35 +681,20 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
         return False, old_value
         
     if abs(value - old_value) > 0.001:
-        bridge = get_bridge()
-        uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
-        if uu_list:
-            uu = uu_list[0]
-            count = cmds.keyframe(uu, q=True, keyframeCount=True)
-            target_index = -1
-            for i in range(count):
-                v = cmds.keyframe(uu, index=(i,i), q=True, vc=True)[0]
-                if abs(v - 1.0) < 0.001:
-                    target_index = i
-                    break
-            if target_index != -1:
-                if prompt:
-                    msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
-                    if not logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
-                        return False, old_value
-                        
-                try:
-                    cmds.keyframe(uu, edit=True, index=(target_index, target_index), absolute=True, floatChange=value)
-                except RuntimeError:
-                    # "Cannot move keys" — 目标浮点位置与已有 key 冲突，跳过阈值更新
-                    return False, old_value
-                try:
-                    cmds.setAttr(ctrl + "." + attr, value)
-                except Exception as _e:
-                    logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-                if not silent:
-                    logger.hud(u"[%s] —— 修改至 —— %.3f" % (target_name, value))
-                return True, value
+        if prompt:
+            msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
+            if not logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
+                return False, old_value
+        if __set_sdk_threshold(target_name, value):
+            try:
+                cmds.setAttr(ctrl + "." + attr, value)
+            except Exception as _e:
+                logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+            if not silent:
+                logger.hud(u"[%s] —— 修改至 —— %.3f" % (target_name, value))
+            return True, value
+        else:
+            return False, old_value
     return False, value
 
 
@@ -757,19 +748,7 @@ def edit_target(target_name, keep_ctrl_attrs=None):
 
 
 def __force_update_threshold(target_name, value):
-    bridge = get_bridge()
-    uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
-    if uu_list:
-        uu = uu_list[0]
-        count = cmds.keyframe(uu, q=True, keyframeCount=True)
-        for i in range(count):
-            v = cmds.keyframe(uu, index=(i,i), q=True, vc=True)[0]
-            if abs(v - 1.0) < 0.001:
-                try:
-                    cmds.keyframe(uu, edit=True, index=(i, i), absolute=True, floatChange=value)
-                except Exception:
-                    pass
-                break
+    __set_sdk_threshold(target_name, value)
 
 def mirror_base_drive_target(target_name):
     ctrl, attr, default_value, value = get_base_sdk_data(target_name)
