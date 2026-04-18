@@ -503,7 +503,7 @@ class Joint(Hierarchy):
         joint_parent = "Head_M" if cmds.objExists("Head_M") else Face()["Joint"].name
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), joint_parent, "joint")
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
+        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"] if self.joint else []
 
     def get(self):
         Face.build_callable(self)

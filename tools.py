@@ -161,7 +161,7 @@ def __match_selected_rotation():
     elif tgt_cluster.cluster:
         tgt_matrix = MMatrix(tgt_cluster.cluster.xform(q=1, ws=1, m=1))
     elif tgt_ctrl.output:
-        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(tgt_ctrl.follow["bindPreMatrix"])
+        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(tgt_ctrl.follow["bindPreMatrix"])
     else:
         return
     
@@ -179,7 +179,7 @@ def __match_selected_rotation():
         elif cluster.cluster:
             src_matrix = MMatrix(cluster.cluster.xform(q=1, ws=1, m=1))
         elif ctrl.output:
-            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"])
+            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(ctrl.follow["bindPreMatrix"])
         else:
             continue
         
