@@ -74,7 +74,7 @@ def cluster_weight_apply():
             if attr and attr.attr == "weight" and cmds.nodeType(attr.node) == "joint":
                 editing_clusters.add(wt.cluster.name)
         
-        Cluster.finsh_edit_weights()
+        Cluster.finish_edit_weights()
         if editing_clusters:
             ctrl_names = []
             for c_name in editing_clusters:

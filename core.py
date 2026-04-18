@@ -22,7 +22,6 @@ class Fmt(object):
         self.data = info
         self.data.setdefault("ud", "")
         self.data.setdefault("merge_ud", False)
-        self.data.setdefault("merge_ud", False)
         self.data.setdefault("m", "")
         if self.data.get("rml") == "M":
             self.data["m"] = "M"
@@ -336,8 +335,6 @@ class Ctrl(Hierarchy):
                 return False
             return True
 
-        for ctrl in filter(is_follow, cls.all()):
-            print (ctrl.name)
         return [ctrl.add_pin() for ctrl in filter(is_follow, cls.all())]
 
     @classmethod
@@ -350,7 +347,7 @@ class Ctrl(Hierarchy):
             elif cluster.cluster:
                 matrix = cluster.cluster.xform(q=1, ws=1, m=1)
             elif ctrl.output:
-                matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"]))
+                matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=1)) * MMatrix(ctrl.follow["bindPreMatrix"]))
             else:
                 continue
             ctrl.edit_matrix(matrix)
@@ -516,7 +513,6 @@ class Joint(Hierarchy):
             bw.get()
             bw.get().set_default(v)
         self.bws[0].output.cnt(self.additive["translateX"])
-        self.bws[0].output.cnt(self.additive["translateX"])
         self.bws[1].output.cnt(self.additive["translateY"])
         self.bws[2].output.cnt(self.additive["translateZ"])
         self.exp().rotate([self.bws[3].output, self.bws[4].output, self.bws[5].output],
@@ -598,7 +594,7 @@ class Joint(Hierarchy):
             self.joint["v"] = 0
             cons = cmds.listConnections(self.joint.name, s=0, d=1) or []
             cons = cmds.ls(cons, typ=["orientConstraint", "parentConstraint"]) or []
-            cons = [con for con in cons if str.endswith("point", "orient")]
+            cons = [con for con in cons if con.endswith("point") or con.endswith("orient")]
             delete_nodes(cons)
 
     @staticmethod
@@ -718,7 +714,7 @@ class Joint(Hierarchy):
             if not name.endswith("_L"):
                 continue
             mirror_value = list(value)
-            for i in range(0, 3, 6):
+            for i in [0, 3, 6]:  # 位移X + Y轴X + Z轴X：YZ平面镜像(右前方右转→左前方左转)
                 mirror_value[i] *= -1
             mirror_data[Fmt.mirror_name(name)] = mirror_value
         return mirror_data
@@ -847,7 +843,7 @@ class Cluster(Hierarchy):
             joint.joint["weight"].connect(weight.weight)
 
     @staticmethod
-    def finsh_edit_weights():
+    def finish_edit_weights():
         for wt in Weight.all():
             attr = wt.weight.input()
             if not attr:

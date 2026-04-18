@@ -188,7 +188,7 @@ def test_cluster_edit():
     Cluster("Brow_R").edit_weights()
     cmds.setAttr("Joint05Brow_R.weight", 0)
     cmds.setAttr("Joint05Brow_L.weight", 1)
-    Cluster.finsh_edit_weights()
+    Cluster.finish_edit_weights()
 
 
 def test_cluster_mirror():

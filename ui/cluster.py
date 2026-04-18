@@ -217,7 +217,7 @@ class ClusterSoft(QDialog):
 
     def closeEvent(self, event):
         QDialog.closeEvent(self, event)
-        Cluster.finsh_edit_weights()
+        Cluster.finish_edit_weights()
         cmds.undoInfo(closeChunk=1)
 
 
@@ -317,7 +317,7 @@ class ClusterTool(QDialog):
 
     def closeEvent(self, event):
         QDialog.closeEvent(self, event)
-        Cluster.finsh_edit_weights()
+        Cluster.finish_edit_weights()
 
 
 window = None
@@ -325,6 +325,7 @@ window = None
 
 def show():
     global window
-    window = ClusterTool()
+    if window is None:
+        window = ClusterTool()
     window.showNormal()
     window.load()

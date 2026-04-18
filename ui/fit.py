@@ -120,5 +120,6 @@ window = None
 
 def show():
     global window
-    window = FitCreateTool()
+    if window is None:
+        window = FitCreateTool()
     window.showNormal()

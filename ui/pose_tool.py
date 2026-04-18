@@ -423,9 +423,12 @@ class FacePoseTool(QDialog):
                 return  # 用户取消
             tools.facs.set_keep_ctrl_attrs(keep)  # 暂存到 facs 模块级变量供 auto_duplicate_edit 使用
             
-            # Capture strictly resolved/swapped targets from C++ logic
-            resolved_targets = tools.auto_duplicate_edit(targets)
-            tools.facs.set_keep_ctrl_attrs(None)  # 清除暂存
+            try:
+                # Capture strictly resolved/swapped targets from C++ logic
+                resolved_targets = tools.auto_duplicate_edit(targets)
+            finally:
+                tools.facs.set_keep_ctrl_attrs(None)  # 清除暂存确保安全不论报错与否
+                
             if resolved_targets:
                 self._auto_select(resolved_targets, None)
             else:
@@ -484,6 +487,7 @@ window = None
 
 def show():
     global window
-    window = FacePoseTool()
+    if window is None:
+        window = FacePoseTool()
     window.showNormal()
     window.reload()

@@ -5,13 +5,10 @@
 import functools
 from maya import cmds
 from maya.api.OpenMaya import *
+from .logger import logger
 
 
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import api_ls
 
 
 def i_to_abc(i=100):
@@ -229,6 +226,9 @@ class Node(object):
         return self
 
     def __getitem__(self, item):
+        if not self:
+            from .logger import logger
+            logger.warning(u"Node警告: 宿主对象 '%s' 不存在，却正在提取 '%s' 属性！这极易导致静默失败。" % (self.name, item))
         return Attr(self.name, item)
 
     def __setitem__(self, key, value):
@@ -379,13 +379,13 @@ class BlendWeighted(Node):
                     for exist, plug in [(in_exist, in_plug), (wt_exist, wt_plug)]:
                         if exist:
                             try: cmds.aliasAttr(self.name + "." + plug, rm=True)
-                            except Exception: pass
+                            except Exception as e: logger.debug("aliasAttr rm failed: %s", e)
                             try: cmds.removeMultiInstance(self.name + "." + plug, b=True)
-                            except Exception: pass
+                            except Exception as e: logger.debug("removeMultiInstance failed: %s", e)
                     
                     if base_target and cmds.objExists(self.name + "." + base_target + "WW"):
                         try: cmds.deleteAttr(self.name + "." + base_target + "WW")
-                        except Exception: pass
+                        except Exception as e: logger.debug("deleteAttr WW failed: %s", e)
                 else:
                     # [无别名路径]：别名完全丢失的僵尸裸槽（如 Weight[24]）
                     # 先给它补一个临时别名，让 Maya 认为它是合法有名属性
@@ -395,11 +395,11 @@ class BlendWeighted(Node):
                         if exist:
                             full_plug = self.name + "." + plug
                             try: cmds.aliasAttr(temp_name + suffix, full_plug)
-                            except Exception: pass
+                            except Exception as e: logger.debug("aliasAttr temp failed: %s", e)
                             try: cmds.aliasAttr(full_plug, rm=True)
-                            except Exception: pass
+                            except Exception as e: logger.debug("aliasAttr rm orphan failed: %s", e)
                             try: cmds.removeMultiInstance(full_plug, b=True)
-                            except Exception: pass
+                            except Exception as e: logger.debug("removeMultiInstance orphan failed: %s", e)
 
 
 def rig_express(name, typ, inputs, output):

@@ -8,11 +8,7 @@ from maya import cmds
 from maya.api.OpenMaya import *
 
 
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import api_ls
 
 
 class Color(object):

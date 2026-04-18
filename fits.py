@@ -66,38 +66,7 @@ def get_selected_vtx_normal():
     return normal
 
 
-def v_dot(v1, v2):
-    return sum([e1*e2 for e1, e2 in zip(v1, v2)])
-
-
-def v_cross(v1, v2):
-    u"""
-    叉乘
-    """
-    v = []
-    for i in range(3):
-        j = (i + 1) % 3
-        k = (i + 2) % 3
-        v.append(v1[j] * v2[k] - v1[k] * v2[j])
-    return v
-
-
-def v_normal(v):
-    u"""
-    归一化
-    """
-    length = sum([e*e for e in v]) ** 0.5
-    if length < 0.0000001:
-        return [0] * len(v)
-    return [e/length for e in v]
-
-
-def v_length(v):
-    return sum([e*e for e in v]) ** 0.5
-
-
-def m3x3_to_m16(m3x3):
-    return sum([row + [0] for row in m3x3], []) + [0.0, 0.0, 0.0, 1.0]
+from .data import v_dot, v_cross, v_normal, v_length, m3x3_to_m16
 
 
 def get_selected_vtx_matrix(mirror):

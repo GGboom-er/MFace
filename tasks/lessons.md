@@ -54,3 +54,21 @@
 - [触发条件]使用 shared.py 统一底层常驻函数时，重新 reload(MFace2) 发现代码不生效 -> [根因] 在 __init__.py 的 reload_modules() 中缺少了新增 shared 模块的导入与 reload，且未将其放置在被依赖模块的最前方 -> [正确方案] 必须在 reload_modules 的起始位置紧跟 from . import shared 后加入 reload(shared) -> [避坑规则] Maya模块热更机制中，所有被底层强依赖的基石模块(Utility)必须保证最早被 reload！
 - [触发条件]模块级绑定删除 (delete_selected) 后，大纲视图里 MFACE_SET 结构没有及时更新空节点 -> [根因] 原删除底层仅包含动作未包含组件树刷新逻辑 -> [正确方案] 在 tools 工具包装层(Wrapper)或清理块的 undoInfo 末尾加入 setmgr.rebuild_sets() 强制回刷 -> [避坑规则] 对于自带自定义层级大纲系统(MFACE_SET)的工具，所有涉及节点增删的动作终点必须显式呼叫树刷新 API。
 - [触发条件]脚本加载骨骼蒙皮权重报错 -> [根因] 使用 cmds.ls(polygon) != 1 直接比较列表和整数（Python语法通过但逻辑恒等） -> [正确方案] 必须包裹 len(cmds.ls(polygon)) != 1 才能判断场景物体存在数量 -> [避坑规则] Python 弱类型下与 API 返回 List 的比较必须强制加 len()，严禁直接对比数字！
+
+### 深度架构安全防灾经验
+- [触发条件]多次运行插件或跨项目调用→[根因]sys.path粗暴插入未去重与跨平台规格化→[正确方案]严格遵守OS标准化与大小写通配检查规范→[避坑规则]严禁直接对环境变量无脑insert，极易造成旧版污染。
+- [触发条件]更新预设面板UI→[根因]findChildren循环剥除并deleteLater引起底层C对象生命被过早杀死→[正确方案]构建自主隔离控件列表，安全迭代清理→[避坑规则]禁止暴力打平销毁带信号的QWidget树。
+- [触发条件]多任务弹窗打断后进行异常终止→[根因]用全局状态变量跨模块交互未设安全网→[正确方案]加用严密的try-finally强制封禁清理上下文→[避坑规则]严禁让全局标识变量外逃，必须确保自旋释放。
+- [触发条件]Node类连续查询层级→[根因]__getitem__缺失存在性防御直接静默建立占位实例→[正确方案]切片前注入objExists验证并在未达下发前高亮告警→[避坑规则]严禁在底层操作中引入虚假包裹而静默失败。
+
+### 代码质量重构经验
+- [触发条件]多弹窗相同checkbox→[根因]复制粘贴无抽象→[正确方案]工厂函数统一创建→[避坑规则]UI控件超2处相同必须抽取
+- [触发条件]base.py已patch枚举但下游仍手写兼容→[根因]patch后未清理历史代码→[正确方案]patch后全局搜索清除冗余→[避坑规则]加patch必须同步清理消费方
+- [触发条件]重构批量函数误删单体函数→[根因]替换范围包含了不该删的代码→[正确方案]缩小替换边界并立即验证→[避坑规则]重构后必须立即用lint和import验证
+
+### 技能自检发现的经验
+- [触发条件]_safe_exec移到base.py后preset调用缺pos参数→[根因]QMenu.exec需要pos而QDialog不需要→[正确方案]_safe_exec用*args透传→[避坑规则]包装函数必须保留原始签名的完整参数
+- [触发条件]get_rig_fit_config_names("")报KeyError→[根因]ComboBox清空时currentText为空→[正确方案]用dict.get()防御→[避坑规则]任何dict[]访问必须考虑key不存在
+
+### import * 与下划线前缀
+- [触发条件]_safe_exec移到base.py后from .base import *无法导入→[根因]Python的import *排除下划线前缀名→[正确方案]显式import: from .base import _safe_exec→[避坑规则]下划线前缀函数必须显式导入,绝不能依赖import *

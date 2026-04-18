@@ -16,11 +16,17 @@ else:
     path = py_path
 
 if use_default:
-    if path in sys.path:
-        sys.path.remove(path)
     path = py_path
 
-if path not in sys.path:
+# Use normpath and normcase for robust cross-os matching
+norm_target = os.path.normcase(os.path.normpath(path))
+exists = False
+for p in sys.path:
+    if os.path.normcase(os.path.normpath(p)) == norm_target:
+        exists = True
+        break
+
+if not exists:
     sys.path.insert(0, path)
 
 

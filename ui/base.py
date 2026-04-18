@@ -125,6 +125,21 @@ def q_prefix(text, width):
     return prefix
 
 
+def _safe_exec(widget, *args):
+    """兼容 PySide2/6 的 exec 调用（Dialog / Menu 均适用）。"""
+    if hasattr(widget, "exec"):
+        return widget.exec(*args)
+    return widget.exec_(*args)
+
+
+def _match_filter(text, target_text):
+    """通用正则过滤匹配：text 为逗号分隔的搜索词，target_text 为待匹配文本。"""
+    fields = [field.replace("*", ".+") for field in text.split(",") if field]
+    if not fields:
+        return True
+    return any(bool(re.findall(field, target_text)) for field in fields)
+
+
 class List(QListWidget):
 
     def __init__(self, parent=None):
@@ -143,11 +158,9 @@ class List(QListWidget):
             self.menu.exec_(event.globalPos())
 
     def filter(self, text):
-        fields = [field.replace("*", ".+") for field in text.split(",") if field]
         for i in range(self.count()):
             item = self.item(i)
-            should_hide = not any([bool(re.findall(field, item.text())) for field in fields]+[not bool(fields)])
-            item.setHidden(should_hide)
+            item.setHidden(not _match_filter(text, item.text()))
             if text == item.text():
                 item.setSelected(True)
 
@@ -178,6 +191,19 @@ class ColorDelegate(QStyledItemDelegate):
             option.palette.setColor(QPalette.HighlightedText, QColor(Theme.COLOR_SELECTED) if has_driver else QColor(Theme.COLOR_DEFAULT_TEXT))
 
 
+def _apply_stretch_header(table_widget):
+    """通用 header 拉伸设置，兼容 PySide2/6。"""
+    header = table_widget.horizontalHeader()
+    try:
+        if hasattr(QHeaderView, 'Stretch'):
+            header.setSectionResizeMode(QHeaderView.Stretch)
+        else:
+            header.setStretchLastSection(True)
+    except Exception:
+         try: header.setResizeMode(QHeaderView.Stretch)
+         except Exception: pass
+
+
 class TargetGrid(QTableWidget):
 
     def __init__(self, parent=None):
@@ -205,7 +231,6 @@ class TargetGrid(QTableWidget):
                 item = self.item(i, j)
                 if not item: continue
                 has_driver = item.data(Qt.UserRole + 1)
-                # Regardless of the selection, set Foreground, the delegate will override HighlightedText!
                 item.setForeground(QColor(Theme.COLOR_ACTIVE) if has_driver else QColor(Theme.COLOR_INACTIVE))
 
     def contextMenuEvent(self, event):
@@ -323,16 +348,7 @@ class TargetGrid(QTableWidget):
                   self._target_items[t] = item
                   
         self.update_selection_colors()
-
-        header = self.horizontalHeader()
-        try:
-            if hasattr(QHeaderView, 'Stretch'):
-                header.setSectionResizeMode(QHeaderView.Stretch)
-            else:
-                header.setStretchLastSection(True)
-        except Exception:
-             try: header.setResizeMode(QHeaderView.Stretch)
-             except Exception: pass
+        _apply_stretch_header(self)
 
     def build_flat_list(self, search_text, all_existing):
         self.clear()
@@ -340,15 +356,8 @@ class TargetGrid(QTableWidget):
         self.setColumnCount(1)
         self.setHorizontalHeaderLabels([u"驱动目标"])
         
-        import re
-        fields = [field.replace("*", ".+") for field in search_text.split(",") if field]
-        
-        filtered_targets = []
-        for t in all_existing:
-             if not any([bool(re.findall(field, t)) for field in fields]+[not bool(fields)]):
-                  continue
-             filtered_targets.append(t)
-             
+        filtered_targets = [t for t in all_existing if _match_filter(search_text, t)]
+              
         self.setRowCount(len(filtered_targets))
         self._target_items = {}
         for i, t in enumerate(filtered_targets):
@@ -356,18 +365,10 @@ class TargetGrid(QTableWidget):
              item.setFlags(item.flags() & ~Qt.ItemIsEditable)
              item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
              item.setData(Qt.UserRole, t)
-             item.setData(Qt.UserRole + 1, True)  # <-- Give it the driver boolean tag
+             item.setData(Qt.UserRole + 1, True)
              item.setForeground(QColor(Theme.COLOR_ACTIVE))
              self.setItem(i, 0, item)
              self._target_items[t] = item
-             
-        header = self.horizontalHeader()
-        try:
-            if hasattr(QHeaderView, 'Stretch'):
-                header.setSectionResizeMode(QHeaderView.Stretch)
-            else:
-                header.setStretchLastSection(True)
-        except Exception:
-             try: header.setResizeMode(QHeaderView.Stretch)
-             except Exception: pass
+              
+        _apply_stretch_header(self)
 

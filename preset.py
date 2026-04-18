@@ -498,7 +498,7 @@ def run_module_with_progress(display, rig_group, settings, rebuild_fn):
                     progress_cb=lambda p: prog.advance(pct_ra * p, u"{} - 恢复骨骼偏移".format(display)))
             prog.advance(w("dgdirty"), u"{} - 刷新场景".format(display))
             cmds.dgdirty(a=True)
-            Cluster.finsh_edit_weights()
+            Cluster.finish_edit_weights()
 
 
 def load_preset(preset):
@@ -546,7 +546,7 @@ def load_preset(preset):
         load_preset_joint_additive(preset, selected_names)
 
     cmds.dgdirty(a=True)
-    Cluster.finsh_edit_weights()
+    Cluster.finish_edit_weights()
     load_preset_blend_shape(preset)
     load_preset_skin_weights(preset)
     from . import setmgr
@@ -719,7 +719,7 @@ class RigSnapshot(object):
         if self.keep_additive:
             self._restore_additive(self.additive_data)
         cmds.dgdirty(a=True)
-        Cluster.finsh_edit_weights()
+        Cluster.finish_edit_weights()
         print("[MFace2] restore {:.2f}s".format(time.time()-t_total))
 
     @staticmethod

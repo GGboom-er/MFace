@@ -13,12 +13,12 @@ def get_ids_points(bs, index):
     try:
         obj = api_ls(ict).getPlug(0).asMObject()
     except RuntimeError:
-        return dict()
+        return [], []
 
     ids = []
     fn_component_list = MFnComponentListData(obj)
     for i in range(fn_component_list.length()):
-        fn_component = MFnSingleIndexedComponent(fn_component_list.get(0))
+        fn_component = MFnSingleIndexedComponent(fn_component_list.get(i))
         ids.extend(fn_component.getElements())
     points = cmds.getAttr(ipt)
     return ids, points

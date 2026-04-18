@@ -9,6 +9,126 @@ try:
 except ImportError:
     _IS_MAYA = False
 
+# ---------- PySide 兼容导入 ----------
+try:
+    from PySide6.QtWidgets import QLabel
+    from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+    from PySide6.QtGui import QFont
+except ImportError:
+    try:
+        from PySide2.QtWidgets import QLabel
+        from PySide2.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+        from PySide2.QtGui import QFont
+    except ImportError:
+        QLabel = None
+
+
+# ---------- QLabel 浮窗 HUD ----------
+class _HudOverlay(QLabel):
+    """半透明淡出的视口浮窗提示，替代 cmds.inViewMessage。"""
+
+    _STAY_MS = 2000   # 停留时长（毫秒）
+    _FADE_MS = 1000   # 淡出时长（毫秒）
+
+    def __init__(self, msg, color="#00FF00"):
+        if QLabel is None:
+            return
+        # 获取 Maya 主窗口作为 parent，确保浮窗在 Maya 窗口层级内
+        import maya.OpenMayaUI as omui
+        try:
+            from shiboken6 import wrapInstance
+        except ImportError:
+            from shiboken2 import wrapInstance
+        from PySide6.QtWidgets import QWidget
+        maya_win = wrapInstance(int(omui.MQtUtil.mainWindow()), QWidget)
+
+        super().__init__(maya_win)
+
+        # ---- 窗口属性 ----
+        self.setWindowFlags(
+            Qt.FramelessWindowHint |
+            Qt.Tool |
+            Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+        # ---- 样式 ----
+        html = msg.replace("\n", "<br>")
+        self.setText(
+            '<div style="'
+            'background: rgba(0,0,0,90); '
+            'border-radius: 12px; '
+            'padding: 16px 28px; '
+            'text-align: center;'
+            '">'
+            '<span style="color:{color}; font-size:18px; '
+            'font-family: Segoe UI, Microsoft YaHei, sans-serif;">'
+            '{html}</span></div>'.format(color=color, html=html)
+        )
+        self.setFont(QFont("Segoe UI", 18))
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("background: transparent;")
+
+        # ---- 淡出定时器 ----
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._start_fade)
+
+    def popup(self):
+        """计算位置并显示。"""
+        if QLabel is None:
+            return
+        self.adjustSize()
+        # 尝试定位到活动 modelPanel 中央，否则用 Maya 主窗口中央
+        rect = self._get_viewport_rect()
+        x = rect[0] + (rect[2] - self.width()) // 2
+        y = rect[1] + (rect[3] - self.height()) // 2
+        self.move(x, y)
+        self.setWindowOpacity(1.0)
+        self.show()
+        self._timer.start(self._STAY_MS)
+
+    def _get_viewport_rect(self):
+        """获取活动 3D viewport 的屏幕矩形，返回 (x, y, w, h)。"""
+        import maya.OpenMayaUI as omui
+        try:
+            from shiboken6 import wrapInstance
+        except ImportError:
+            from shiboken2 import wrapInstance
+        from PySide6.QtWidgets import QWidget
+        try:
+            panel = cmds.getPanel(wf=True)
+            if cmds.getPanel(to=panel) == "modelPanel":
+                ptr = omui.MQtUtil.findControl(panel)
+                if ptr:
+                    widget = wrapInstance(int(ptr), QWidget)
+                    tl = widget.mapToGlobal(widget.rect().topLeft())
+                    return (tl.x(), tl.y(), widget.width(), widget.height())
+        except Exception:
+            pass
+        # fallback: Maya 主窗口
+        ptr = omui.MQtUtil.mainWindow()
+        widget = wrapInstance(int(ptr), QWidget)
+        tl = widget.mapToGlobal(widget.rect().topLeft())
+        return (tl.x(), tl.y(), widget.width(), widget.height())
+
+    def _start_fade(self):
+        """启动淡出动画。"""
+        self._anim = QPropertyAnimation(self, b"windowOpacity")
+        self._anim.setDuration(self._FADE_MS)
+        self._anim.setStartValue(1.0)
+        self._anim.setEndValue(0.0)
+        self._anim.setEasingCurve(QEasingCurve.OutQuad)
+        self._anim.finished.connect(self._on_fade_done)
+        self._anim.start()
+
+    def _on_fade_done(self):
+        """动画结束后销毁。"""
+        self.close()
+        self.deleteLater()
+
 
 class MFaceLogger(object):
     """
@@ -66,19 +186,31 @@ class MFaceLogger(object):
             return wrapper
         return decorator
 
-    # ====== 视口 HUD 提示（统一替代散落的 cmds.inViewMessage）======
-    _HUD_TEMPLATE = u'<span style="color: {color}; font-size: 20px;">{msg}</span>'
+    # ====== 视口 HUD 提示（QLabel 浮窗，替代 cmds.inViewMessage）======
+    _hud_overlay = None  # 当前活跃的浮窗实例（避免堆叠）
 
     @classmethod
     def hud(cls, msg, color="#00FF00"):
         """
-        在 Maya 视口正中央显示一行半透明淡出的富文本提示。
+        在 Maya 视口正中央显示半透明淡出的富文本提示（QLabel 浮窗）。
         :param msg: 提示文字，支持 \\n 换行
         :param color: 十六进制颜色，默认成功绿，警告用 #FFFF00，错误用 #FF0000
         """
-        if _IS_MAYA:
-            amg = cls._HUD_TEMPLATE.format(color=color, msg=msg)
-            cmds.inViewMessage(amg=amg, pos='midCenter', fade=True)
+        if not _IS_MAYA:
+            print("[MFace2 HUD] " + str(msg))
+            return
+        # 关闭上一条（不堆叠）
+        if cls._hud_overlay is not None:
+            try:
+                cls._hud_overlay.close()
+                cls._hud_overlay.deleteLater()
+            except RuntimeError:
+                pass
+            cls._hud_overlay = None
+
+        overlay = _HudOverlay(msg, color)
+        cls._hud_overlay = overlay
+        overlay.popup()
 
     @classmethod
     def confirm(cls, title, message, accept=u"确认", cancel=u"取消"):

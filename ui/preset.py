@@ -1,5 +1,6 @@
 # coding:utf-8
 from .base import *
+from .base import _safe_exec
 from .. import tools
 from maya import cmds
 import os
@@ -11,7 +12,7 @@ class Image(QWidget):
         QWidget.__init__(self, parent)
         self.icon = QIcon(path)
         self.setFixedSize(QImage(path).size())
-        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
+        self.mode = QIcon.Normal
         self.path = path
 
     def paintEvent(self, event):
@@ -34,23 +35,23 @@ class IconButton(Image):
 
     def mousePressEvent(self, event):
         super(IconButton, self).mousePressEvent(event)
-        self.mode = getattr(QIcon, 'Selected', QIcon.Mode.Selected) if hasattr(QIcon, 'Mode') else QIcon.Selected
+        self.mode = QIcon.Selected
         self.update_mode()
 
     def mouseReleaseEvent(self, event):
         super(IconButton, self).mouseReleaseEvent(event)
-        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
+        self.mode = QIcon.Normal
         self.clicked.emit()
         self.update_mode()
 
     def enterEvent(self, event):
         super(IconButton, self).enterEvent(event)
-        self.mode = getattr(QIcon, 'Active', QIcon.Mode.Active) if hasattr(QIcon, 'Mode') else QIcon.Active
+        self.mode = QIcon.Active
         self.update_mode()
 
     def leaveEvent(self, event):
         super(IconButton, self).leaveEvent(event)
-        self.mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
+        self.mode = QIcon.Normal
         self.update_mode()
 
 
@@ -67,8 +68,8 @@ class FitButton(IconButton):
         return cmds.objExists(name)
 
     def update_mode(self):
-        disabled_mode = getattr(QIcon, 'Disabled', QIcon.Mode.Disabled) if hasattr(QIcon, 'Mode') else QIcon.Disabled
-        normal_mode = getattr(QIcon, 'Normal', QIcon.Mode.Normal) if hasattr(QIcon, 'Mode') else QIcon.Normal
+        disabled_mode = QIcon.Disabled
+        normal_mode = QIcon.Normal
         
         if self.mode in [disabled_mode, normal_mode]:
             if self.is_fit_exist():
@@ -87,6 +88,7 @@ class Preset(QDialog):
     def __init__(self, preset="default"):
         QDialog.__init__(self, get_app())
         self.preset = preset
+        self.dynamic_widgets = []
         self.build_children()
 
     def build_children(self):
@@ -95,12 +97,14 @@ class Preset(QDialog):
         policy = getattr(Qt, 'CustomContextMenu', Qt.ContextMenuPolicy.CustomContextMenu) if hasattr(Qt, 'ContextMenuPolicy') else Qt.CustomContextMenu
         bg.setContextMenuPolicy(policy)
         bg.customContextMenuRequested.connect(self.show_menu)
+        self.dynamic_widgets.append(bg)
 
         for name in os.listdir(root):
             if not name.endswith("png"):
                 continue
             button_path = os.path.join(root, name).replace("\\", "/")
-            FitButton(self, button_path)
+            btn = FitButton(self, button_path)
+            self.dynamic_widgets.append(btn)
 
         build_path = os.path.abspath("{}/../../data/presets/build.png".format(__file__)).replace("\\", "/")
         build_button = IconButton(self, build_path)
@@ -108,6 +112,7 @@ class Preset(QDialog):
         build_button.setMask(QBitmap(QPixmap(build_path).mask().scaled(32, 32)))
         build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
         build_button.clicked.connect(self.build)
+        self.dynamic_widgets.append(build_button)
 
     def show_menu(self):
         menu = QMenu(self)
@@ -127,19 +132,17 @@ class Preset(QDialog):
         sub_save_load_delete(u"融合变形", "blend_shape")
         sub_save_load_delete(u"蒙皮权重", "skin_weights")
         menu.addAction(u"删除预设", self.delete_preset)
-        if hasattr(menu, "exec"):
-            menu.exec(QCursor.pos())
-        else:
-            menu.exec_(QCursor.pos())
+        _safe_exec(menu, QCursor.pos())
 
     def update_pngs(self):
         tools.save_preset_pngs(self.preset)
-        for children in self.findChildren(QWidget):
-            children.setParent(None)
-            children.deleteLater()
+        for widget in self.dynamic_widgets:
+            widget.setParent(None)
+            widget.deleteLater()
+        self.dynamic_widgets = []
         self.build_children()
-        for children in self.findChildren(QWidget):
-            children.setVisible(True)
+        for widget in self.dynamic_widgets:
+            widget.setVisible(True)
         self.update()
 
     def build(self):
@@ -192,7 +195,8 @@ window = None
 
 def show():
     global window
-    window = Preset()
+    if window is None:
+        window = Preset()
     window.showNormal()
 
 
