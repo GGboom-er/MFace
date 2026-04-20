@@ -763,7 +763,17 @@ def __force_update_threshold(target_name, value):
 def mirror_base_drive_target(target_name):
     ctrl, attr, default_value, value = get_base_sdk_data(target_name)
     mirror_ctrl = Fmt.mirror_name(ctrl)
-    attr_full = mirror_ctrl + "." + attr
+    # 从目标名提取原始属性名（如 real_rz），而非 get_base_sdk_data 剥离后的 rz
+    # 目标名格式: parsedCtrl_attrName_min/max
+    # 但 ctrl 是 Maya 节点全名，目标名用的是 parse_base_name(ctrl) 后的缩写
+    parsed_ctrl = parse_base_name(ctrl)
+    ctrl_prefix = parsed_ctrl + "_"
+    if target_name.startswith(ctrl_prefix):
+        remainder = target_name[len(ctrl_prefix):]  # e.g. "real_rz_max" or "rz_min"
+        original_attr = "_".join(remainder.split("_")[:-1])  # e.g. "real_rz" or "rz"
+    else:
+        original_attr = attr
+    attr_full = mirror_ctrl + "." + original_attr
     dst_target_name = get_target_name(attr_full, default_value, value)
     if not exist_target(dst_target_name):
         add_sdk(attr_full, dst_target_name, default_value, value)

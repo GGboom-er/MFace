@@ -268,7 +268,7 @@ class Ctrl(Hierarchy):
         self.follow.xform(ws=1, m=matrix)
         self.follow["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if self.is_left():
-            local = self.follow.xform(q=1, m=1)
+            local = _strip_scale_from_matrix(self.follow.xform(q=1, m=1))
             self.mirror.xform(ws=0, m=list(MMatrix(local).inverse()))
             self.mirror["sx"] = -1
             local = local[:]
@@ -299,11 +299,26 @@ class Ctrl(Hierarchy):
             return
         con = constraints[0]
         if cmds.objectType(con) == "pointConstraint":
-            cmds.dgdirty(con)
-            now_point = self.follow.xform(q=1, t=1, ws=1)
             bind_point = self.follow["bindPreMatrix"].get()[12:15]
-            old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o+b-n for n, b, o in zip(now_point, bind_point, old_offset)]
+            # 清零 offset 获取约束目标的纯世界坐标
+            cmds.setAttr(con + ".offset", 0, 0, 0)
+            cmds.dgdirty(con)
+            target_ws = self.follow.xform(q=1, t=1, ws=1)
+            # 世界空间增量
+            dx = bind_point[0] - target_ws[0]
+            dy = bind_point[1] - target_ws[1]
+            dz = bind_point[2] - target_ws[2]
+            # 通过父级逆矩阵精确转换到约束偏移的局部空间
+            parent = cmds.listRelatives(self.follow.name, parent=True)
+            if parent:
+                m = cmds.getAttr(parent[0] + ".worldInverseMatrix[0]")
+                new_offset = [
+                    m[0]*dx + m[4]*dy + m[8]*dz,
+                    m[1]*dx + m[5]*dy + m[9]*dz,
+                    m[2]*dx + m[6]*dy + m[10]*dz,
+                ]
+            else:
+                new_offset = [dx, dy, dz]
             cmds.setAttr(con + ".offset", *new_offset)
 
     def add_pin(self):
@@ -493,6 +508,20 @@ class Ctrl(Hierarchy):
             return ctrl
 
 
+def _strip_scale_from_matrix(m):
+    """从 4x4 list 矩阵中剥离缩放，返回纯旋转+位移的干净矩阵。
+    归一化前三列（旋转列向量），避免父级缩放污染 BlendWeighted 通道值。"""
+    m = list(m)
+    for col in range(3):  # x, y, z 旋转列
+        off = col * 4
+        length = (m[off] ** 2 + m[off + 1] ** 2 + m[off + 2] ** 2) ** 0.5
+        if length > 1e-8:
+            m[off] /= length
+            m[off + 1] /= length
+            m[off + 2] /= length
+    return m
+
+
 class Joint(Hierarchy):
 
     def __init__(self, name):
@@ -527,9 +556,11 @@ class Joint(Hierarchy):
         if local_matrix is None:
             root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
             local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+        # 剥离缩放：归一化旋转列向量，避免父级缩放污染 BlendWeighted 通道值
+        clean_local = _strip_scale_from_matrix(local_matrix)
         for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
             input_sum = cmds.getAttr(self.bws[i].name + ".output") - self.bws[i].get_default()
-            self.bws[i].set_default(local_matrix[j] - input_sum)
+            self.bws[i].set_default(clean_local[j] - input_sum)
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if reskin:
             self.re_skin(old_world)
@@ -556,7 +587,9 @@ class Joint(Hierarchy):
         local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         x, y, z, p = [local_matrix[i: i + 3] for i in range(0, 16, 4)]
         s = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [x, y, z]]
-        values = [local_matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
+        # 剥离缩放后提取旋转值，与 set_matrix 保持一致
+        clean_local = _strip_scale_from_matrix(local_matrix)
+        values = [clean_local[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
         for bw, value in zip(self.bws, values):
             bw.add_pose(weight, value)
 
@@ -797,6 +830,8 @@ class Cluster(Hierarchy):
             local_matrix = list(MMatrix(matrix) * MMatrix(parent_ws_inv))
         else:
             local_matrix = matrix
+        # 剥离缩放：避免父级缩放泄露到 decomposeMatrix 驱动的通道值
+        local_matrix = _strip_scale_from_matrix(local_matrix)
         self.pre["bindPreMatrix"].add(dt="matrix").set(local_matrix, typ="matrix")
         # 同时用 xform(ws=1) 设 Pre 位置（B 类无 DeMat 驱动时直接生效）
         self.pre.xform(ws=1, m=matrix)
