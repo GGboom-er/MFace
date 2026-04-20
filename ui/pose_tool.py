@@ -347,7 +347,9 @@ class FacePoseTool(QDialog):
                         try:
                             val = cmds.getAttr(ctrl_attr)
                             try:
-                                default = cmds.addAttr(ctrl_attr, q=True, dv=True)
+                                ctrl_node, attr_name = ctrl_attr.rsplit(".", 1)
+                                default_list = cmds.attributeQuery(attr_name, node=ctrl_node, listDefault=True)
+                                default = default_list[0] if default_list else 0.0
                             except Exception:
                                 default = 0.0
                             
@@ -355,17 +357,17 @@ class FacePoseTool(QDialog):
                                 tools.facs.add_sdk(ctrl_attr, target_name, default, val)
                                 targets.append(target_name)
                             else:
-                                logger.warning(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
+                                logger.hud(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
                         except Exception as e:
                             print(str(e))
             finally:
                 cmds.undoInfo(closeChunk=True)
 
-        if not targets:
+        if not targets and not sel_items:
             ctrl = self.line.text().strip()
             if not ctrl: return
             try:
-                # Fallback directly
+                # 仅在用户未选择网格条目时，使用自动检测
                 targets = tools.facs.add_sdk_by_selected([ctrl])
             except Exception as e:
                 logger.warning(u"从选择项添加驱动失败: %s" % str(e))

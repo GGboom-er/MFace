@@ -6,6 +6,9 @@ from .core import *
 from . import bs
 from .logger import logger
 
+# 可驱动的数值属性类型集合（统一 UI 过滤 + 自动检测共用）
+_NUMERIC_ATTR_TYPES = {"double", "float", "long", "short", "doubleAngle", "doubleLinear", "byte", "bool", "enum"}
+
 # 模块级变量：UI 弹窗确认后暂存 keep_ctrl_attrs，供 auto_duplicate_edit 取用
 _keep_ctrl_attrs = None
 
@@ -69,9 +72,7 @@ def find_add_sdk_data(ctrls=None):
         ctrls = [c for c in ctrls if cmds.objExists(c) and cmds.objectType(c) == "transform"]
         
     for ctrl in ctrls:
-        max_delta = 0.001
-        best_data = None
-        
+        # ── TRS 属性：独立收集每一个有显著偏移的属性 ──
         for trs in "trs":
             for xyz in "xyz":
                 attr = ctrl + '.' + trs + xyz
@@ -81,29 +82,29 @@ def find_add_sdk_data(ctrls=None):
                     continue
                 default = dict(t=0, r=0, s=1)[trs]
                 delta = abs(default - value)
-                if delta > max_delta:
-                    max_delta = delta
+                if delta > 0.001:
                     target_name = get_target_name(attr, default, value)
-                    best_data = dict(attr=attr, value=value, default_value=default, target_name=target_name)
-                    
+                    data.append(dict(attr=attr, value=value, default_value=default, target_name=target_name))
+
+        # ── 自定义属性：独立收集每一个有显著偏移的属性（不再赢家通吃）──
         for attr in cmds.listAttr(ctrl, ud=1, sn=1) or []:
-            node_attr = ctrl+"."+attr
+            node_attr = ctrl + "." + attr
             try:
-                if cmds.getAttr(node_attr, type=1) != "double":
+                # 跳过锁定属性（锁定属性无法 setAttr，不能作为 SDK 驱动源）
+                if cmds.getAttr(node_attr, lock=True):
                     continue
-                default = cmds.addAttr(node_attr, q=1, dv=1)
+                attr_type = cmds.getAttr(node_attr, type=1)
+                if attr_type not in _NUMERIC_ATTR_TYPES:
+                    continue
+                default_list = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+                default = default_list[0] if default_list else 0.0
                 value = cmds.getAttr(node_attr)
             except Exception:
                 continue
             delta = abs(default - value)
-            # Give priority to custom attributes if deltas are equal
-            if delta >= max_delta:
-                max_delta = delta
+            if delta > 0.001:
                 target_name = get_target_name(node_attr, default, value)
-                best_data = dict(attr=node_attr, value=value, default_value=default, target_name=target_name)
-                
-        if best_data:
-            data.append(best_data)
+                data.append(dict(attr=node_attr, value=value, default_value=default, target_name=target_name))
             
     return data
 
@@ -429,6 +430,8 @@ def get_base_sdk_data(target_name):
     if attr_name in ["real_rx", "real_ry", "real_rz"]:
         attr_name = attr_name[5:]
     if cmds.nodeType(ctrl) == "unitConversion":
+        # 穿透 unitConversion 节点，保留原始属性名作为回退
+        original_attr_name = attr_name
         attr_query = cmds.listConnections(ctrl, s=1, d=0, p=1)
         if not attr_query or len(attr_query) != 1:
             return
@@ -436,7 +439,11 @@ def get_base_sdk_data(target_name):
         if "." not in attr:
             return
         ctrl, attr_name = attr.split(".", 1)
-        attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
+        try:
+            attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
+        except Exception:
+            # 穿透后属性名查询失败（如 output 等内部名），回退使用穿透前的名称
+            attr_name = original_attr_name
     
     # Robustly find default value: Find the keyframe where the Driven Value (Target Weight) is 0.
     # The animCurve maps Driver Value (Time) -> Driven Value (Value).
@@ -524,7 +531,10 @@ def set_pose_by_target(target_name, ib):
         ctrl, attr, default_value, value = data
         ratio = float(_ib)/60.0 * float(ib)/60.0
         current_value = default_value + (value - default_value) * ratio
-        cmds.setAttr(ctrl+"."+attr, current_value)
+        try:
+            cmds.setAttr(ctrl+"."+attr, current_value)
+        except Exception:
+            pass  # 跳过锁定/连接的属性
 
 
 def set_pose_by_targets(target_names, ib=60, reset_other=True):

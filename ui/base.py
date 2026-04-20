@@ -276,9 +276,10 @@ class TargetGrid(QTableWidget):
                  attrs.append(trs + xyz)
                  
         if cmds.objExists(ctrl):
+            from .. import facs as facs_module
             ud_attrs = cmds.listAttr(ctrl, ud=True, sn=True) or []
             for ud in ud_attrs:
-                 if cmds.getAttr(ctrl + "." + ud, type=True) == "double":
+                 if cmds.getAttr(ctrl + "." + ud, type=True) in facs_module._NUMERIC_ATTR_TYPES:
                      attrs.append(ud)
                      
         row_count = len(attrs)
