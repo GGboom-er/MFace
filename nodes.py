@@ -226,9 +226,6 @@ class Node(object):
         return self
 
     def __getitem__(self, item):
-        if not self:
-            from .logger import logger
-            logger.warning(u"Node警告: 宿主对象 '%s' 不存在，却正在提取 '%s' 属性！这极易导致静默失败。" % (self.name, item))
         return Attr(self.name, item)
 
     def __setitem__(self, key, value):

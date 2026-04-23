@@ -519,13 +519,6 @@ def load_preset(preset):
         # 全新场景：全部模块都需要构建，无需保留
         selected = modules
 
-    # 收集被选中模块的全部资产名（用于过滤预设数据加载）
-    selected_names = set()
-    for mod in selected:
-        rg = mod["rig_group"]
-        if cmds.objExists(rg):
-            selected_names.update(cmds.listAttr(rg, ud=True) or [])
-
     # 逐模块处理（每模块独立进度条）
     need_snap = any(keep.values())
     load_preset_plane(preset)
@@ -535,6 +528,13 @@ def load_preset(preset):
         snap_settings = keep if need_snap else None
         rebuild_fn = lambda m=mod: rig.build_module_raw(m)
         run_module_with_progress(display, rig_group, snap_settings, rebuild_fn)
+
+    # rebuild 完成后收集资产名（此时 RigGroup 已创建，ud 属性已注册）
+    selected_names = set()
+    for mod in selected:
+        rg = mod["rig_group"]
+        if cmds.objExists(rg):
+            selected_names.update(cmds.listAttr(rg, ud=True) or [])
 
     # 未勾选保留的项从预设文件加载（按 selected_names 过滤，只触及被选模块）
     if not keep.get("keep_cluster"):

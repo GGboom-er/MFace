@@ -529,7 +529,7 @@ class Joint(Hierarchy):
         joint_parent = "Head_M" if cmds.objExists("Head_M") else Face()["Joint"].name
         self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), joint_parent, "joint")
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"] if self.joint else []
+        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
 
     def get(self):
         Face.build_callable(self)
@@ -558,9 +558,10 @@ class Joint(Hierarchy):
             local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
         # 剥离缩放：归一化旋转列向量，避免父级缩放污染 BlendWeighted 通道值
         clean_local = _strip_scale_from_matrix(local_matrix)
-        for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
-            input_sum = cmds.getAttr(self.bws[i].name + ".output") - self.bws[i].get_default()
-            self.bws[i].set_default(clean_local[j] - input_sum)
+        if self.bws[0]:
+            for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
+                input_sum = cmds.getAttr(self.bws[i].name + ".output") - self.bws[i].get_default()
+                self.bws[i].set_default(clean_local[j] - input_sum)
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if reskin:
             self.re_skin(old_world)
@@ -623,7 +624,7 @@ class Joint(Hierarchy):
             self.joint.xform(ws=1, m=matrix)
             self.joint["v"] = 0
             cons = cmds.listConnections(self.joint.name, s=0, d=1) or []
-            cons = cmds.ls(cons, typ=["orientConstraint", "parentConstraint"]) or []
+            cons = cmds.ls(cons, typ=["orientConstraint", "parentConstraint", "pointConstraint"]) or []
             cons = [con for con in cons if con.endswith("point") or con.endswith("orient")]
             delete_nodes(cons)
 
@@ -913,7 +914,7 @@ class Cluster(Hierarchy):
     def set_weight_data(self, data):
         for name, value in data.items():
             joint = Joint(name)
-            if not joint.joint or not joint.bws[0]:
+            if not joint.joint:
                 continue
             self.weight(joint).set(value)
 
