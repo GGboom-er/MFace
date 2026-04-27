@@ -291,7 +291,29 @@ class Ctrl(Hierarchy):
         cluster = Cluster(self.name)
         if cluster.cluster:
             cluster.set_matrix(matrix)
+        # 修复朝向：FCtrl 归零 + cluster.set_matrix 改变 Pre 旋转，
+        # 导致 orient 约束求解值偏移。用矩阵数学重算 offset 补偿。
+        # offset = desired_world * target_world.inverse()
+        ocon = self.follow.name + "_orient"
+        if cmds.objExists(ocon) and cmds.objectType(ocon) == "orientConstraint":
+            import math
+            targets = cmds.orientConstraint(ocon, q=1, tl=1)
+            target_ws = MMatrix(cmds.xform(targets[0], q=1, m=1, ws=1))
+            desired_ws = MMatrix(matrix)
+            offset_mat = desired_ws * target_ws.inverse()
+            ro = cmds.getAttr(self.follow.name + ".rotateOrder")
+            offset_euler = MTransformationMatrix(offset_mat).rotation()
+            offset_euler.reorderIt(ro)
+            cmds.setAttr(ocon + ".offset",
+                         math.degrees(offset_euler[0]),
+                         math.degrees(offset_euler[1]),
+                         math.degrees(offset_euler[2]))
         self.reset_constraint_offset()
+        # 修复级联：cluster.set_matrix 通过权重链路影响其他骨骼，
+        # 导致约束驱动的其他控制器偏移。重算所有非本身控制器的约束偏移恢复原位。
+        for other in Ctrl.all():
+            if other.name != self.name:
+                other.reset_constraint_offset()
 
     def reset_constraint_offset(self):
         constraints = self.follow["tx"].connects(s=1, d=0)
