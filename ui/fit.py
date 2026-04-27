@@ -39,7 +39,7 @@ class FitCreateTool(QDialog):
                     q_add(
                         QHBoxLayout(),
                         q_button(u"冻结变换", tools.ctrl_edit_selected_matrix),
-                        q_button(u"镜像位置", tools.ctrl_mirror_selected_matrix),
+                        q_button(u"镜像", tools.ctrl_mirror_selected_matrix),
                     ),
                     q_add(
                         QHBoxLayout(),

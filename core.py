@@ -366,15 +366,26 @@ class Ctrl(Hierarchy):
 
     @classmethod
     def mirror_selected_matrix(cls):
+        """将选中控制器的位置、朝向和 shape 一次性镜像到对侧控制器。
+        执行顺序：先镜像矩阵（重建 Mirror sx=-1 层级），再直接拷贝 shape。
+        """
         for ctrl in cls.selected():
             mirror_ctrl = Ctrl(Fmt.mirror_name(ctrl.name))
             if mirror_ctrl.name == ctrl.name:
                 continue
+            # 1. 镜像位置和朝向
             matrix = ctrl.output.xform(q=1, ws=1, m=1)
             for i in range(4):
                 matrix[i * 4 + 0] *= -1
                 matrix[0 * 4 + i] *= -1
             mirror_ctrl.edit_matrix(matrix)
+            # 2. 拷贝 shape（Mirror sx=-1 已处理视觉翻转，直接拷贝即可）
+            src = Control(t=ctrl.ctrl.name)
+            shape_data = src.get_shape()
+            if not shape_data:
+                continue
+            dst = Control(t=mirror_ctrl.ctrl.name)
+            Control(t=mirror_ctrl.ctrl.name, s=shape_data, c=dst.get_color(), ou=dst.get_outputs())
 
     @staticmethod
     def delete_selected():
