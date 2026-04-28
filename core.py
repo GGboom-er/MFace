@@ -278,64 +278,20 @@ class Ctrl(Hierarchy):
             self.flip.xform(ws=0, m=local)
         if self.is_dn():
             self.flip["sy"] = -1
-        # 修复朝向：set_matrix 改变 Follow 父级变换后，orient 约束求解值与
-        # 期望朝向不一致。用矩阵数学重算 offset 补偿。
-        # offset = desired_world * target_world.inverse()
-        ocon = self.follow.name + "_orient"
-        if cmds.objExists(ocon) and cmds.objectType(ocon) == "orientConstraint":
-            import math
-            targets = cmds.orientConstraint(ocon, q=1, tl=1)
-            target_ws = MMatrix(cmds.xform(targets[0], q=1, m=1, ws=1))
-            desired_ws = MMatrix(matrix)
-            offset_mat = desired_ws * target_ws.inverse()
-            ro = cmds.getAttr(self.follow.name + ".rotateOrder")
-            offset_euler = MTransformationMatrix(offset_mat).rotation()
-            offset_euler.reorderIt(ro)
-            cmds.setAttr(ocon + ".offset",
-                         math.degrees(offset_euler[0]),
-                         math.degrees(offset_euler[1]),
-                         math.degrees(offset_euler[2]))
         return self
 
     def edit_matrix(self, matrix):
         joint = Joint(self.name)
-        
-        # 将 FCtrl 本地归零
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        
-        # 规避 Maya UI 进程环境下的强力脏读（DG de-evaluation）延迟！
-        # 若我们在重置本机坐标后立刻测其本机的世界坐标，此时由于视窗 DG 延迟，返回的极有可能是修改前的缓存坐标，导致 inner 错误包含手动极值！
-        # 由于 FCtrl 目前位于本地零点，因此它此时的理论精确世界坐标，完全等于它的绝对父级（Anim 节点）的世界矩阵！
-        parent_node = cmds.listRelatives(self.ctrl.name, parent=True)
-        if parent_node:
-            pure_fctrl_ws = MMatrix(cmds.xform(parent_node[0], q=1, ws=1, m=1))
-        else:
-            pure_fctrl_ws = MMatrix(self.ctrl.xform(q=1, ws=1, m=1)) # 备用
-            
-        follow_ws = MMatrix(self.follow.xform(q=1, ws=1, m=1))
-        
-        inner_matrix = pure_fctrl_ws * follow_ws.inverse()
-        follow_matrix = list(inner_matrix.inverse() * MMatrix(matrix))
-        
         old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
-        
-        self.set_matrix(follow_matrix)
+        self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        
         if joint.joint:
-            joint.set_matrix(follow_matrix, old_world=old_world)
+            joint.set_matrix(matrix, old_world=old_world)
         cluster = Cluster(self.name)
         if cluster.cluster:
-            cluster.set_matrix(follow_matrix)
-        # 朝向补偿已在 set_matrix 中统一处理，此处 set_matrix 后
-        # 再次调用 set_matrix 防止刚绑定骨骼被 DG 管线强行扯偏。
-        self.set_matrix(follow_matrix)
+            cluster.set_matrix(matrix)
         self.reset_constraint_offset()
-        # 修复级联：cluster.set_matrix 通过权重链路影响其他骨骼，
-        # 导致约束驱动的其他控制器偏移。重算所有非本身控制器的约束偏移恢复原位。
-        for other in Ctrl.all():
-            if other.name != self.name:
-                other.reset_constraint_offset()
 
     def reset_constraint_offset(self):
         constraints = self.follow["tx"].connects(s=1, d=0)
