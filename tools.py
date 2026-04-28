@@ -238,7 +238,9 @@ def default_scene_json():
 
 
 def get_face_pose_filter():
-    return ",".join(cmds.ls(sl=1, type="transform"))
+    names = cmds.ls(sl=1, type="transform") or []
+    stripped = [n[5:] if n.startswith("FCtrl") else n for n in names]
+    return ",".join(stripped)
 
 
 # face poses

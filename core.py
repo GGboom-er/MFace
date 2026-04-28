@@ -278,21 +278,8 @@ class Ctrl(Hierarchy):
             self.flip.xform(ws=0, m=local)
         if self.is_dn():
             self.flip["sy"] = -1
-        return self
-
-    def edit_matrix(self, matrix):
-        joint = Joint(self.name)
-        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
-        self.set_matrix(matrix)
-        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        if joint.joint:
-            joint.set_matrix(matrix, old_world=old_world)
-        cluster = Cluster(self.name)
-        if cluster.cluster:
-            cluster.set_matrix(matrix)
-        # 修复朝向：FCtrl 归零 + cluster.set_matrix 改变 Pre 旋转，
-        # 导致 orient 约束求解值偏移。用矩阵数学重算 offset 补偿。
+        # 修复朝向：set_matrix 改变 Follow 父级变换后，orient 约束求解值与
+        # 期望朝向不一致。用矩阵数学重算 offset 补偿。
         # offset = desired_world * target_world.inverse()
         ocon = self.follow.name + "_orient"
         if cmds.objExists(ocon) and cmds.objectType(ocon) == "orientConstraint":
@@ -308,6 +295,22 @@ class Ctrl(Hierarchy):
                          math.degrees(offset_euler[0]),
                          math.degrees(offset_euler[1]),
                          math.degrees(offset_euler[2]))
+        return self
+
+    def edit_matrix(self, matrix):
+        joint = Joint(self.name)
+        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
+        self.set_matrix(matrix)
+        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        if joint.joint:
+            joint.set_matrix(matrix, old_world=old_world)
+        cluster = Cluster(self.name)
+        if cluster.cluster:
+            cluster.set_matrix(matrix)
+        # 朝向补偿已在 set_matrix 中统一处理，此处 cluster.set_matrix 后
+        # 再次调用 set_matrix 修复 Pre 旋转变化引起的 orient 偏移。
+        self.set_matrix(matrix)
         self.reset_constraint_offset()
         # 修复级联：cluster.set_matrix 通过权重链路影响其他骨骼，
         # 导致约束驱动的其他控制器偏移。重算所有非本身控制器的约束偏移恢复原位。

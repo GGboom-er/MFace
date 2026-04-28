@@ -656,7 +656,11 @@ class Hierarchy(object):
         if not cmds.objExists(parent):
             return []
         names = dict()
+        constraint_types = {"pointConstraint", "orientConstraint",
+                            "parentConstraint", "aimConstraint", "scaleConstraint"}
         for path in cmds.listRelatives(parent, ad=1) or []:
+            if cmds.objectType(path) in constraint_types:
+                continue
             for child in children:
                 if child in path:
                     names.setdefault(path.replace(child, "", 1), set()).add(child)

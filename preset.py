@@ -474,32 +474,36 @@ def run_module_with_progress(display, rig_group, settings, rebuild_fn):
                     module_names,
                     progress_cb=lambda p: prog.advance(pct_ca * p, u"{} - 采集骨骼偏移".format(display)))
 
-        # ── rebuild ──
-        rebuild_pct = 100 if not need_snap else w("rebuild")
-        prog.advance(0, u"{} - 构建绑定".format(display))
-        rebuild_fn()
-        prog.advance(rebuild_pct, u"{} - 构建完成".format(display))
+        # ── rebuild + restore（包裹在 undo chunk 中，一步可撤回）──
+        cmds.undoInfo(openChunk=True, chunkName=u"MFace_Rebuild_{}".format(display))
+        try:
+            rebuild_pct = 100 if not need_snap else w("rebuild")
+            prog.advance(0, u"{} - 构建绑定".format(display))
+            rebuild_fn()
+            prog.advance(rebuild_pct, u"{} - 构建完成".format(display))
 
-        # ── restore ──
-        if snap:
-            if snap.keep_ctrl or snap.keep_ctrl_transform:
-                prog.advance(w("restore_ctrl"), u"{} - 恢复控制器".format(display))
-                snap._restore_ctrl(snap.ctrl_data, restore_matrix=snap.keep_ctrl_transform)
-            if snap.keep_cluster:
-                prog.advance(w("restore_cluster"), u"{} - 恢复簇权重".format(display))
-                snap._restore_cluster(snap.cluster_data)
-            if snap.keep_sdk:
-                prog.advance(w("restore_sdk"), u"{} - 恢复 SDK".format(display))
-                snap._restore_sdk(snap.sdk_data)
-            if snap.keep_additive:
-                pct_ra = w("restore_additive")
-                prog.advance(0, u"{} - 恢复骨骼偏移".format(display))
-                snap._restore_additive_with_progress(
-                    snap.additive_data,
-                    progress_cb=lambda p: prog.advance(pct_ra * p, u"{} - 恢复骨骼偏移".format(display)))
-            prog.advance(w("dgdirty"), u"{} - 刷新场景".format(display))
-            cmds.dgdirty(a=True)
-            Cluster.finish_edit_weights()
+            # ── restore ──
+            if snap:
+                if snap.keep_ctrl or snap.keep_ctrl_transform:
+                    prog.advance(w("restore_ctrl"), u"{} - 恢复控制器".format(display))
+                    snap._restore_ctrl(snap.ctrl_data, restore_matrix=snap.keep_ctrl_transform)
+                if snap.keep_cluster:
+                    prog.advance(w("restore_cluster"), u"{} - 恢复簇权重".format(display))
+                    snap._restore_cluster(snap.cluster_data)
+                if snap.keep_sdk:
+                    prog.advance(w("restore_sdk"), u"{} - 恢复 SDK".format(display))
+                    snap._restore_sdk(snap.sdk_data)
+                if snap.keep_additive:
+                    pct_ra = w("restore_additive")
+                    prog.advance(0, u"{} - 恢复骨骼偏移".format(display))
+                    snap._restore_additive_with_progress(
+                        snap.additive_data,
+                        progress_cb=lambda p: prog.advance(pct_ra * p, u"{} - 恢复骨骼偏移".format(display)))
+                prog.advance(w("dgdirty"), u"{} - 刷新场景".format(display))
+                cmds.dgdirty(a=True)
+                Cluster.finish_edit_weights()
+        finally:
+            cmds.undoInfo(closeChunk=True)
 
 
 def load_preset(preset):
@@ -752,6 +756,14 @@ class RigSnapshot(object):
                     ctrl_obj = Ctrl(ctrl_name)
                     if ctrl_obj:
                         ctrl_obj.set_matrix(matrix_data)
+                        # 同步 Cluster/Pre 矩阵（和 edit_matrix 一致）
+                        cluster_obj = Cluster(ctrl_name)
+                        if cluster_obj.cluster:
+                            cluster_obj.set_matrix(matrix_data)
+                            # cluster.set_matrix 改变 Pre 旋转后需要
+                            # 重新设置 Follow 的 orient offset
+                            ctrl_obj.set_matrix(matrix_data)
+                        ctrl_obj.reset_constraint_offset()
             except Exception as e:
                 from .logger import logger
                 logger.warning(u"RigSnapshot._restore_ctrl 跳过 {}: {}".format(kwargs.get("t"), str(e)))
