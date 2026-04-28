@@ -300,9 +300,18 @@ class Ctrl(Hierarchy):
     def edit_matrix(self, matrix):
         joint = Joint(self.name)
         
-        # 将 FCtrl 本地归零，测算纯粹的层级空间偏差（即 InnerMatrix）
+        # 将 FCtrl 本地归零
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        pure_fctrl_ws = MMatrix(self.ctrl.xform(q=1, ws=1, m=1))
+        
+        # 规避 Maya UI 进程环境下的强力脏读（DG de-evaluation）延迟！
+        # 若我们在重置本机坐标后立刻测其本机的世界坐标，此时由于视窗 DG 延迟，返回的极有可能是修改前的缓存坐标，导致 inner 错误包含手动极值！
+        # 由于 FCtrl 目前位于本地零点，因此它此时的理论精确世界坐标，完全等于它的绝对父级（Anim 节点）的世界矩阵！
+        parent_node = cmds.listRelatives(self.ctrl.name, parent=True)
+        if parent_node:
+            pure_fctrl_ws = MMatrix(cmds.xform(parent_node[0], q=1, ws=1, m=1))
+        else:
+            pure_fctrl_ws = MMatrix(self.ctrl.xform(q=1, ws=1, m=1)) # 备用
+            
         follow_ws = MMatrix(self.follow.xform(q=1, ws=1, m=1))
         
         inner_matrix = pure_fctrl_ws * follow_ws.inverse()
