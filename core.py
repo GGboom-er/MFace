@@ -299,18 +299,28 @@ class Ctrl(Hierarchy):
 
     def edit_matrix(self, matrix):
         joint = Joint(self.name)
+        
+        # 将 FCtrl 本地归零，测算纯粹的层级空间偏差（即 InnerMatrix）
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        pure_fctrl_ws = MMatrix(self.ctrl.xform(q=1, ws=1, m=1))
+        follow_ws = MMatrix(self.follow.xform(q=1, ws=1, m=1))
+        
+        inner_matrix = pure_fctrl_ws * follow_ws.inverse()
+        follow_matrix = list(inner_matrix.inverse() * MMatrix(matrix))
+        
         old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
-        self.set_matrix(matrix)
+        
+        self.set_matrix(follow_matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        
         if joint.joint:
-            joint.set_matrix(matrix, old_world=old_world)
+            joint.set_matrix(follow_matrix, old_world=old_world)
         cluster = Cluster(self.name)
         if cluster.cluster:
-            cluster.set_matrix(matrix)
-        # 朝向补偿已在 set_matrix 中统一处理，此处 cluster.set_matrix 后
-        # 再次调用 set_matrix 修复 Pre 旋转变化引起的 orient 偏移。
-        self.set_matrix(matrix)
+            cluster.set_matrix(follow_matrix)
+        # 朝向补偿已在 set_matrix 中统一处理，此处 set_matrix 后
+        # 再次调用 set_matrix 防止刚绑定骨骼被 DG 管线强行扯偏。
+        self.set_matrix(follow_matrix)
         self.reset_constraint_offset()
         # 修复级联：cluster.set_matrix 通过权重链路影响其他骨骼，
         # 导致约束驱动的其他控制器偏移。重算所有非本身控制器的约束偏移恢复原位。

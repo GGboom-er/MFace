@@ -755,14 +755,24 @@ class RigSnapshot(object):
                     ctrl_name = short_name[5:]  # 去掉 "FCtrl" 前缀（5个字符）
                     ctrl_obj = Ctrl(ctrl_name)
                     if ctrl_obj:
+                        joint_obj = Joint(ctrl_name)
+                        old_world = None
+                        if joint_obj.joint:
+                            old_world = list(cmds.getAttr(joint_obj.joint.name + ".worldMatrix[0]"))
+
                         ctrl_obj.set_matrix(matrix_data)
+
+                        if joint_obj.joint:
+                            joint_obj.set_matrix(matrix_data, old_world=old_world)
+
                         # 同步 Cluster/Pre 矩阵（和 edit_matrix 一致）
                         cluster_obj = Cluster(ctrl_name)
                         if cluster_obj.cluster:
                             cluster_obj.set_matrix(matrix_data)
-                            # cluster.set_matrix 改变 Pre 旋转后需要
-                            # 重新设置 Follow 的 orient offset
-                            ctrl_obj.set_matrix(matrix_data)
+                            
+                        # 核心防偏拉扯：骨骼与集群对位结束后，可能触发 Maya DG 结算把 Follow 强行扯偏
+                        # 因此必须仿照 edit_matrix，在测算重置约束前再把 Follow 强行定回正确的目标坐标
+                        ctrl_obj.set_matrix(matrix_data)
                         ctrl_obj.reset_constraint_offset()
             except Exception as e:
                 from .logger import logger
