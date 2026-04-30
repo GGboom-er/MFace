@@ -375,15 +375,26 @@ def get_active_other_drivers(target_names):
         seen.add(ctrl_attr)
         try:
             val = cmds.getAttr(ctrl_attr)
+            
             if is_own_comb_driver:
                 # COMB 组件驱动：只有当前值偏离 SDK 阈值时才显示（用户手动改变了）
                 threshold = own_thresholds.get(ctrl_attr, default_value)
                 if abs(val - threshold) < 0.001:
                     continue  # 处于 COMB 正常激活状态，不需要用户干预
             else:
-                # 外部驱动：值在默认值附近则不显示
-                if abs(val - default_value) < 0.001:
+                # 外部驱动：查询真实的物理默认值（解决死区偏移导致 default_value!=0 的弹窗误报）
+                true_default = 0.0
+                try:
+                    default_array = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+                    if default_array:
+                        true_default = default_array[0]
+                except Exception:
+                    pass
+                
+                # 值在物理默认值附近则不显示
+                if abs(val - true_default) < 0.001:
                     continue
+
             found.append(dict(
                 ctrl_attr=ctrl_attr,
                 display_label=u"%s  (当前=%.3f)" % (ctrl_attr, val),

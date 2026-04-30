@@ -645,11 +645,20 @@ class RigSnapshot(object):
                 m = None
                 if cmds.objExists(ctrl.follow.name + ".bindPreMatrix"):
                     m = cmds.getAttr(ctrl.follow.name + ".bindPreMatrix")
+                
+                # 单独记录关节的 bindPreMatrix (为支持 roll_ctrl 这类控制器与关节不同坐标的情况)
+                jm = None
+                from .core import Joint
+                joint_obj = Joint(ctrl.name)
+                if joint_obj and joint_obj.additive and cmds.objExists(joint_obj.additive.name + ".bindPreMatrix"):
+                    jm = cmds.getAttr(joint_obj.additive.name + ".bindPreMatrix")
+
                 data.append(dict(
                     t=c.get_transform(),
                     s=c.get_shape(),
                     c=c.get_color(),
-                    m=m
+                    m=m,
+                    jm=jm
                 ))
             except Exception as e:
                 logger.warning(u"RigSnapshot: 采集控制器 {} 失败: {}".format(ctrl.name, e))
@@ -749,6 +758,7 @@ class RigSnapshot(object):
                     continue
                 # 提取矩阵数据（无论是否恢复，都从 kwargs 中移除）
                 matrix_data = kwargs.pop("m", None)
+                joint_matrix_data = kwargs.pop("jm", None)
                 Control(**kwargs)
                 # 通过 Ctrl.set_matrix 完整恢复（xform + bindPreMatrix + 约束偏移）
                 if restore_matrix and matrix_data and short_name.startswith("FCtrl"):
@@ -763,7 +773,9 @@ class RigSnapshot(object):
                         ctrl_obj.set_matrix(matrix_data)
 
                         if joint_obj.joint:
-                            joint_obj.set_matrix(matrix_data, old_world=old_world)
+                            # 优先使用关节单独缓存的矩阵（应对如 Jaw_M 等关节和控制器分离的情况），否则兼容旧版数据使用控制器矩阵
+                            j_mat = joint_matrix_data if joint_matrix_data else matrix_data
+                            joint_obj.set_matrix(j_mat, old_world=old_world)
 
                         # 同步 Cluster/Pre 矩阵（和 edit_matrix 一致）
                         cluster_obj = Cluster(ctrl_name)

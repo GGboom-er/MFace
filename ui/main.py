@@ -15,7 +15,7 @@ class MFaceMain(QDialog):
         QDialog.__init__(self, get_app())
         self.tab = QTabWidget(self)
         self.setLayout(q_add(QVBoxLayout(), self.tab))
-        self.setWindowTitle(u"MFace2.0")
+        self.setWindowTitle(u"MFace 4.0.2")
         self.fit = fit.FitCreateTool()
         self.cluster = cluster.ClusterTool()
         self.facePose = pose_tool.FacePoseTool()
