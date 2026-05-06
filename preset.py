@@ -773,9 +773,16 @@ class RigSnapshot(object):
                         ctrl_obj.set_matrix(matrix_data)
 
                         if joint_obj.joint:
-                            # 优先使用关节单独缓存的矩阵（应对如 Jaw_M 等关节和控制器分离的情况），否则兼容旧版数据使用控制器矩阵
-                            j_mat = joint_matrix_data if joint_matrix_data else matrix_data
-                            joint_obj.set_matrix(j_mat, old_world=old_world)
+                            # 判定是否为 roll 类型的控制器（即控制器与关节初始生成点分离的类型，如 Jaw_M）
+                            # roll 类型的骨骼位置严格依赖 Fit 点，如果重构时将其强制设回快照缓存的位置，会导致它无视用户对 Fit 点的更新
+                            ctrl_typ = ""
+                            if cmds.objExists(ctrl_obj.follow.name + ".typ"):
+                                ctrl_typ = cmds.getAttr(ctrl_obj.follow.name + ".typ")
+                            
+                            if ctrl_typ != "roll":
+                                # 优先使用关节单独缓存的矩阵，否则兼容旧版数据使用控制器矩阵
+                                j_mat = joint_matrix_data if joint_matrix_data else matrix_data
+                                joint_obj.set_matrix(j_mat, old_world=old_world)
 
                         # 同步 Cluster/Pre 矩阵（和 edit_matrix 一致）
                         cluster_obj = Cluster(ctrl_name)

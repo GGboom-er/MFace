@@ -294,32 +294,45 @@ class Ctrl(Hierarchy):
         self.reset_constraint_offset()
 
     def reset_constraint_offset(self):
-        constraints = self.follow["tx"].connects(s=1, d=0)
-        if not constraints:
-            return
-        con = constraints[0]
-        if cmds.objectType(con) == "pointConstraint":
-            bind_point = self.follow["bindPreMatrix"].get()[12:15]
-            # 清零 offset 获取约束目标的纯世界坐标
-            cmds.setAttr(con + ".offset", 0, 0, 0)
-            cmds.dgdirty(con)
-            target_ws = self.follow.xform(q=1, t=1, ws=1)
-            # 世界空间增量
-            dx = bind_point[0] - target_ws[0]
-            dy = bind_point[1] - target_ws[1]
-            dz = bind_point[2] - target_ws[2]
-            # 通过父级逆矩阵精确转换到约束偏移的局部空间
-            parent = cmds.listRelatives(self.follow.name, parent=True)
-            if parent:
-                m = cmds.getAttr(parent[0] + ".worldInverseMatrix[0]")
-                new_offset = [
-                    m[0]*dx + m[4]*dy + m[8]*dz,
-                    m[1]*dx + m[5]*dy + m[9]*dz,
-                    m[2]*dx + m[6]*dy + m[10]*dz,
-                ]
-            else:
-                new_offset = [dx, dy, dz]
-            cmds.setAttr(con + ".offset", *new_offset)
+        # 1. Point Constraint
+        pt_cons = self.follow["tx"].connects(s=1, d=0)
+        if pt_cons:
+            con = pt_cons[0]
+            if cmds.objectType(con) == "pointConstraint":
+                bind_point = self.follow["bindPreMatrix"].get()[12:15]
+                # 清零 offset 获取约束目标的纯世界坐标
+                cmds.setAttr(con + ".offset", 0, 0, 0)
+                cmds.dgdirty(con)
+                target_ws = self.follow.xform(q=1, t=1, ws=1)
+                # 世界空间增量
+                dx = bind_point[0] - target_ws[0]
+                dy = bind_point[1] - target_ws[1]
+                dz = bind_point[2] - target_ws[2]
+                # 通过父级逆矩阵精确转换到约束偏移的局部空间
+                parent = cmds.listRelatives(self.follow.name, parent=True)
+                if parent:
+                    m = cmds.getAttr(parent[0] + ".worldInverseMatrix[0]")
+                    new_offset = [
+                        m[0]*dx + m[4]*dy + m[8]*dz,
+                        m[1]*dx + m[5]*dy + m[9]*dz,
+                        m[2]*dx + m[6]*dy + m[10]*dz,
+                    ]
+                else:
+                    new_offset = [dx, dy, dz]
+                cmds.setAttr(con + ".offset", *new_offset)
+
+        # 2. Orient Constraint
+        or_cons = self.follow["rx"].connects(s=1, d=0)
+        if or_cons:
+            con = or_cons[0]
+            if cmds.objectType(con) == "orientConstraint":
+                bind_m = self.follow["bindPreMatrix"].get()
+                # 因为上面点约束查询 xform 可能触发了 DG 更新，把旋转拉扯回了错误状态
+                # 所以我们必须先把它掰回正确的预设世界矩阵
+                self.follow.xform(ws=1, m=bind_m)
+                targets = cmds.orientConstraint(con, q=1, tl=1)
+                if targets:
+                    cmds.orientConstraint(targets, self.follow.name, e=1, mo=1)
 
     def add_pin(self):
         pin = Node(name="Pin"+self.name, parent="MFacePins").get()
