@@ -357,7 +357,14 @@ class TargetGrid(QTableWidget):
         self.setColumnCount(1)
         self.setHorizontalHeaderLabels([u"驱动目标"])
         
-        filtered_targets = [t for t in all_existing if _match_filter(search_text, t)]
+        from ..facs import parse_base_name
+        clean_fields = []
+        for field in search_text.split(","):
+            if field.strip():
+                clean_fields.append(parse_base_name(field.strip()))
+        clean_search_text = ",".join(clean_fields)
+        
+        filtered_targets = [t for t in all_existing if _match_filter(clean_search_text, t)]
               
         self.setRowCount(len(filtered_targets))
         self._target_items = {}
