@@ -229,6 +229,41 @@ def __clear_all_bw_orphans():
     print("="*50 + u"\n")
 
 clear_all_bw_orphans = undo(__clear_all_bw_orphans)
+
+def __hard_refresh_blend_weighted():
+    import maya.cmds as cmds
+    from .logger import logger
+    
+    bws = cmds.ls(type="blendWeighted")
+    if not bws:
+        return
+        
+    print(u"\n" + "="*50)
+    print(u"[深度刷新] 扫描全场 %d 个 blendWeighted 节点..." % len(bws))
+    
+    refreshed_count = 0
+    for bw in bws:
+        if cmds.attributeQuery('default', node=bw, exists=True):
+            try:
+                val = cmds.getAttr(bw + ".default")
+                cmds.setAttr(bw + ".default", val + 1.0)
+                cmds.dgdirty(bw)
+                cmds.setAttr(bw + ".default", val)
+                refreshed_count += 1
+            except Exception:
+                pass
+                
+    print(u"-"*50)
+    if refreshed_count > 0:
+        print(u"  总计深度刷新 %d 个包含 default 属性的叠加节点。" % refreshed_count)
+        logger.hud(u"已成功对全场景 %d 个 blendWeighted 节点进行深度脏数据刷新！" % refreshed_count)
+    else:
+        print(u"  未找到需要刷新的节点。")
+        logger.hud(u"未找到需要刷新的 Additive 节点。")
+    print("="*50 + u"\n")
+
+hard_refresh_blend_weighted = undo(__hard_refresh_blend_weighted)
+
 def default_scene_json():
     path = cmds.file(q=1, sn=1)
     if path:

@@ -51,6 +51,10 @@ class FitCreateTool(QDialog):
                         q_button(u"跟随模型", tools.ctrl_follow_to_selected_polygon),
                         q_button(u"删除选择", tools.ctrl_delete_selected),
                     ),
+                    q_add(
+                        QHBoxLayout(),
+                        q_button(u"深度刷新缓存", tools.hard_refresh_blend_weighted),
+                    ),
                 ),
                 q_box(
                     u"预设",

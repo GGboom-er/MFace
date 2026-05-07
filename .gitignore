@@ -4,6 +4,7 @@ __pycache__/
 .vscode/
 .claude/
 .gemini/
+scratch/
 debug*.json
 debug*.txt
 lid_joints.txt
