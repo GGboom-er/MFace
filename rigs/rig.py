@@ -45,7 +45,11 @@ class RigSystem(object):
                 k = cls.__name__
                 if not attr.startswith(k):
                     continue
-                cls(attr[len(k):]).delete()
+                try:
+                    cls(attr[len(k):]).delete()
+                except Exception as _e:
+                    from ..logger import logger
+                    logger.warning(u"MFace2: remove_useless 跳过 %s: %s" % (attr, _e))
                 self.root[attr].delete()
 
     def delete(self):

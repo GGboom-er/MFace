@@ -1028,7 +1028,16 @@ def auto_duplicate_edit(targets):
 
     targets, cross_msgs = resolve_target_crossings(targets)
 
-    # 1. 记录当前所有的控制器属性（不仅是被驱动端，还要包括用户手捏的所有控制器，以防循环注射时清空第二目标）
+    # 1. 记录被驱动端的目标控制器状态（用于最后恢复它的初始值）
+    driver_states = {}
+    for target in targets:
+        data = get_base_sdk_data(target)
+        if data:
+            ctrl, attr, _, _ = data
+            try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
+            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+
+    # 1.5 记录当前所有的控制器属性（包括源控制器，仅用于多目标循环时防第一轮将其清零）
     full_ctrl_states = {}
     for ctrl in Ctrl.all():
         if ctrl.ctrl:
@@ -1040,17 +1049,17 @@ def auto_duplicate_edit(targets):
 
     # 2. 核心注入逻辑：提取骨骼数据与纯数据 BS 内存差分注入（基于 snapshot）
     for target in targets:
-        # 每次迭代前，确保用户捏的 WYSIWYG pose 被完整还原（因为 edit_joint_target 内部会执行 reset_all）
+        # 每次迭代前，确保用户捏的 WYSIWYG pose 被完整还原（防止多目标同时修改时，第二目标捕捉到 0）
         for attr, val in full_ctrl_states.items():
             try: cmds.setAttr(attr, val)
             except: pass
             
         edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
         
-    # 3. 注入完成后，彻底还原用户的所有控制器到最初的 WYSIWYG 状态
-    for attr, val in full_ctrl_states.items():
+    # 3. 注入完成后，仅还原【目标控制器】，允许其余的源控制器自然归零（也就是常说的“还原归位”）
+    for attr, val in driver_states.items():
         try: cmds.setAttr(attr, val)
-        except: pass
+        except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
         
     # 4. 自动更新极限阈值（可能弹窗）
     updated_msgs = []
