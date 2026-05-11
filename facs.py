@@ -582,6 +582,16 @@ def run_joint_or_polygon(joint_fun, polygon_fun, *args, **kwargs):
     if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
         polygon_fun(*args, **kwargs)
 
+def _create_bs_mesh_snapshot(bs_node, prefix=""):
+    u"""创建并分离出包含当前 outputGeometry[0] 状态的物理网格（无 SkinCluster）"""
+    import maya.cmds as cmds
+    tmp_transform = cmds.createNode("transform", name=f"{prefix}_{bs_node}_snap_transform")
+    tmp_shape = cmds.createNode("mesh", parent=tmp_transform, name=f"{prefix}_{bs_node}_snap_shape")
+    cmds.connectAttr(bs_node + ".outputGeometry[0]", tmp_shape + ".inMesh")
+    cmds.refresh()
+    cmds.disconnectAttr(bs_node + ".outputGeometry[0]", tmp_shape + ".inMesh")
+    return tmp_transform
+
 
 @keep_selected
 def edit_joint_target(target_name, keep_ctrl_attrs=None):
@@ -594,63 +604,112 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
         
     exclude = set(keep_ctrl_attrs) if keep_ctrl_attrs else set()
 
-    driver_cache = []
     base_targets = get_base_targets([target_name])
-    for base_target in base_targets:
-        data = get_base_sdk_data(base_target)
-        if data:
-            ctrl, attr, _, _ = data
-            try: driver_cache.append((ctrl + "." + attr, cmds.getAttr(ctrl + "." + attr)))
-            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
     joints = Joint.all()
     matrices = [joint.joint.xform(q=1, ws=1, m=1) for joint in joints]
     
-    # 从 "ctrl.attr" 提取纯节点名，用于跳过绑定控制器的 Transform 重置（支持去命名空间以保证强匹配）
-    exclude_ctrl_names = {parse_base_name(ca.split(".")[0]) for ca in exclude}
+    # [BS Track] 1. 抓取当前界面纯 WYSIWYG 状态（此时任何控制器都还未被重置，最真实的界面快照）
+    bs_nodes = cmds.ls(type="blendShape") or []
+    active_bs_nodes = []
+    for bs_node in bs_nodes:
+        aliases = cmds.aliasAttr(bs_node, q=True) or []
+        has_active = False
+        for i in range(0, len(aliases), 2):
+            try:
+                if abs(cmds.getAttr(bs_node + "." + aliases[i])) > 0.0001:
+                    has_active = True
+                    break
+            except Exception:
+                continue
+        if has_active:
+            active_bs_nodes.append(bs_node)
 
-    # 重置未被「排除」的绑定控制器（捕获直接移动的控制器变换）
-    for ctrl in Ctrl.all():
-        short_name = parse_base_name(ctrl.ctrl.name)
-        if short_name not in exclude_ctrl_names:
-            ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-
-    # 重置未被「排除」的 Pose 驱动控制器（按精确 ctrl.attr 匹配）
-    reset_all(exclude_ctrl_attrs=exclude)
-
-    # 始终将目标自身驱动恢复到快照时的值，确保基准与快照的驱动状态一致
-    # 但对 COMB 目标中被排除（exclude）的组件驱动，不恢复快照值（下面单独处理）
-    for attr_val, val in driver_cache:
-        if attr_val in exclude:
-            continue
-        try:
-            cmds.setAttr(attr_val, val)
-        except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-
-    # COMB 目标特殊处理：将被排除的组件驱动恢复到 SDK 阈值
-    # 数学原理：delta = snapshot - base。如果 base 包含被排除驱动的单独效果，
-    # 那么 delta 会自动减去该效果。当 COMB 激活时：
-    # a_individual + b_individual + delta = a_indiv + b_indiv + (-a_indiv + adjustment) = b_indiv + adjustment
-    if "_COMB_" in target_name and exclude:
+    wysiwyg_bs_meshes = {}
+    native_bs_meshes = {}
+    try:
+        for bs_node in active_bs_nodes:
+            wysiwyg_bs_meshes[bs_node] = _create_bs_mesh_snapshot(bs_node, prefix="wysiwyg")
+        # 从 "ctrl.attr" 提取纯节点名，用于跳过绑定控制器的 Transform 重置（支持去命名空间以保证强匹配）
+        exclude_ctrl_names = {parse_base_name(ca.split(".")[0]) for ca in exclude}
+    
+        # 重置未被「排除」的绑定控制器（捕获直接移动的控制器变换）
+        for ctrl in Ctrl.all():
+            if not ctrl.ctrl:
+                continue
+            short_name = parse_base_name(ctrl.ctrl.name)
+            if short_name not in exclude_ctrl_names:
+                ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    
+        # 重置未被「排除」的 Pose 驱动控制器（按精确 ctrl.attr 匹配）
+        reset_all(exclude_ctrl_attrs=exclude)
+    
+        # 【终极底层修正】强制将当前目标的所有底层驱动恢复到其被定义时的 SDK 阈值
         for base_target in base_targets:
             data = get_base_sdk_data(base_target)
             if data:
                 ctrl, attr, default_value, threshold = data
                 ca = ctrl + "." + attr
-                if ca in exclude:
-                    try: cmds.setAttr(ca, threshold)
-                    except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-
-    cleaned_joints = 0
-    cleaned_bws = 0
+                try: cmds.setAttr(ca, threshold)
+                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
     
+        cleaned_joints = 0
+        cleaned_bws = 0
+        
+        # [BS Track] 2. 抓取被推至阈值后的原生基底状态 (Native At Threshold)
+        for bs_node in active_bs_nodes:
+            native_bs_meshes[bs_node] = _create_bs_mesh_snapshot(bs_node, prefix="native")
+        
+        # [BS Track] 3. 计算最终注入的纯数据 BS 差分并使用 C++ API 直接注入目标内存
+        from .api_lib import bs_api
+        from maya.api import OpenMaya as om
+        from .bs import add_target, get_index
+        
+        for bs_node in active_bs_nodes:
+            w_mesh = wysiwyg_bs_meshes[bs_node]
+            n_mesh = native_bs_meshes[bs_node]
+            
+            # 验证是否有差值
+            sel = om.MSelectionList()
+            sel.add(w_mesh)
+            w_dag = sel.getDagPath(0)
+            w_dag.extendToShape()
+            w_pts = om.MFnMesh(w_dag).getPoints(om.MSpace.kObject)
+            sel.clear()
+            sel.add(n_mesh)
+            n_dag = sel.getDagPath(0)
+            n_dag.extendToShape()
+            n_pts = om.MFnMesh(n_dag).getPoints(om.MSpace.kObject)
+            
+            has_delta = False
+            for i in range(len(w_pts)):
+                if w_pts[i].distanceTo(n_pts[i]) > 0.0001:
+                    has_delta = True
+                    break
+                    
+            if has_delta:
+                # 确保目标通道存在
+                add_target(bs_node, target_name)
+                index = get_index(bs_node, target_name)
+                if index is not None:
+                    # 注入 Delta (wysiwyg - native)
+                    bs_api.edit_static_target(bs_node, index, w_mesh, n_mesh)
+    finally:
+        # 清理所有临时网格，确保即使发生异常也不残留垃圾
+        for w_mesh in wysiwyg_bs_meshes.values():
+            if cmds.objExists(w_mesh):
+                cmds.delete(w_mesh)
+        for n_mesh in native_bs_meshes.values():
+            if cmds.objExists(n_mesh):
+                cmds.delete(n_mesh)
+
     for joint, matrix in zip(joints, matrices):
         # 1. 在写入前，提前抓取当前复位后的干净底座矩阵，计算运动差值
         rest_m = joint.joint.xform(q=1, ws=1, m=1)
         matrix_diff = sum([abs(a - b) for a, b in zip(matrix, rest_m)])
         
         # 2. 原版无毒、无损地注入驱动数据（不在此前杀菌以免破坏输出读值）
-        joint.add_pose(Face()["Additive"][target_name], matrix)
+        joint.add_pose(Face()["Additive"][target_name], matrix, rest_m)
 
         # 3. [后置并靶向清查钩子] 仅在这根骨头【真实活动且被注入了差分数据后】，对其进行垃圾清理
         # 这样既不会影响提取数据时的节点网络评价，也能精准剥除残留在有效骨架上的错位幽灵
@@ -699,6 +758,10 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
         
     # Safeguard against cross-axis RuntimeError (Cannot move keys)
     if (value - default_value) * (old_value - default_value) < -0.0001:
+        return False, old_value
+        
+    # 防止极值被更新为默认值（如0），这会导致 SDK 驱动区间失效 (0到0)
+    if abs(value - default_value) < 0.0001:
         return False, old_value
         
     if abs(value - old_value) > 0.001:
@@ -893,7 +956,12 @@ def delete_drive_target(target_names):
     target_names = list(filter(exist_target, target_names))
     bridge = get_bridge()
     for target_name in target_names:
+        conns = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
         cmds.deleteAttr(bridge + '.' + target_name)
+        if conns:
+            for conn in conns:
+                if cmds.objExists(conn):
+                    cmds.delete(conn)
         update_ib(target_name)
 
 
@@ -949,74 +1017,54 @@ def restore_controllers():
 
 
 def auto_duplicate_edit(targets):
-    polygons = bs.get_selected_polygons()
-    is_finishing = bs.is_on_duplicate_edit()
+    """
+    一键所见即所得：将当前的姿势（骨骼+BS）直接差分计算并注入目标驱动。
+    不再进入中间的雕刻模式（Sculpt Edit Mode）。
+    """
+    # 防御：如果此前意外卡在老版雕刻模式里，先退出
+    if bs.is_on_duplicate_edit():
+        try: bs.finish_duplicate_edit(lambda x: None)
+        except: pass
 
-    cross_msgs = []
-    if not is_finishing:
-        targets, cross_msgs = resolve_target_crossings(targets)
+    targets, cross_msgs = resolve_target_crossings(targets)
 
-    # 精准捕捉 Driver 状态，确保被驱动端能正常归零烘焙
-    driver_states = {}
+    # 1. 记录当前所有的控制器属性（不仅是被驱动端，还要包括用户手捏的所有控制器，以防循环注射时清空第二目标）
+    full_ctrl_states = {}
+    for ctrl in Ctrl.all():
+        if ctrl.ctrl:
+            # 必须加 scalar=True，否则会抓取到 translate 等复合属性，导致后续 setAttr 报错
+            for attr in cmds.listAttr(ctrl.ctrl.name, k=True, scalar=True) or []:
+                full_attr = ctrl.ctrl.name + "." + attr
+                try: full_ctrl_states[full_attr] = cmds.getAttr(full_attr)
+                except: pass
+
+    # 2. 核心注入逻辑：提取骨骼数据与纯数据 BS 内存差分注入（基于 snapshot）
     for target in targets:
-        data = get_base_sdk_data(target)
-        if data:
-            ctrl, attr, _, _ = data
-            try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
-            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-
-    if not polygons and not is_finishing:
-        for target in targets:
-            edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
-            
-        updated_msgs = []
-        for target in targets:
-            updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
-            if updated:
-                updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
-                
-        for attr, val in driver_states.items():
+        # 每次迭代前，确保用户捏的 WYSIWYG pose 被完整还原（因为 edit_joint_target 内部会执行 reset_all）
+        for attr, val in full_ctrl_states.items():
             try: cmds.setAttr(attr, val)
-            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+            except: pass
             
-        if cross_msgs or updated_msgs:
-            logger.hud("\n".join(cross_msgs + updated_msgs))
-        else:
-            logger.hud(u"[%s] —— 修改成功 (极值不变)" % "\n".join(targets))
-        return targets
+        edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
+        
+    # 3. 注入完成后，彻底还原用户的所有控制器到最初的 WYSIWYG 状态
+    for attr, val in full_ctrl_states.items():
+        try: cmds.setAttr(attr, val)
+        except: pass
+        
+    # 4. 自动更新极限阈值（可能弹窗）
+    updated_msgs = []
+    for target in targets:
+        updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
+        if updated:
+            updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
+            
+    if cross_msgs or updated_msgs:
+        logger.hud("\n".join(cross_msgs + updated_msgs))
     else:
-        if not is_finishing:
-            for target in targets:
-                edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
-                auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
-
-            def clone_to_pose(t):
-                to_pose(t)
-
-            bs.auto_duplicate_edit(list(map(get_driver_attr, targets)), clone_to_pose)
-            
-            for attr, val in driver_states.items():
-                try: cmds.setAttr(attr, val)
-                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-        else:
-            bs.auto_duplicate_edit(list(map(get_driver_attr, targets)), to_pose)
-            updated_msgs = []
-            for target in targets:
-                edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
-                updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
-                if updated:
-                    updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
-            for attr, val in driver_states.items():
-                try: cmds.setAttr(attr, val)
-                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-                
-            msg = u"[%s] —— 模型修改并应用成功！" % "\n".join(targets)
-            if updated_msgs:
-                msg += "\n" + "\n".join(updated_msgs)
-            if cross_msgs:
-                msg += "\n" + "\n".join(cross_msgs)
-            logger.hud(msg)
-        return targets
+        logger.hud(u"[%s] —— 所见即所得直接注入成功 (极值不变)" % "\n".join(targets))
+        
+    return targets
 
 
 def cancel_duplicate_edit(targets):

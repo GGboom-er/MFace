@@ -272,9 +272,12 @@ class BlendWeighted(Node):
     def get_default(self):
         return self.default.add(k=1, at="double").get()
 
-    def add_pose(self, weight, value):
+    def add_pose(self, weight, value, rest_value=None):
         cmds.dgdirty(self.name)
-        value -= self.output.get()
+        if rest_value is not None:
+            value -= rest_value
+        else:
+            value -= self.output.get()
         name = weight.attr
         weight_attr = self[name+"W"]
         if weight_attr:
@@ -652,7 +655,13 @@ class Hierarchy(object):
         return Hierarchy(fmt, root, self)
 
     @staticmethod
-    def ls(parent, children):
+    def ls(parent, children, rule="@*"):
+        """
+        根据 rule 模板逆向解析核心名称。
+        rule: '@' 代表 child 组件名，'*' 代表待提取的核心 name。
+              例如 '@*' 提取前缀 (FollowJaw_M -> Jaw_M)
+              例如 '*_@' 提取后缀 (Jaw_M_Follow -> Jaw_M)
+        """
         if not cmds.objExists(parent):
             return []
         names = dict()
@@ -661,9 +670,20 @@ class Hierarchy(object):
         for path in cmds.listRelatives(parent, ad=1) or []:
             if cmds.objectType(path) in constraint_types:
                 continue
+            # 【架构级修复】强制剥离可能存在的命名空间或完整路径，只提取干净的节点短名
+            short_name = path.split("|")[-1].split(":")[-1]
             for child in children:
-                if child in path:
-                    names.setdefault(path.replace(child, "", 1), set()).add(child)
+                # 动态解析前缀和后缀要求
+                prefix, suffix = rule.replace('@', child).split('*')
+                
+                # 双端严格匹配
+                if short_name.startswith(prefix) and (not suffix or short_name.endswith(suffix)):
+                    # 确保提取的内容不为空
+                    if len(short_name) >= len(prefix) + len(suffix):
+                        extracted_name = short_name[len(prefix): len(short_name)-len(suffix) if suffix else len(short_name)]
+                        if extracted_name:
+                            names.setdefault(extracted_name, set()).add(child)
+                            
         count = len(children)
         return [k for k, v in names.items() if len(v) == count]
 

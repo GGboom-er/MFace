@@ -420,7 +420,7 @@ class Ctrl(Hierarchy):
 
     @classmethod
     def all(cls):
-        return [cls(name) for name in Hierarchy.ls(Face()["Ctrl"].name, ["Follow"])]
+        return [ctrl for ctrl in (cls(name) for name in Hierarchy.ls(Face()["Ctrl"].name, ["Follow"])) if ctrl]
 
     @classmethod
     def selected(cls):
@@ -428,7 +428,8 @@ class Ctrl(Hierarchy):
         return [cls(name) for name in filter_pres(names, ["Follow"])]
 
     def reset(self):
-        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        if self.ctrl:
+            self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
         return self
 
     @classmethod
@@ -605,7 +606,7 @@ class Joint(Hierarchy):
                 new_bpm = list(MMatrix(self.additive["bindPreMatrix"].get()).inverse())
             attr.get_node()["bindPreMatrix"][attr.index()].set(new_bpm)
 
-    def add_pose(self, weight, matrix):
+    def add_pose(self, weight, matrix, rest_matrix=None):
         if not self.bws[0]:
             return
         root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
@@ -615,8 +616,17 @@ class Joint(Hierarchy):
         # 剥离缩放后提取旋转值，与 set_matrix 保持一致
         clean_local = _strip_scale_from_matrix(local_matrix)
         values = [clean_local[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
-        for bw, value in zip(self.bws, values):
-            bw.add_pose(weight, value)
+        
+        rest_values = [None] * len(values)
+        if rest_matrix:
+            local_rest = list(MMatrix(rest_matrix) * MMatrix(root_ws_inv))
+            xr, yr, zr, pr = [local_rest[i: i + 3] for i in range(0, 16, 4)]
+            sr = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [xr, yr, zr]]
+            clean_rest = _strip_scale_from_matrix(local_rest)
+            rest_values = [clean_rest[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + sr
+            
+        for bw, value, rest_val in zip(self.bws, values, rest_values):
+            bw.add_pose(weight, value, rest_val)
 
     def get_additive(self, name):
         if not self.bws[0]:
@@ -658,7 +668,7 @@ class Joint(Hierarchy):
 
     @classmethod
     def all(cls):
-        return [cls(name) for name in Hierarchy.ls(Face()["Additive"].name, ["Additive", "Port"])]
+        return [joint for joint in (cls(name) for name in Hierarchy.ls(Face()["Additive"].name, ["Additive", "Port"])) if joint.joint]
 
     @classmethod
     def selected(cls):

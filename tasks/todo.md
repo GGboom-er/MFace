@@ -8,3 +8,4 @@
 - [x] 修复 `FCtrlEye_L` 绑定旋转偏移问题：通过应用 `check_aim_roll` 清洗掉受父节点 `MFaces` 污染的欧拉角，修复了导致红轴在绑定后没有对准 Aim 控制器（绿轴）而是偏向黄色环形的问题。
 - [x] 修复自定义属性驱动 Pose 的 5 个 Bug：BUG-1 赢家通吃改为独立收集；BUG-2 默认值退化修复；BUG-3 短名/长名统一为长名；BUG-4 unitConversion 穿透属性名回退；NEW 扩展支持 float/long/short 等数值类型。
 
+- [x] 修复 FACS WYSIWYG 复制位移中的双重控制冲突，添加所见即所得的快照平滑过渡（Smart State Handoff）。

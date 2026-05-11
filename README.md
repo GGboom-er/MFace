@@ -1,41 +1,72 @@
-# MFace 工具集介绍
+# MFace2 纯数据驱动的面部绑定管线引擎 (Pure-Data FACS Rigging Engine)
 
-`MFace` 是一个为 Maya 设计的综合性面部绑定工具集，旨在提供高效、灵活且数据驱动的面部绑定工作流程。它涵盖了从初始拟合、绑定构建到姿势管理、Blend Shape 和权重处理的各个方面，并提供了强大的预设系统以提高工作效率。
+`MFace2` 是 CGI Pipeline 2.0 框架下，为 Maya 深度定制的高保真、纯数据驱动的面部绑定生态系统。它的核心设计理念已从传统的“视口几何堆叠映射”彻底进化为**“内存级数学增量提取 (Pure Data WYSIWYG)”**，实现了面部骨骼变换矩阵与 BlendShape 顶点偏移数据的绝对隔离与无损重现。
 
-## 主要功能模块
+---
 
-### 1. 核心工具与基础 (Core Tools & Foundation)
-*   **`core.py`**: 提供了绑定系统的核心实用程序和基类，包括对 Maya 属性 (`Attr`)、节点 (`Node`) 的封装，以及用于复杂绑定逻辑的表达式 (`Exp`) 和约束 (`Cons`) 工具。它还包含一个 `Hierarchy` 类，用于管理 Maya 节点层次结构。
-*   **`node.py`**: 提供了更基础的 Maya 节点和属性操作，是 `core.py` 的底层支持。
-*   **`data.py`**: 专注于数据处理，特别是几何体和矩阵相关的操作，如从曲线获取点、向量/矩阵运算、创建 `follicle` 节点以及计算样条权重。
+## 🔴 一、核心数学引擎：所见即所得 (The Mathematical Engine)
 
-### 2. 拟合与构建 (Fitting & Building)
-*   **`fits.py`**: 管理“拟合”对象，这些对象作为构建绑定的指南或模板。它支持创建关节、曲线、曲面、翻滚和 FK 等多种类型的拟合对象，并存储其相关数据。
-*   **`rigs` (目录)**: 包含实际的绑定构建逻辑，根据 `fits` 数据生成 Maya 绑定元素（关节、控制器、簇、约束等）。
-*   **`tools.py`**: 作为高级接口，整合了其他模块的功能，并为主要操作添加了撤销功能，简化了绑定构建、编辑和镜像等操作。
+MFace2 解决了传统面部修型中长期存在的“双重控制 (Double-Control)”与“累加形变崩坏”问题，其底层理论基石为绝对显式差分提取：
 
-### 3. 姿势管理 (Pose Management)
-*   **`facs.py`**: 处理面部动画控制系统 (FACS) 相关功能，特别是驱动关键帧 (SDK) 和姿势管理。它支持根据控制器属性值添加 SDK、创建组合目标 (`_COMB_`) 和中间目标 (`_IB`)，以及设置、重置、编辑和镜像姿势。
-*   **`preset.py`**: 提供了保存和加载面部姿势数据（SDK、附加关节、Blend Shape）的功能，方便姿势的复用和管理。
+### 核心计算公式：
+`Target_Delta = WYSIWYG_Snapshot - Native_At_Threshold`
 
-### 4. Blend Shape 管理 (Blend Shape Management)
-*   **`bs.py`**: 专注于 Blend Shape 操作，提供了查找、创建、重建、添加、镜像、编辑和删除 Blend Shape 目标的功能。它还支持将 Blend Shape 目标连接到驱动属性，并管理“复制编辑”模式以进行交互式雕刻。
-*   **`preset.py`**: 支持 Blend Shape 数据的保存和加载。
+1. **阈值强制对齐 (Threshold Alignment)**：
+   在提取目标控制器的表现（Target_Delta）前，系统会**强制将所有驱动器 (Driver) 恢复到 SDK 定义的激活阈值（如 `1` 或 `-1`）**，而非 UI 当前显示的瞬时值（如 `0`）。
+2. **纯净提取 (Pure Data Extraction)**：
+   这保证了被提取出的数据差值（Delta），严格去除了目标控制器在触发时自带的原生形变（Native Deformation）。
+3. **完美重现 (Perfect Reconstruction)**：
+   当用户在动画环节再次触发该驱动器至阈值时，Maya 的线性运算为：
+   `Final_Deformation = Native_At_Threshold + Target_Delta = WYSIWYG`
 
-### 5. 权重处理 (Weighting Tools)
-*   **`wts.py`**: 专注于蒙皮权重操作，包��获取和设置蒙皮权重、获取关节数据、在网格之间复制点以及保存和加载蒙皮权重数据。
-*   **`bs.py`**: 也包含一些与 Blend Shape 权重相关的操作。
-*   **`preset.py`**: 支持簇权重和蒙皮权重的保存和加载。
+这一严密的数学闭环，使得动画师在任何复杂复合表情 (COMB) 激活的情况下，都能实现 100% 精确的骨骼与网格修型对齐，彻底免疫累计偏移死锁。
 
-### 6. 控制器管理 (Controller Management)
-*   **`control.py`**: 定义了 `Control` 类，用于创建、修改和管理 Maya 控制器，包括设置其变换、父对象、名称、形状、颜色、半径、旋转、偏移、锁定属性和输出连接。
-*   **`preset.py`**: 支持控制器形状的保存和加载。
+---
 
-### 7. 辅助功能 (Auxiliary Features)
-*   **`fastPin.py`**: 用于在网格上创建“图钉”，这些图钉是跟随网格变形的定位器或控制器，并根据顶点接近度和 Blend Shape/蒙皮簇数据计算权重。
-*   **`preset.py`**: 提供了全面的预设系统，允许用户保存和加载绑定各个方面的配置，包括拟合、姿势、权重和控制器，极大地提高了工作效率和一致性。它还支持为拟合预设创建 UI 按钮对象和生成预览图。
-*   **`test.py`**: 包含了工具集中各个组件的测试函数，用于验证功能的正确性。
+## 🟡 二、双轨架构：骨骼与网格的并行隔离 (Dual-Track Architecture)
 
-## 总结
+MFace2 在执行姿势存储与镜像复制时，实行**骨骼变换**与**表面形变**的严格解耦处理，双线并行：
 
-`MFace` 工具集通过模块化的设计和丰富的功能，为 Maya 中的面部绑���提供了强大的支持。它强调数据驱动和自动化，旨在简化复杂的面部绑定流程，提高绑定师的工作效率和最终效果的质量。无论是创建基础绑定、管理复杂的面部姿势，还是处理 Blend Shape 和权重，`MFace` 都提供了全面的解决方案。
+### 1. 骨骼矩阵轨 (Bone Track: `facs.py` & `core.py`)
+- **注入靶向**: `Joint.add_pose` + `BlendWeighted` 节点阵列。
+- **运行机制**: 提取变换矩阵 `xform(q=1, ws=1, m=1)`，经过父级逆矩阵转换后，计算出纯粹的局部偏移量，再线性叠加回 `BlendWeighted` 驱动链中。
+- **镜像机制 (`core.mirror_all_additive`)**: 直接读取存储于 `BlendWeighted` 中的数学 Delta，通过 `OpenMaya.MMatrix` 矩阵反演直接注入镜像目标，由于提取的数据已绝对纯净，镜像生成的形态天然免疫对侧 Native 形状的干扰。
+
+### 2. 网格形变轨 (Mesh Track: `bs.py` & `bs_api.py`)
+- **注入靶向**: `blendShape` 节点底层的 `id_point_map` 数组。
+- **运行机制**: 放弃使用低效且容易污染的 `duplicate` 网格操作，转而全面拥抱底层 API。通过 `bs_api.get_bs_id_point_map` 直接读取各激活目标在内存中的原始顶点偏移增量 (`MPoint`)，按当前 UI 权重合并后注入目标属性。
+- **镜像机制 (`bs_api.mirror_targets`)**: 基于空间 KD-Tree 和重心坐标回归 (Linear Regression)，跨拓扑、无视视口污染地实现顶点数组镜像对齐。
+
+---
+
+## 🟢 三、系统组件全景图 (Component Registry)
+
+### 底层核心 (Foundation)
+*   **`core.py`**: 面向对象封装的 DAG 映射层（`Node`, `Joint`, `Ctrl`）。提供了与 `facs.py` 协同工作的核心类，包括管理 Maya 原生层级结构 (`Hierarchy`)。
+*   **`nodes.py`**: 专精于数据流节点封装（如 `BlendWeighted`, `MathNode`）。提供 `BlendWeighted.add_pose` 接口，是接驳骨骼矩阵增量的底层守门员。
+*   **`data.py` / `wts.py`**: 提供矩阵反演、点阵运算、样条权重 (`Spline Weight`) 计算及蒙皮数据落地的基建模块。
+
+### 姿势与表情序列 (Pose & Sequence)
+*   **`facs.py`**: FACS 系统的中枢大脑。负责驱动关键帧 (SDK) 的分发、复合表情 (`_COMB_`) 与中间件 (`_IB`) 的路由解析，以及**所见即所得核心数学差分逻辑 (`edit_joint_target`)**的实际调度。
+*   **`preset.py`**: 全局状态机，负责面部姿势、权重、控制器的序列化存储与无损重载。
+
+### 拓扑与表面变形 (Deformation & BlendShape)
+*   **`bs.py`**: 负责在场景级别调度、创建、与删除 BlendShape 节点，管理 `LEditTargetJob` 临时交互状态。
+*   **`plug-ins/mayadefault/bs_api.py`**: 借助 C++ 原生能力封装的 Python OpenMaya 加速库，提供 `get_bs_id_point_map` 等极端底层的高效数据 IO 接口，是实现纯数据提取轨道的硬件引擎。
+
+### 绑定构建与交互 (Rig Building & UI)
+*   **`rigs/` (目录)**: 垂直领域的拓扑构建器（例如 `eye.py`, `lip.py` 等），依据 `fits.py` 定义的空间标定数据，生成具体的骨骼约束网络。
+*   **`tools.py`**: 包含高级工具命令与撤销 (Undo) 封装的控制层。
+*   **`control.py`**: 控制器外观库，处理自定义形状 (Shape)、颜色与属性锁定逻辑。
+*   **`fastPin.py`**: 顶点吸附工具，基于邻近度与形变簇权重计算实时跟随控制器的锚点 (`Pin`)。
+
+---
+
+## 🔵 四、标准开发与执行约束 (Execution Conventions)
+
+为保证 MFace2 引擎的数据纯净性与管线稳定性，所有针对本库的自动化扩展或二次开发必须遵循以下红线：
+
+1. **绝对禁止依赖视口取值**：任何位移差值的提取（针对目标修改）均需直接请求 `xform(ws=1)`，并在矩阵层面减去带有 Threshold 的 `rest_matrix`。严禁通过单纯的 `getAttr` 计算差值。
+2. **BS API 原生优先**：所有 BlendShape 级别的重构必须使用 `bs_api.py` 内部提供的 MPointArray/MVector 底层接口，**严格禁止**使用 `duplicate -rr` 创建用于提取差异比对的物理副本模型。
+3. **Undo 原子性**：所有修改指令需统一封装至 `cmds.undoInfo(openChunk=True)` 和 `closeChunk=True` 内，绝不允许跨步崩溃引发的节点悬空与数据污染。
+4. **清理零贡献数据**：`facs.py` 执行 `add_pose` 后，必须伴随严格的钩子清查动作（垃圾清理机制），确保未发生位移（差值 < 0.0001）的 `BlendWeighted` 管道中无冗余数组残留。
