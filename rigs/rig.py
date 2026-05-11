@@ -125,6 +125,15 @@ def get_rig_name_cls():
     name_cls = dict()
     for cls in RigSystem.__subclasses__():
         name_cls[cls.__name__] = cls
+    if not name_cls:
+        # 热重载 rig.py 但未重载子模块时，__subclasses__() 会丢失注册。
+        # 此处自动 re-import 整个 rigs 包以恢复子类注册表。
+        from importlib import reload as _reload
+        from . import joint, surface, loop, roll, fk, brow, lip, eye, nose
+        for m in [joint, surface, loop, roll, fk, brow, lip, eye, nose]:
+            _reload(m)
+        for cls in RigSystem.__subclasses__():
+            name_cls[cls.__name__] = cls
     return name_cls
 
 
@@ -205,6 +214,10 @@ def _build_one_module(rig_cls, fits):
         if settings is None:
             return
 
+    if rig_name not in rig_cls:
+        from ..logger import logger
+        logger.error(u"MFace2: 未找到 Rig 类型 '%s'（可用: %s）。请执行完整热重载。" % (rig_name, list(rig_cls.keys())))
+        return
     rebuild_fn = lambda: rig_cls[rig_name](fits).rebuild()
     run_module_with_progress(display, rig_group, settings, rebuild_fn)
 
