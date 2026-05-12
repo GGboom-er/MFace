@@ -1,7 +1,7 @@
 # coding:utf-8
 from .base import *
 from .. import tools
-from ..logger import logger
+from ..logger import logger, MSG
 
 
 class TargetSlider(QHBoxLayout):
@@ -242,7 +242,7 @@ class FacePoseTool(QDialog):
             import tools.bs
             tools.bs.cancel_duplicate_edit()
         except Exception as e:
-            logger.warning(u"关闭窗口时取消编辑修形失败: %s" % str(e))
+            logger.warning(MSG.FACS_CANCEL_EDIT_FAIL % str(e))
             
         super().closeEvent(event)
 
@@ -357,7 +357,7 @@ class FacePoseTool(QDialog):
                                 tools.facs.add_sdk(ctrl_attr, target_name, default, val)
                                 targets.append(target_name)
                             else:
-                                logger.hud(u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。" % target_name)
+                                logger.hud(MSG.ZERO_DELTA_ERROR % target_name)
                         except Exception as e:
                             print(str(e))
             finally:
@@ -370,7 +370,7 @@ class FacePoseTool(QDialog):
                 # 仅在用户未选择网格条目时，使用自动检测
                 targets = tools.facs.add_sdk_by_selected([ctrl])
             except Exception as e:
-                logger.warning(u"从选择项添加驱动失败: %s" % str(e))
+                logger.warning(MSG.FACS_ADD_SDK_FAIL % str(e))
             if not targets: return
         
         if len(targets) > 1:

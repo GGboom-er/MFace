@@ -1,7 +1,7 @@
 # coding:utf-8
 from .base import *
 from .. import tools
-from ..logger import logger
+from ..logger import logger, MSG
 from .. core import *
 
 
@@ -292,7 +292,7 @@ class ClusterTool(QDialog):
         if not is_editing_before:
             clusters = tools.Cluster.selected()
             if len(clusters) != 1:
-                logger.hud(u"请先在场景中选择一个需要修改权重的 Cluster 控制器！", color="#FF0000")
+                logger.hud(MSG.SELECT_CLUSTER_FIRST, color="#FF0000")
                 return
         result = tools.cluster_weight_apply()
         self.update_button_text()

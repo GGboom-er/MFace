@@ -56,7 +56,7 @@ except ImportError:
         from PySide.QtCore import *
 import re
 from .. import tools
-from ..logger import logger
+from ..logger import logger, MSG
 from .theme import Theme
 
 def get_app():
@@ -90,7 +90,7 @@ def save_json(fun):
         path = get_save_path(tools.default_scene_json(), "json")
         if path:
             fun(path)
-            logger.hud(u"导出成功！")
+            logger.hud(MSG.EXPORT_SUCCESS)
     return run
 
 
@@ -99,7 +99,7 @@ def load_json(fun):
         path = get_open_path(tools.default_scene_json(), "json")
         if path:
             fun(path)
-            logger.hud(u"导入成功！")
+            logger.hud(MSG.IMPORT_SUCCESS)
     return run
 
 

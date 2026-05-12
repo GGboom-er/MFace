@@ -160,6 +160,21 @@ class MFaceLogger(object):
             print("[MFace2 WARNING] " + str(msg))
 
     @classmethod
+    def debug(cls, msg, *args):
+        """调试日志；DEBUG_MODE 关闭时静默。"""
+        if not cls.DEBUG_MODE:
+            return
+        if args:
+            try:
+                msg = msg % args
+            except Exception:
+                msg = "{} {}".format(msg, args)
+        if _IS_MAYA:
+            MGlobal.displayInfo("[MFace2 DEBUG] " + str(msg))
+        else:
+            print("[MFace2 DEBUG] " + str(msg))
+
+    @classmethod
     def error(cls, msg, exc=None):
         """报错与拦截（红字或完整栈追踪）"""
         err_msg = "[MFace2 ERROR] " + str(msg)
@@ -228,6 +243,73 @@ class MFaceLogger(object):
             )
             return res == accept
         return True
+
+class MSG:
+    # --- 按钮与通用交互 ---
+    BTN_CONFIRM = u"确认"
+    BTN_CANCEL = u"取消"
+    TITLE_SYNC_CONFIRM = u"极值同步确认"
+
+    # --- 绑定与工具 ---
+    CLUSTER_EDIT_START = u"开始修改: %s"
+    CLUSTER_EDIT_FINISH = u"结束修改: %s"
+    CLUSTER_EDIT_FINISH_GENERIC = u"结束修改"
+    CLUSTER_SELECT_UNIQUE = u"请先在场景中选择唯一一个需要修改的 Cluster 控制器！"
+    CLUSTER_MIRROR_SELF = u"%s 自身镜像完成"
+
+    RIG_REBUILD_SUCCESS = u"模块绑定成功！"
+    RIG_REBUILD_ERROR = u"模块绑定失败，请检查脚本编辑器错误详情。"
+    RIG_TYPE_MISSING = u"未找到 Rig 类型 '%s'（可用: %s）。请执行完整热重载。"
+    RIG_CLEANUP_SKIP = u"清理旧组件跳过: %s"
+    RIG_CLEANUP_FAIL = u"清理旧组件失败: 记录=%s 类型=%s 名称=%s 原因=%s"
+    TOOL_BW_CLEAN_LIST = u"[Cluster 镜像列表]\n\n%s"
+    TOOL_MATCH_ROT_DONE = u"已成功将 %d 个控制器的旋转完全匹配并冻结至最后所选: %s"
+    TOOL_FOLLOW_DONE = u"已成功绑定控制器跟随！"
+    TOOL_ORIENT_HINT = u"请按顺序选择至少两个以上控制器！（系统会将前面选中的所有控制器旋转匹配并冻结至最后一个选中的位目标）"
+
+    # --- FACS 系统 ---
+    FACS_COMB_CREATED = u"成功创建组合: %s"
+    FACS_IB_CREATED = u"成功插入中间帧: %s"
+    FACS_MIRROR_DONE = u"姿势镜像完成！\n%s"
+    FACS_FLIP_DONE = u"拷贝翻转完成！%s -> %s"
+    FACS_SYNC_DONE = u"[组合: %s] 的下属触发阈值已同步更新！"
+    FACS_MOD_DONE = u"[%s] 修改成功"
+    FACS_MOD_NO_CHANGE = u"[%s] 修改成功 (极值不变)"
+    FACS_TARGET_DELETED = u"所选物体的目标已被删除:\n%s"
+    FACS_RESET_ALL = u"全场景所有控制器及修形目标极值已重置归零！"
+    FACS_RESET_SEL = u"您所选中的控制器及相关修形极值已被归零！"
+    FACS_CANCEL_EDIT = u"已放弃修改，恢复原始模型状态"
+    FACS_CANCEL_EDIT_FAIL = u"关闭窗口时取消编辑修形失败: %s"
+    FACS_THRESHOLD_UPDATED = u"已将 %s 触发阈值更新为 %.3f"
+    FACS_THRESHOLD_HINT = u"[%s] —— 修改至 —— %.3f"
+    FACS_DIRECT_INJECT_DONE = u"[%s] —— 所见即所得直接注入成功 (极值不变)"
+    FACS_ADD_SDK_FAIL = u"从选择项添加驱动失败: %s"
+
+    # --- 采集与恢复 (RigSnapshot) ---
+    SNAP_CAPTURE_ERROR = u"RigSnapshot: 采集 %s 失败: %s"
+    SNAP_RESTORE_ERROR = u"RigSnapshot: 恢复 %s 失败: %s"
+    SNAP_RESTORE_SKIP = u"RigSnapshot: 恢复跳过 %s: %s"
+    PRESET_LOAD_CANCEL = u"加载预设已取消。"
+
+    # --- 校验与提示 ---
+    SELECT_TARGET_FIRST = u"请先选择要操作的目标！"
+    SELECT_EDGE_FIRST = u"请先选择边(Edge)！"
+    SELECT_MESH_FIRST = u"请先选择模型网格！"
+    SELECT_CLUSTER_FIRST = u"请先在场景中选择一个需要修改权重的 Cluster 控制器！"
+    ZERO_DELTA_ERROR = u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。"
+    CLEAN_BW_DONE = u"已清除全场景 BlendWeighted 中 %d 个废弃属性。"
+    CLEAN_BW_EMPTY = u"全场景的 BW 属性非常干净，无废弃隔离槽位！"
+    REFRESH_BW_DONE = u"已成功对全场景 %d 个 blendWeighted 节点进行深度脏数据刷新！"
+    REFRESH_BW_EMPTY = u"未找到需要刷新的 Additive 节点。"
+    EXPORT_SUCCESS = u"导出成功！"
+    IMPORT_SUCCESS = u"导入成功！"
+
+    # --- 错误定位 ---
+    NOT_FOUND_TARGET = u"找不到目标: %s"
+    NOT_FOUND_INPUT = u"找不到 %s 的输入连接"
+    IB_INSERT_FAIL = u"无法插入中间帧"
+    IB_VALUE_ERROR = u"无法插入中间帧: 值为 %s"
+    BS_EXPORT_EMPTY_WARN = u"未选中任何模型网格，本次导出的 BlendShape 数据将为空。"
 
 logger = MFaceLogger
 

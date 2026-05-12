@@ -45,12 +45,15 @@ class RigSystem(object):
                 k = cls.__name__
                 if not attr.startswith(k):
                     continue
+                name = attr[len(k):]
                 try:
-                    cls(attr[len(k):]).delete()
-                except Exception as _e:
-                    from ..logger import logger
-                    logger.warning(u"MFace2: remove_useless 跳过 %s: %s" % (attr, _e))
-                self.root[attr].delete()
+                    cls(name).delete()
+                except Exception as e:
+                    from ..logger import logger, MSG
+                    logger.error(MSG.RIG_CLEANUP_FAIL % (attr, cls.__name__, name, e), exc=e)
+                    raise
+                else:
+                    self.root[attr].delete()
 
     def delete(self):
         if self.root:
@@ -180,7 +183,7 @@ def build_all_raw():
         display = fits["classify"] or fits["rig"]
         rig_group = "Rig{}{}".format(fits["rig"], fits["classify"])
         rebuild_fn = lambda r=fits["rig"], f=fits: rig_cls[r](f).rebuild()
-        run_module_with_progress(display, rig_group, None, rebuild_fn)
+        run_module_with_progress(display, rig_group, None, rebuild_fn, fits=fits)
 
 
 def build_module_raw(mod):
@@ -208,18 +211,18 @@ def _build_one_module(rig_cls, fits):
 
     # 快照弹窗（进度条之前）
     settings = None
-    if RigSnapshot.has_module_rig(rig_group):
+    if RigSnapshot.has_module_rig(rig_group, fits):
         from ..ui.snapshot import ask_snapshot_settings
         settings = ask_snapshot_settings(rig_group)
         if settings is None:
             return
 
     if rig_name not in rig_cls:
-        from ..logger import logger
-        logger.error(u"MFace2: 未找到 Rig 类型 '%s'（可用: %s）。请执行完整热重载。" % (rig_name, list(rig_cls.keys())))
+        from ..logger import logger, MSG
+        logger.error(MSG.RIG_TYPE_MISSING % (rig_name, list(rig_cls.keys())))
         return
     rebuild_fn = lambda: rig_cls[rig_name](fits).rebuild()
-    run_module_with_progress(display, rig_group, settings, rebuild_fn)
+    run_module_with_progress(display, rig_group, settings, rebuild_fn, fits=fits)
 
 
 def delete_selected():

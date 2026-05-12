@@ -5,7 +5,7 @@ from . import facs
 from . import preset
 from . import fastPin
 from . import setmgr
-from .logger import logger
+from .logger import logger, MSG
 
 
 def undo(fun):
@@ -83,15 +83,15 @@ def cluster_weight_apply():
                     ctrl_names.append(ctrl_node.ctrl.name)
             if ctrl_names:
                 cmds.select(ctrl_names)
-            return True, u"结束修改: " + ", ".join(editing_clusters)
-        return True, u"结束修改"
+            return True, MSG.CLUSTER_EDIT_FINISH % ", ".join(editing_clusters)
+        return True, MSG.CLUSTER_EDIT_FINISH_GENERIC
     else:
         clusters = Cluster.selected()
         if len(clusters) != 1:
-            return False, u"请先在场景中选择唯一一个需要修改的 Cluster 控制器！"
+            return False, MSG.CLUSTER_SELECT_UNIQUE
         cluster = clusters[0]
         cluster.edit_weights()
-        return True, u"开始修改: " + cluster.name
+        return True, MSG.CLUSTER_EDIT_START % cluster.name
 
 
 @undo
@@ -102,7 +102,7 @@ def mirror_cluster_weights():
         if cluster.name.endswith(("_R", "_L")):
             msgs.append(u"%s -> %s" % (cluster.name, Fmt.mirror_name(cluster.name)))
         else:
-            msgs.append(u"%s 自身完成" % cluster.name)
+            msgs.append(MSG.CLUSTER_MIRROR_SELF % cluster.name)
             
     if msgs:
         # 返璞归真：放弃任何 HTML 结构性排版标签！
@@ -110,7 +110,7 @@ def mirror_cluster_weights():
         # 如果遇到 <br> 或 <table> 会算错长宽。
         # 必须使用原生的纯文本换行符 '\n' 拼接，它才能正确算出屏幕居中的边界并拉伸背景。
         display_text = u"\n".join(msgs)
-        logger.hud(u"[Cluster 镜像列表]\n\n%s" % display_text)
+        logger.hud(MSG.TOOL_BW_CLEAN_LIST % display_text)
 
 
 def save_cluster_weights(path):
@@ -148,7 +148,7 @@ def __match_selected_rotation():
             valid_sel.append((name, core_rml))
             
     if len(valid_sel) < 2:
-        return logger.warning(u"请按顺序选择至少两个以上控制器！（系统会将前面选中的所有控制器旋转匹配并冻结至最后一个选中的位目标）")
+        return logger.warning(MSG.TOOL_ORIENT_HINT)
         
     target_node, target_core = valid_sel[-1]
     
@@ -189,7 +189,7 @@ def __match_selected_rotation():
         
         ctrl.edit_matrix(list(new_xform.asMatrix()))
         
-    logger.hud(u"已成功将 %d 个控制器的旋转完全匹配并冻结至最后所选: %s" % (len(valid_sel)-1, target_node))
+    logger.hud(MSG.TOOL_MATCH_ROT_DONE % (len(valid_sel)-1, target_node))
 
 ctrl_match_selected_rotation = undo(__match_selected_rotation)
 
@@ -222,10 +222,10 @@ def __clear_all_bw_orphans():
     print(u"-"*50)
     if cleaned_total > 0:
         print(u"  总计清除 %d 个废弃幽灵属性。" % cleaned_total)
-        logger.hud(u"已清除全场景 BlendWeighted 中 %d 个废弃幽灵属性。" % cleaned_total)
+        logger.hud(MSG.CLEAN_BW_DONE % cleaned_total)
     else:
         print(u"  全场景无废弃属性。")
-        logger.hud(u"全场景的 BW 属性非常干净，无废弃隔离槽位！")
+        logger.hud(MSG.CLEAN_BW_EMPTY)
     print("="*50 + u"\n")
 
 clear_all_bw_orphans = undo(__clear_all_bw_orphans)
@@ -256,10 +256,9 @@ def __hard_refresh_blend_weighted():
     print(u"-"*50)
     if refreshed_count > 0:
         print(u"  总计深度刷新 %d 个包含 default 属性的叠加节点。" % refreshed_count)
-        logger.hud(u"已成功对全场景 %d 个 blendWeighted 节点进行深度脏数据刷新！" % refreshed_count)
+        logger.hud(MSG.REFRESH_BW_DONE % refreshed_count)
     else:
-        print(u"  未找到需要刷新的节点。")
-        logger.hud(u"未找到需要刷新的 Additive 节点。")
+        logger.hud(MSG.REFRESH_BW_EMPTY)
     print("="*50 + u"\n")
 
 hard_refresh_blend_weighted = undo(__hard_refresh_blend_weighted)
@@ -337,8 +336,8 @@ delete_preset_skin_weights = undo(preset.delete_preset_skin_weights)
 def ctrl_follow_to_selected_polygon():
     polygon = fastPin.get_selected_polygon()
     if not polygon:
-        logger.warning(u"请先选择要跟随的目标模型！")
+        logger.warning(MSG.SELECT_TARGET_FIRST)
         return
     pins = Ctrl.add_pins()
     fastPin.create_pins(polygon, pins)
-    logger.hud(u"已成功绑定控制器跟随！")
+    logger.hud(MSG.TOOL_FOLLOW_DONE)

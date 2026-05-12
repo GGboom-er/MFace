@@ -4,7 +4,7 @@ import re
 from contextlib import contextmanager
 from .core import *
 from . import bs
-from .logger import logger
+from .logger import logger, MSG
 
 # 可驱动的数值属性类型集合（统一 UI 过滤 + 自动检测共用）
 _NUMERIC_ATTR_TYPES = {"double", "float", "long", "short", "doubleAngle", "doubleLinear", "byte", "bool", "enum"}
@@ -181,7 +181,7 @@ def add_sdk(attr, target_name, default_value, value):
                 
             if logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
                 if __set_sdk_threshold(target_name, value):
-                    logger.hud(u"已将 %s 触发阈值更新为 %.3f" % (target_name, value))
+                    logger.hud(MSG.FACS_THRESHOLD_UPDATED % (target_name, value))
         return
     if not cmds.objExists(attr):
         return
@@ -223,9 +223,9 @@ def add_comb(target_names):
     bridge = get_bridge()
     for target_name in target_names:
         if not exist_target(target_name):
-            return logger.warning(u"找不到目标: %s" % target_name)
+            return logger.warning(MSG.NOT_FOUND_TARGET % target_name)
         if not cmds.listConnections(bridge, s=1, d=0, ):
-            return logger.warning(u"找不到 %s 的输入连接" % target_name)
+            return logger.warning(MSG.NOT_FOUND_INPUT % target_name)
     cmds.addAttr(bridge, ln=comb_name, min=0, max=1, at="double", k=1)
     com = cmds.createNode("combinationShape", n=comb_name)
     cmds.connectAttr(com + ".outputWeight", bridge + '.' + comb_name)
@@ -233,7 +233,7 @@ def add_comb(target_names):
     for i, target_name in enumerate(target_names):
         inputs = cmds.listConnections(bridge + '.' + target_name, s=1, d=0, p=1)
         cmds.connectAttr(inputs[0], com+".inputWeight[%i]" % i)
-    logger.hud(u"成功创建组合: %s" % comb_name)
+    logger.hud(MSG.FACS_COMB_CREATED % comb_name)
     return comb_name
 
 
@@ -283,19 +283,19 @@ def add_ib(target_name):
     bridge = get_bridge()
     target_name, ib = target_to_base_ib(target_name)
     if ib != 60:
-        return logger.warning(u"无法插入中间帧")
+        return logger.warning(MSG.IB_INSERT_FAIL)
     if not exist_target(target_name):
-        return logger.warning(u"找不到目标: %s" % target_name)
+        return logger.warning(MSG.NOT_FOUND_TARGET % target_name)
     attr = bridge + '.' + target_name
     value = cmds.getAttr(attr)
     ib = int(round(value * 60))
     if ib == 60:
-        return logger.warning(u"无法插入中间帧: 值为60")
+        return logger.warning(MSG.IB_VALUE_ERROR % "60")
     if ib == 0:
-        return logger.warning(u"无法插入中间帧: 值为0")
+        return logger.warning(MSG.IB_VALUE_ERROR % "0")
     ib_name = base_ib_to_target(target_name, ib)
     add_ib_by_name(ib_name)
-    logger.hud(u"成功插入中间帧: %s" % ib_name)
+    logger.hud(MSG.FACS_IB_CREATED % ib_name)
     return ib_name
 
 
@@ -651,7 +651,8 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
                 ctrl, attr, default_value, threshold = data
                 ca = ctrl + "." + attr
                 try: cmds.setAttr(ca, threshold)
-                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+                except Exception as _e:
+                    logger.error("MFace2 FACS Error (Sync): %s" % str(_e), exc=_e)
     
         cleaned_joints = 0
         cleaned_bws = 0
@@ -738,7 +739,7 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
             vals.append(val)
         avg_val = (sum(vals)/len(vals)) if vals else 0.0
         if updated_any and not silent:
-            logger.hud(u"[组合: %s] 的下属触发阈值已同步更新！" % target_name)
+            logger.hud(MSG.FACS_SYNC_DONE % target_name)
         return updated_any, avg_val
         
     data = get_base_sdk_data(target_name)
@@ -767,7 +768,7 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
     if abs(value - old_value) > 0.001:
         if prompt:
             msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
-            if not logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
+            if not logger.confirm(MSG.TITLE_SYNC_CONFIRM, msg, accept=MSG.BTN_CONFIRM, cancel=MSG.BTN_CANCEL):
                 return False, old_value
         if __set_sdk_threshold(target_name, value):
             try:
@@ -775,7 +776,7 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
             except Exception as _e:
                 logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
             if not silent:
-                logger.hud(u"[%s] —— 修改至 —— %.3f" % (target_name, value))
+                logger.hud(MSG.FACS_THRESHOLD_HINT % (target_name, value))
             return True, value
         else:
             return False, old_value
@@ -806,7 +807,7 @@ def resolve_target_crossings(targets):
             if not exist_target(new_target_name):
                 add_sdk(ctrl + "." + attr, new_target_name, default_value, value)
             resolved.append(new_target_name)
-            messages.append(u"[%s] —— 修改至 —— %.3f" % (new_target_name, value))
+            messages.append(MSG.FACS_THRESHOLD_HINT % (new_target_name, value))
         else:
             resolved.append(target)
             
@@ -824,9 +825,9 @@ def edit_target(target_name, keep_ctrl_attrs=None):
         
     updated, val = auto_update_threshold(target_name, silent=True)
     if updated:
-        logger.hud(u"[%s] —— 修改至 —— %.3f" % (target_name, val))
+        logger.hud(MSG.FACS_THRESHOLD_HINT % (target_name, val))
     else:
-        logger.hud(u"[%s] —— 修改成功 (极值不变)" % target_name)
+        logger.hud(MSG.FACS_MOD_NO_CHANGE % target_name)
 
     return target_name
 
@@ -919,7 +920,7 @@ def mirror_targets(target_names):
         auto_mirror_polygon_targets(target_mirrors)
         
     msgs = [u"从 %s 镜像至 -> %s" % (src, dst) for src, dst in target_mirrors]
-    logger.hud(u"姿势镜像完成！\n%s" % "\n".join(msgs))
+    logger.hud(MSG.FACS_MIRROR_DONE % "\n".join(msgs))
 
 
 def copy_flip_target(target_names):
@@ -936,7 +937,7 @@ def copy_flip_target(target_names):
     else:
         auto_mirror_polygon_targets([target_names])
         
-    logger.hud(u"拷贝翻转完成！%s -> %s" % (target_names[0], target_names[1]))
+    logger.hud(MSG.FACS_FLIP_DONE % (target_names[0], target_names[1]))
 
 
 def delete_polygon_connect_targets(target_names):
@@ -996,7 +997,7 @@ def delete_selected_targets(target_names):
         lambda x: delete_joints_targets(Joint.selected(), x),
         bs.delete_selected_targets,
         target_names)
-    logger.hud(u"所选物体的目标已被删除:\n%s" % "\n".join(target_names), color="#FFFF00")
+    logger.hud(MSG.FACS_TARGET_DELETED % "\n".join(target_names), color="#FFFF00")
 
 
 def esc():
@@ -1008,12 +1009,12 @@ def restore_controllers():
     ctrls = get_selected_ctrls()
     if not ctrls:
         esc()
-        logger.hud(u"全场景所有控制器及修形目标极值已重置归零！")
+        logger.hud(MSG.FACS_RESET_ALL)
     else:
         reset_all(ctrls)
         for c in ctrls:
             rest_ctrl(c)
-        logger.hud(u"您所选中的控制器及相关修形极值已被归零！")
+        logger.hud(MSG.FACS_RESET_SEL)
 
 
 def auto_duplicate_edit(targets):
@@ -1024,7 +1025,7 @@ def auto_duplicate_edit(targets):
     # 防御：如果此前意外卡在老版雕刻模式里，先退出
     if bs.is_on_duplicate_edit():
         try: bs.finish_duplicate_edit(lambda x: None)
-        except: pass
+        except Exception as e: logger.warning("MFace2: Cleanup old edit failed: %s" % e)
 
     targets, cross_msgs = resolve_target_crossings(targets)
 
@@ -1045,14 +1046,14 @@ def auto_duplicate_edit(targets):
             for attr in cmds.listAttr(ctrl.ctrl.name, k=True, scalar=True) or []:
                 full_attr = ctrl.ctrl.name + "." + attr
                 try: full_ctrl_states[full_attr] = cmds.getAttr(full_attr)
-                except: pass
+                except Exception as e: logger.debug("MFace2: Skip attr %s: %s" % (full_attr, e))
 
     # 2. 核心注入逻辑：提取骨骼数据与纯数据 BS 内存差分注入（基于 snapshot）
     for target in targets:
         # 每次迭代前，确保用户捏的 WYSIWYG pose 被完整还原（防止多目标同时修改时，第二目标捕捉到 0）
         for attr, val in full_ctrl_states.items():
             try: cmds.setAttr(attr, val)
-            except: pass
+            except Exception as e: logger.debug("MFace2: Restore attr %s failed: %s" % (attr, e))
             
         edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
         
@@ -1071,7 +1072,7 @@ def auto_duplicate_edit(targets):
     if cross_msgs or updated_msgs:
         logger.hud("\n".join(cross_msgs + updated_msgs))
     else:
-        logger.hud(u"[%s] —— 所见即所得直接注入成功 (极值不变)" % "\n".join(targets))
+        logger.hud(MSG.FACS_DIRECT_INJECT_DONE % "\n".join(targets))
         
     return targets
 
@@ -1094,7 +1095,7 @@ def cancel_duplicate_edit(targets):
         for attr, val in driver_states.items():
             try: cmds.setAttr(attr, val)
             except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
-        logger.hud(u"已放弃修改，恢复原始模型状态", color="#FFFF00")
+        logger.hud(MSG.FACS_CANCEL_EDIT, color="#FFFF00")
 
 
 def get_sdk_data():
