@@ -39,3 +39,5 @@
 - [x] Maya 7009 验证干净文件绑定全部：两个 Lip 控制器 world/local/shape 点 0 差异，`ciweiguai_body2` 顶点 0 差异；报告 `tasks/scratch/lip_ctrl_regression_audit_20260512_180353.json`。
 - [x] Maya 7009 验证 Lip Fit 位移：`FitLip_M` 上移 1 后 `FCtrlAALipMDn_M` 上移 1，shape local 0 差异；报告 `tasks/scratch/lip_fit_move_audit_20260512_181530.json`。
 - [x] Maya 7009 验证 Jaw Fit 位移：`FitJaw_M` 上移 1 后 `FCtrlLip_M` 上移 1，shape local 0 差异；报告 `tasks/scratch/jaw_fit_move_audit_20260512_182554.json`。
+- [x] 修复 FACS 绑定 SDK 采集过程中因 `MFaceAdditives` 节点无自定义属性导致 `cmds.listAttr` 返回 `None` 进而抛出 `'NoneType' object is not iterable` 的 Bug。在 `get_sdk_data` 中加入显式 `None` 校验并提供富文本日志。
+- [x] 优化 `RigSnapshot` 五大采集入口的异常处理，改用 `logger.error` 并引入 `exc=e` 输出完整的 Python 调用栈 Traceback，确保遇到异常时能够准确打印堆栈以便正确调试（拒绝静默阻断）。

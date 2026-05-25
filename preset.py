@@ -770,7 +770,7 @@ class RigSnapshot(object):
                         cbm=cbm)
                 data.append(row)
             except Exception as e:
-                logger.warning(MSG.SNAP_CAPTURE_ERROR % ("控制器 " + ctrl.name, e))
+                logger.error(MSG.SNAP_CAPTURE_ERROR % ("控制器 " + ctrl.name, str(e)), exc=e)
         return data
 
     @staticmethod
@@ -783,7 +783,7 @@ class RigSnapshot(object):
                     for cluster in Cluster.all()
                     if module_names is None or ("Cluster" + cluster.name) in module_names}
         except Exception as e:
-            logger.warning(MSG.SNAP_CAPTURE_ERROR % ("Cluster 权重", e))
+            logger.error(MSG.SNAP_CAPTURE_ERROR % ("Cluster 权重", str(e)), exc=e)
             return {}
 
     @staticmethod
@@ -797,7 +797,7 @@ class RigSnapshot(object):
             return [d for d in all_data
                     if ("Ctrl" + d.get("ctrl", "")) in module_names]
         except Exception as e:
-            logger.warning(MSG.SNAP_CAPTURE_ERROR % ("SDK 数据", e))
+            logger.error(MSG.SNAP_CAPTURE_ERROR % ("SDK 数据", str(e)), exc=e)
             return []
 
     @staticmethod
@@ -851,7 +851,7 @@ class RigSnapshot(object):
                 if target_name in sparse
             ]
         except Exception as e:
-            logger.warning(MSG.SNAP_CAPTURE_ERROR % ("Additive 数据", e))
+            logger.error(MSG.SNAP_CAPTURE_ERROR % ("Additive 数据", str(e)), exc=e)
             return []
 
     @staticmethod
@@ -887,7 +887,7 @@ class RigSnapshot(object):
                     if cmds.objExists(joint.additive.name + ".bindPreMatrix") else None,
                     skin_pre=skin_pre)
         except Exception as e:
-            logger.warning(MSG.SNAP_CAPTURE_ERROR % ("Joint 静息层", e))
+            logger.error(MSG.SNAP_CAPTURE_ERROR % ("Joint 静息层", str(e)), exc=e)
         return data
 
     # ── 恢复 ──────────────────────────────────

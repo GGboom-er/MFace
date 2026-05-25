@@ -75,7 +75,7 @@
                     "suf": "Aim"
                 },
                 {
-                    "zip": false,
+                    "zip": true,
                     "lockInfluenceWeights": false
                 }
             ],

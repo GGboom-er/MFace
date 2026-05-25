@@ -1101,7 +1101,11 @@ def cancel_duplicate_edit(targets):
 def get_sdk_data():
     bridge = get_bridge()
     data = []
-    for attr in cmds.listAttr(bridge, ud=1):
+    attrs = cmds.listAttr(bridge, ud=1)
+    if attrs is None:
+        logger.debug(u"桥接节点 [Bridge Node] %s 上未检测到任何自定义属性，无可采集的 FACS SDK 驱动数据。", bridge)
+        return []
+    for attr in attrs:
         target_name = attr.split(".")[-1]
         if target_name[-4:-2] == "IB":
             data.append(dict(
