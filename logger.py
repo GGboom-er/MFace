@@ -283,6 +283,13 @@ class MSG:
     FACS_THRESHOLD_UPDATED = u"已将 %s 触发阈值更新为 %.3f"
     FACS_THRESHOLD_HINT = u"[%s] —— 修改至 —— %.3f"
     FACS_DIRECT_INJECT_DONE = u"[%s] —— 所见即所得直接注入成功 (极值不变)"
+    FACS_WYSIWYG_EDIT_START = u"[%s] 已创建所见即所得修型模型"
+    FACS_WYSIWYG_EDIT_DONE = u"[%s] 修型已写入"
+    FACS_WYSIWYG_SINGLE_TARGET = u"Mesh 修型一次只支持一个基础目标"
+    FACS_WYSIWYG_UNSUPPORTED_TARGET = u"[%s] 暂不支持 COMB / IB 的 Mesh 修型"
+    FACS_WYSIWYG_DRIVER_MISSING = u"[%s] 未找到基础驱动，无法创建 Mesh 修型"
+    FACS_WYSIWYG_DRIVER_LOW = u"[%s] 当前驱动值过低，无法按当前状态修型"
+    FACS_WYSIWYG_NO_EDIT = u"未找到可提交的所见即所得修型模型"
     FACS_ADD_SDK_FAIL = u"从选择项添加驱动失败: %s"
 
     # --- 采集与恢复 (RigSnapshot) ---

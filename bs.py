@@ -309,6 +309,366 @@ def wireframe_planes():
     cmds.select(cl=1)
 
 
+WYSIWYG_ROOT_ATTR = "mfaceWysiwygSession"
+WYSIWYG_TARGET_ATTR = "mfaceTarget"
+WYSIWYG_DRIVER_ATTR = "mfaceDriverAttr"
+WYSIWYG_SAMPLE_DRIVER_ATTR = "mfaceSampleDriverAttr"
+WYSIWYG_SAMPLE_ATTR = "mfaceSampleValue"
+WYSIWYG_SOURCE_ATTR = "mfaceSourceMesh"
+WYSIWYG_SOURCE_VISIBLE_ATTR = "mfaceSourceVisible"
+WYSIWYG_SOURCE_VIS_LOCKED_ATTR = "mfaceSourceVisibilityLocked"
+WYSIWYG_SOURCE_VIS_INPUTS_ATTR = "mfaceSourceVisibilityInputs"
+
+
+def _set_string_attr(node, attr, value):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        cmds.addAttr(node, ln=attr, dt="string")
+    cmds.setAttr(node + "." + attr, value or "", type="string")
+
+
+def _get_string_attr(node, attr):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        return ""
+    return cmds.getAttr(node + "." + attr) or ""
+
+
+def _set_double_attr(node, attr, value):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        cmds.addAttr(node, ln=attr, at="double")
+    cmds.setAttr(node + "." + attr, float(value))
+
+
+def _get_double_attr(node, attr, default=0.0):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        return default
+    try:
+        return float(cmds.getAttr(node + "." + attr))
+    except Exception:
+        return default
+
+
+def _set_bool_attr(node, attr, value):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        cmds.addAttr(node, ln=attr, at="bool")
+    cmds.setAttr(node + "." + attr, bool(value))
+
+
+def _get_bool_attr(node, attr, default=False):
+    if not cmds.attributeQuery(attr, node=node, exists=True):
+        return default
+    try:
+        return bool(cmds.getAttr(node + "." + attr))
+    except Exception:
+        return default
+
+
+def _safe_short_name(node):
+    return node.split("|")[-1].split(":")[-1]
+
+
+def _visible_mesh_shape(transform):
+    for shape in cmds.listRelatives(transform, s=1, f=1) or []:
+        try:
+            if cmds.objectType(shape) == Shape.mesh and not cmds.getAttr(shape + ".io"):
+                return shape
+        except Exception:
+            continue
+
+
+def _edit_root():
+    return "|lush_duplicate_edit" if cmds.objExists("|lush_duplicate_edit") else "lush_duplicate_edit"
+
+
+def is_wysiwyg_duplicate_edit():
+    root = _edit_root()
+    if not cmds.objExists(root):
+        return False
+    if not cmds.attributeQuery(WYSIWYG_ROOT_ATTR, node=root, exists=True):
+        return False
+    return bool(cmds.getAttr(root + "." + WYSIWYG_ROOT_ATTR))
+
+
+def _delete_intermediate_shapes(transform):
+    for shape in cmds.listRelatives(transform, s=1, f=1) or []:
+        try:
+            if cmds.getAttr(shape + ".io"):
+                cmds.delete(shape)
+        except Exception:
+            continue
+
+
+def _freeze_duplicate_mesh(transform):
+    try:
+        cmds.delete(transform, ch=True)
+    except Exception:
+        pass
+    _delete_intermediate_shapes(transform)
+
+
+def _snapshot_mesh(source, name):
+    source_shape = _visible_mesh_shape(source)
+    if not source_shape:
+        return
+    dup = cmds.createNode("transform", name=name)
+    dup_shape = cmds.createNode("mesh", name=name + "Shape", parent=dup)
+    try:
+        cmds.xform(dup, ws=True, m=cmds.xform(source, q=True, ws=True, m=True))
+    except Exception:
+        pass
+    cmds.connectAttr(source_shape + ".outMesh", dup_shape + ".inMesh", f=True)
+    cmds.refresh()
+    cmds.disconnectAttr(source_shape + ".outMesh", dup_shape + ".inMesh")
+    _copy_shading(source, source_shape, dup, dup_shape)
+    return dup
+
+
+def _copy_shading(source, source_shape, dup, dup_shape):
+    shading_engines = cmds.listConnections(source_shape, type="shadingEngine") or []
+    if not shading_engines:
+        return
+    source_names = [
+        source,
+        source_shape,
+        source.split("|")[-1],
+        source_shape.split("|")[-1],
+    ]
+    for sg in set(shading_engines):
+        members = cmds.sets(sg, q=True) or []
+        assigned = False
+        for member in members:
+            new_member = None
+            for source_name in source_names:
+                if member == source_name or member == source_name + ".f[*]":
+                    new_member = dup
+                    break
+                if member.startswith(source_name + "."):
+                    new_member = dup + member[len(source_name):]
+                    break
+            if not new_member or not cmds.objExists(new_member):
+                continue
+            try:
+                cmds.sets(new_member, e=True, forceElement=sg)
+                assigned = True
+            except Exception:
+                continue
+        if not assigned:
+            try:
+                cmds.sets(dup_shape, e=True, forceElement=sg)
+            except Exception:
+                pass
+
+
+def _set_source_visible(source, visible):
+    try:
+        cmds.setAttr(source + ".v", bool(visible))
+        return True
+    except Exception:
+        return False
+
+
+def _capture_visibility_state(source):
+    attr = source + ".v"
+    state = dict(value=True, locked=False, inputs=[])
+    try:
+        state["value"] = bool(cmds.getAttr(attr))
+    except Exception:
+        pass
+    try:
+        state["locked"] = bool(cmds.getAttr(attr, lock=True))
+    except Exception:
+        pass
+    for src in cmds.listConnections(attr, s=True, d=False, p=True) or []:
+        state["inputs"].append(src)
+    return state
+
+
+def _hide_source_with_state(source):
+    attr = source + ".v"
+    state = _capture_visibility_state(source)
+    if state["locked"]:
+        try:
+            cmds.setAttr(attr, lock=False)
+        except Exception:
+            pass
+    for src in state["inputs"]:
+        try:
+            if cmds.isConnected(src, attr):
+                cmds.disconnectAttr(src, attr)
+        except Exception:
+            pass
+    _set_source_visible(source, False)
+    return state
+
+
+def _store_visibility_state(node, state):
+    _set_bool_attr(node, WYSIWYG_SOURCE_VISIBLE_ATTR, bool(state.get("value", True)))
+    _set_bool_attr(node, WYSIWYG_SOURCE_VIS_LOCKED_ATTR, bool(state.get("locked", False)))
+    _set_string_attr(node, WYSIWYG_SOURCE_VIS_INPUTS_ATTR, "\n".join(state.get("inputs", [])))
+
+
+def _visibility_state_from_attrs(node):
+    state = dict(
+        value=_get_bool_attr(node, WYSIWYG_SOURCE_VISIBLE_ATTR, True),
+        locked=_get_bool_attr(node, WYSIWYG_SOURCE_VIS_LOCKED_ATTR, False),
+        inputs=[],
+    )
+    input_text = _get_string_attr(node, WYSIWYG_SOURCE_VIS_INPUTS_ATTR)
+    if input_text:
+        state["inputs"] = [plug for plug in input_text.splitlines() if plug]
+    return state
+
+
+def _restore_source_visibility(source, state):
+    attr = source + ".v"
+    if not cmds.objExists(source):
+        return
+    try:
+        if cmds.getAttr(attr, lock=True):
+            cmds.setAttr(attr, lock=False)
+    except Exception:
+        pass
+    for src in cmds.listConnections(attr, s=True, d=False, p=True) or []:
+        try:
+            if cmds.isConnected(src, attr):
+                cmds.disconnectAttr(src, attr)
+        except Exception:
+            pass
+    _set_source_visible(source, state.get("value", True))
+    for src in state.get("inputs", []):
+        if not cmds.objExists(src) or not cmds.objExists(attr):
+            continue
+        try:
+            cmds.connectAttr(src, attr, f=True)
+        except Exception:
+            pass
+    try:
+        cmds.setAttr(attr, lock=bool(state.get("locked", False)))
+    except Exception:
+        pass
+
+
+def start_wysiwyg_duplicate_edit(target, driver_attr, sample_value, sample_driver_attr=""):
+    u"""Create visible WYSIWYG edit meshes for the selected polygons.
+
+    The editable meshes are only carriers. Final target extraction still goes
+    through bs_api.edit_target so downstream deformation space is respected.
+    """
+    polygons = get_selected_polygons()
+    if not polygons:
+        return []
+
+    root = "lush_duplicate_edit"
+    parent = "edit_" + target
+    if not cmds.objExists(root):
+        cmds.group(em=1, n=root)
+    _set_bool_attr(root, WYSIWYG_ROOT_ATTR, True)
+    _set_string_attr(root, WYSIWYG_TARGET_ATTR, target)
+    _set_string_attr(root, WYSIWYG_DRIVER_ATTR, driver_attr)
+    _set_string_attr(root, WYSIWYG_SAMPLE_DRIVER_ATTR, sample_driver_attr)
+    _set_double_attr(root, WYSIWYG_SAMPLE_ATTR, sample_value)
+
+    parent_path = "|lush_duplicate_edit|" + parent
+    if not cmds.objExists(parent_path):
+        cmds.group(em=1, n=parent, p=root)
+
+    created = []
+    for polygon in polygons:
+        source = (cmds.ls(polygon, l=True) or [polygon])[0]
+        name = target + "_" + _safe_short_name(source)
+        dup = _snapshot_mesh(source, name)
+        if not dup:
+            continue
+        _freeze_duplicate_mesh(dup)
+        dup = cmds.parent(dup, parent_path)[0]
+        _set_string_attr(dup, WYSIWYG_TARGET_ATTR, target)
+        _set_string_attr(dup, WYSIWYG_DRIVER_ATTR, driver_attr)
+        _set_string_attr(dup, WYSIWYG_SAMPLE_DRIVER_ATTR, sample_driver_attr)
+        _set_double_attr(dup, WYSIWYG_SAMPLE_ATTR, sample_value)
+        _set_string_attr(dup, WYSIWYG_SOURCE_ATTR, source)
+        source_visibility_state = _hide_source_with_state(source)
+        _store_visibility_state(dup, source_visibility_state)
+        created.append(dup)
+
+    wireframe_planes()
+    if created:
+        cmds.select(created, r=True)
+    return created
+
+
+def _iter_wysiwyg_edit_meshes(root):
+    for node in cmds.listRelatives(root, ad=True, type="transform", fullPath=True) or []:
+        if is_shape(node) and _get_string_attr(node, WYSIWYG_SOURCE_ATTR):
+            yield node
+
+
+def edit_wysiwyg_target(src, dst, target):
+    bs = get_bs(dst)
+    add_target(bs, target)
+    index = get_index(bs, target)
+    if index is None:
+        raise RuntimeError("Can not find blendShape target index: %s.%s" % (bs, target))
+    bs_api.edit_target(bs, index, src, dst, get_orig(dst))
+    return bs
+
+
+def _restore_wysiwyg_sources(root):
+    for src in list(_iter_wysiwyg_edit_meshes(root)):
+        dst = _get_string_attr(src, WYSIWYG_SOURCE_ATTR)
+        if not dst or not cmds.objExists(dst):
+            continue
+        _restore_source_visibility(dst, _visibility_state_from_attrs(src))
+
+
+def finish_wysiwyg_duplicate_edit(prepare_native=None):
+    LEditTargetJob.del_job()
+    root = _edit_root()
+    if not cmds.objExists(root):
+        return []
+    if not is_wysiwyg_duplicate_edit():
+        return []
+
+    results = []
+    try:
+        for src in list(_iter_wysiwyg_edit_meshes(root)):
+            dst = _get_string_attr(src, WYSIWYG_SOURCE_ATTR)
+            target = _get_string_attr(src, WYSIWYG_TARGET_ATTR)
+            driver_attr = _get_string_attr(src, WYSIWYG_DRIVER_ATTR)
+            sample_driver_attr = _get_string_attr(src, WYSIWYG_SAMPLE_DRIVER_ATTR)
+            sample_value = _get_double_attr(src, WYSIWYG_SAMPLE_ATTR)
+            if not target or not dst or not cmds.objExists(dst):
+                continue
+            item = dict(
+                target=target,
+                source_mesh=dst,
+                edit_mesh=src,
+                driver_attr=driver_attr,
+                sample_driver_attr=sample_driver_attr,
+                sample_value=sample_value,
+            )
+            if sample_driver_attr and cmds.objExists(sample_driver_attr):
+                cmds.setAttr(sample_driver_attr, sample_value)
+            if driver_attr and cmds.objExists(driver_attr):
+                connect_target(dst, driver_attr)
+            if prepare_native:
+                prepare_native(item)
+            bs_node = edit_wysiwyg_target(src, dst, target)
+            item["bs_node"] = bs_node
+            results.append(item)
+    finally:
+        if cmds.objExists(root):
+            _restore_wysiwyg_sources(root)
+            cmds.delete(root)
+    return results
+
+
+def cancel_wysiwyg_duplicate_edit():
+    LEditTargetJob.del_job()
+    root = _edit_root()
+    if cmds.objExists(root):
+        _restore_wysiwyg_sources(root)
+        cmds.delete(root)
+
+
 def duplicate_polygon(attr, polygon):
     target = get_target(attr)
     root = "lush_duplicate_edit"
