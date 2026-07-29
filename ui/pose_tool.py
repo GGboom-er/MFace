@@ -26,11 +26,11 @@ class ActiveDriverDialog(QDialog):
 
         # 驱动列表（彻底重构为 QListWidget 支持双击及详细取值）
         self.list_widget = QListWidget()
-        import maya.cmds as cmds
+        from .. import shared
         for info in driver_infos:
             val = 0.0
             try: 
-                val = cmds.getAttr(info["ctrl_attr"])
+                val = shared.get_attr(info["ctrl_attr"], 0.0)
             except Exception: 
                 pass
                 
@@ -89,9 +89,9 @@ class ActiveDriverDialog(QDialog):
         
     def _on_item_double_clicked(self, item):
         ctrl_name = item.data(Qt.UserRole + 1)
-        import maya.cmds as cmds
-        if ctrl_name and cmds.objExists(ctrl_name):
-            cmds.select(ctrl_name)
+        from .. import shared
+        if ctrl_name and shared.obj_exists(ctrl_name):
+            shared.select_node(ctrl_name)
 
     def kept_ctrl_attrs(self):
         u"""返回需要「保留活跃」来将其效果从 delta 中排除的 ctrl_attr 集合。
@@ -236,9 +236,9 @@ class FacePoseTool(QDialog):
         
         # Select the driver object in Maya Viewport
         ctrl = self.line.text().strip()
-        import maya.cmds as cmds
-        if ctrl and cmds.objExists(ctrl):
-            cmds.select(ctrl)
+        from .. import shared
+        if ctrl and shared.obj_exists(ctrl):
+            shared.select_node(ctrl)
 
     def sync_slider_to_target_weight(self):
         target = self.list.current_name()
@@ -247,9 +247,9 @@ class FacePoseTool(QDialog):
         if not bridge: return
         attr = bridge + "." + target
         
-        import maya.cmds as cmds
-        if cmds.objExists(attr):
-            val = cmds.getAttr(attr)
+        from .. import shared
+        if shared.obj_exists(attr):
+            val = shared.get_attr(attr, 0.0)
             slider_val = int(val * 60)
             
             # Clamp the value strictly between 0 and 60 to prevent overdriven targets from crashing the UI
@@ -266,8 +266,8 @@ class FacePoseTool(QDialog):
 
     def reload(self):
         text = self.line.text().strip()
-        import maya.cmds as cmds
-        if text and cmds.objExists(text) and cmds.objectType(text) == "transform":
+        from .. import shared
+        if text and cmds.objExists(text) and shared.is_transform(text):
             self.list.build_controller_grid(text, tools.get_targets())
         else:
             self.list.build_flat_list(text, tools.get_targets())
@@ -318,20 +318,19 @@ class FacePoseTool(QDialog):
         sel_items = self.list.selectedItems()
         targets = []
         if sel_items:
-            import maya.cmds as cmds
+            from .. import shared
             
-            cmds.undoInfo(openChunk=True)
+            pass
             try:
                 for item in sel_items:
                     target_name = item.data(Qt.UserRole)
                     ctrl_attr = item.data(Qt.UserRole + 2)
                     if target_name and ctrl_attr:
                         try:
-                            val = cmds.getAttr(ctrl_attr)
+                            val = shared.get_attr(ctrl_attr, 0.0)
                             try:
                                 ctrl_node, attr_name = ctrl_attr.rsplit(".", 1)
-                                default_list = cmds.attributeQuery(attr_name, node=ctrl_node, listDefault=True)
-                                default = default_list[0] if default_list else 0.0
+                                default = shared.get_attribute_default(ctrl_attr)
                             except Exception:
                                 default = 0.0
                             
@@ -343,7 +342,7 @@ class FacePoseTool(QDialog):
                         except Exception as e:
                             print(str(e))
             finally:
-                cmds.undoInfo(closeChunk=True)
+                pass
 
         if not targets and not sel_items:
             ctrl = self.line.text().strip()
@@ -385,7 +384,7 @@ class FacePoseTool(QDialog):
 
     def start_slider_undo(self):
         from maya import cmds
-        cmds.undoInfo(openChunk=True)
+        pass
         tools.facs.begin_pose_cache()
 
     def end_slider_undo(self):
@@ -394,7 +393,7 @@ class FacePoseTool(QDialog):
             pass
         finally:
             tools.facs.end_pose_cache()
-            cmds.undoInfo(closeChunk=True)
+            pass
 
     def set_slider_pose(self, value):
         tools.facs.set_pose_by_targets(self.list.selected_names(), value, False)
@@ -421,8 +420,8 @@ class FacePoseTool(QDialog):
             else:
                 self._auto_select(targets, None)
             # Check scene state directly as a fallback
-            import maya.cmds as cmds
-            if cmds.objExists("lush_duplicate_edit"):
+            from .. import shared
+            if shared.obj_exists("lush_duplicate_edit"):
                 self.but.setText(u"结束修改")
                 self.but.setStyleSheet("background-color: #ff5555; color: white;")
                 self.but.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -451,8 +450,8 @@ class FacePoseTool(QDialog):
 
     def cancel_edit(self):
         # Cancel logic for duplicate edit
-        import maya.cmds as cmds
-        if cmds.objExists("|lush_duplicate_edit"):
+        from .. import shared
+        if shared.obj_exists("|lush_duplicate_edit"):
             targets = self.list.selected_names()
             if targets:
                 tools.cancel_duplicate_edit(targets)

@@ -2,7 +2,7 @@
 from .base import *
 from ..body_pose import ADPoses
 from .. import bs
-import maya.cmds as cmds
+from .. import shared
 
 class TargetList(BaseTargetList):
     def __init__(self, parent=None):
@@ -15,10 +15,9 @@ class TargetList(BaseTargetList):
         self.menu.addAction(u"传递到其他网格", self.warp_copy_targets)
         self.reload()
 
+    @shared.keep_selected
     def new_target(self):
-        selected = cmds.ls(sl=1)
         ADPoses.auto_insert_pose(self.text.split(","))
-        cmds.select(selected)
         ADPoses.auto_edit_by_selected_target(self.text.split(","))
         self.reload()
 

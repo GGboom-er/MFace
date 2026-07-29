@@ -268,19 +268,8 @@ class TargetGrid(QTableWidget):
         self.setColumnCount(2)
         self.setHorizontalHeaderLabels([u"最小值驱动", u"最大值驱动"])
         
-        import maya.cmds as cmds
-        
-        attrs = []
-        for trs in "trs":
-            for xyz in "xyz":
-                 attrs.append(trs + xyz)
-                 
-        if cmds.objExists(ctrl):
-            from .. import facs as facs_module
-            ud_attrs = cmds.listAttr(ctrl, ud=True, sn=True) or []
-            for ud in ud_attrs:
-                 if cmds.getAttr(ctrl + "." + ud, type=True) in facs_module._NUMERIC_ATTR_TYPES:
-                     attrs.append(ud)
+        from .. import facs as facs_module
+        attrs = facs_module.get_controller_attrs(ctrl)
                      
         row_count = len(attrs)
         self.setRowCount(row_count)
@@ -402,13 +391,9 @@ class Tool(QDialog):
         pass
 
     def try_apply(self):
-        cmds.undoInfo(openChunk=True)
-        try:
+        from .. import shared
+        with shared.undo_context():
             self.apply()
-        except Exception:
-            cmds.undoInfo(closeChunk=True)
-            raise
-        cmds.undoInfo(closeChunk=True)
 
     def showNormal(self):
         QDialog.showNormal(self)
@@ -447,7 +432,8 @@ class MayaObjLayout(QHBoxLayout):
             self.line.setText(str(obj))
 
     def load_selected(self):
-        selected = cmds.ls(sl=True, o=True) or []
+        from .. import shared
+        selected = shared.get_selected_nodes(transforms_only=False)
         if len(selected) == 1:
             self.set_obj(selected[0])
         else:
@@ -498,8 +484,8 @@ class BaseTargetList(QListWidget):
     def current_target(self):
         targets = self.selected_targets()
         if len(targets) != 1:
-            import maya.cmds as cmds
-            cmds.warning("please selected only one target")
+            from ..logger import logger
+            logger.warning("please selected only one target")
             return ""
         return targets[0]
     def contextMenuEvent(self, event):

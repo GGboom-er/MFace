@@ -1213,3 +1213,18 @@ def load_face_pose_data(path):
         bs.set_selected_bs_data(data["bs"], path)
     if data.get("additive"):
         Joint.set_additive_data(data["additive"])
+
+
+def get_controller_attrs(ctrl):
+    from maya import cmds
+    attrs = []
+    for trs in "trs":
+        for xyz in "xyz":
+             attrs.append(trs + xyz)
+             
+    if cmds.objExists(ctrl):
+        ud_attrs = cmds.listAttr(ctrl, ud=True, sn=True) or []
+        for ud in ud_attrs:
+             if cmds.getAttr(ctrl + "." + ud, type=True) in _NUMERIC_ATTR_TYPES:
+                 attrs.append(ud)
+    return attrs

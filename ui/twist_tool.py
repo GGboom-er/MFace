@@ -2,7 +2,7 @@
 from .base import *
 from .. import twist
 from .. import bs
-import maya.cmds as cmds
+from .. import shared
 
 class TargetList(BaseTargetList):
     def __init__(self, parent=None):
@@ -14,10 +14,9 @@ class TargetList(BaseTargetList):
         self.menu.addAction(u"传递", self.wrap_copy)
         self.reload()
 
+    @shared.keep_selected
     def add_edit_target(self):
-        selected = cmds.ls(sl=1)
         twist.auto_insert_pose(self.text)
-        cmds.select(selected)
         twist.add_edit_target(self.text)
         self.reload()
 
@@ -38,7 +37,7 @@ class TwistTool(BaseTargetTool):
 
     def set_ib_pose_by_targets(self, value):
         twist.to_target(self.list.current_target(), value)
-        cmds.refresh()
+        shared.refresh_viewport()
 
     def _on_duplicate_edit(self, target_name):
         def _add_target(t):

@@ -163,3 +163,79 @@ def create_group(n="|FaceGroup|SkeletonGroup", d=False, v=None, i=None):
     if i is not None:
         cmds.setAttr(result + ".inheritsTransform", i)
     return result
+
+
+
+def keep_selected(fun):
+    def keep_selected_fun(*args, **kwargs):
+        from maya import cmds
+        selected = cmds.ls(sl=True) or []
+        try:
+            return fun(*args, **kwargs)
+        finally:
+            if selected:
+                cmds.select(selected, noExpand=True)
+            else:
+                cmds.select(clear=True)
+    return keep_selected_fun
+
+
+def refresh_viewport():
+    from maya import cmds
+    cmds.refresh(cv=True, f=True)
+
+
+import contextlib
+@contextlib.contextmanager
+def undo_context():
+    from maya import cmds
+    cmds.undoInfo(openChunk=True)
+    try:
+        yield
+    finally:
+        cmds.undoInfo(closeChunk=True)
+
+def get_selected_nodes(transforms_only=False):
+    from maya import cmds
+    kwargs = {'sl': True}
+    if transforms_only:
+        kwargs['type'] = 'transform'
+    else:
+        kwargs['o'] = True
+    return cmds.ls(**kwargs) or []
+
+
+def get_scene_name():
+    from maya import cmds
+    return cmds.file(q=True, sn=True) or ""
+
+
+def obj_exists(name):
+    from maya import cmds
+    return cmds.objExists(name)
+
+def get_attr(attr_name, default=None):
+    from maya import cmds
+    try:
+        return cmds.getAttr(attr_name)
+    except Exception:
+        return default
+
+def get_attribute_default(attr_name):
+    from maya import cmds
+    try:
+        node, attr = attr_name.rsplit(".", 1)
+        default_list = cmds.attributeQuery(attr, node=node, listDefault=True)
+        return default_list[0] if default_list else 0.0
+    except Exception:
+        return 0.0
+
+def select_node(name):
+    from maya import cmds
+    if cmds.objExists(name):
+        cmds.select(name)
+
+def is_transform(name):
+    from maya import cmds
+    if not cmds.objExists(name): return False
+    return cmds.objectType(name) == "transform"

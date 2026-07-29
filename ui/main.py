@@ -83,8 +83,8 @@ class MFaceMain(QDialog):
         bs.custom_mirror(self.get_selected_targets_list())
 
     def _default_scene_path(self):
-        import maya.cmds as cmds
-        scene_name = cmds.file(q=True, sn=True) or ""
+        from .. import shared
+        scene_name = shared.get_scene_name()
         base_path, _ = os.path.splitext(scene_name)
         return base_path + ".json"
 
