@@ -515,19 +515,22 @@ def run_module_with_progress(display, rig_group, settings, rebuild_fn, fits=None
             cmds.undoInfo(closeChunk=True)
 
 
-def load_preset(preset):
+def load_preset(preset, ask_modules_cb=None):
     modules = get_all_modules()
 
     keep = {}
     if RigSnapshot.has_existing_rig():
         # 已有绑定：弹模块选择器 + 保留选项
-        from .ui.snapshot import ask_preset_modules
-        result = ask_preset_modules(modules)
-        if result is None:
-            from .logger import logger
-            logger.warning(MSG.PRESET_LOAD_CANCEL)
-            return
-        selected, keep = result
+        if ask_modules_cb:
+            result = ask_modules_cb(modules)
+            if result is None:
+                from .logger import logger
+                logger.warning(MSG.PRESET_LOAD_CANCEL)
+                return
+            selected, keep = result
+        else:
+            selected = modules
+            keep = {}
     else:
         # 全新场景：全部模块都需要构建，无需保留
         selected = modules

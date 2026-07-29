@@ -146,7 +146,8 @@ class Preset(QDialog):
         self.update()
 
     def build(self):
-        tools.load_preset(self.preset)
+        from .snapshot import ask_preset_modules
+        tools.load_preset(self.preset, ask_modules_cb=ask_preset_modules)
 
     def run_preset(self, fun):
         def wrapper():
