@@ -380,3 +380,80 @@ class TargetGrid(QTableWidget):
               
         _apply_stretch_header(self)
 
+
+class Tool(QDialog):
+    title = u"通用应用"
+    button_text = u"应用"
+
+    def __init__(self, parent=None):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle(self.title)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        self.setLayout(layout)
+        self.kwargs_layout = QVBoxLayout()
+        self.kwargs_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self.kwargs_layout)
+        self.button = QPushButton(self.button_text)
+        self.button.clicked.connect(self.try_apply)
+        layout.addWidget(self.button)
+
+    def apply(self):
+        pass
+
+    def try_apply(self):
+        cmds.undoInfo(openChunk=True)
+        try:
+            self.apply()
+        except Exception:
+            cmds.undoInfo(closeChunk=True)
+            raise
+        cmds.undoInfo(closeChunk=True)
+
+    def showNormal(self):
+        QDialog.showNormal(self)
+        self.show_update()
+
+    def show_update(self):
+        pass
+
+
+
+class MayaObjLayout(QHBoxLayout):
+    """Maya 对象选择布局"""
+    objChanged = Signal(u''.__class__)
+
+    def __init__(self, label, width=60):
+        QHBoxLayout.__init__(self)
+        prefix = QLabel(label)
+        self.addWidget(prefix)
+        self.line = QLineEdit()
+        self.line.setReadOnly(True)
+        self.addWidget(self.line)
+        self.button = QPushButton('<<')
+        self.addWidget(self.button)
+        prefix.setFixedWidth(width)
+        prefix.setAlignment(Qt.AlignRight)
+        self.button.setFixedWidth(width)
+        self.obj = None
+        self.button.clicked.connect(self.load_selected)
+
+    def set_obj(self, obj):
+        """设置对象 - obj 现在是字符串"""
+        self.obj = obj
+        if isinstance(obj, str):
+            self.line.setText(obj)
+        else:
+            self.line.setText(str(obj))
+
+    def load_selected(self):
+        selected = cmds.ls(sl=True, o=True) or []
+        if len(selected) == 1:
+            self.set_obj(selected[0])
+        else:
+            self.clear()
+        self.objChanged.emit(self.line.text())
+
+    def clear(self):
+        self.obj = None
+        self.line.clear()

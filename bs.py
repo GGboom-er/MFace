@@ -832,3 +832,35 @@ def get_selected_polygon_ids():
     return polygon, ids
 
 
+
+
+def comb_skin_bs():
+    """合并蒙皮和 blendShape"""
+    polygons = get_selected_polygons()
+    duplicate_polygons = [cmds.duplicate(polygon)[0] for polygon in polygons]
+    joints = get_joints(polygons)
+    com_polygon = cmds.polyUnite(duplicate_polygons, ch=False)[0]
+    cmds.delete(cmds.ls(duplicate_polygons))
+    if joints:
+        cmds.skinCluster(joints, com_polygon, tsb=True, mi=1)
+        cmds.select(polygons + [com_polygon])
+        cmds.copySkinWeights(noMirror=True, surfaceAssociation='closestPoint', influenceAssociation='name')
+    attr_target_names = get_attr_target_names(polygons)
+    for input_attr, target_name in attr_target_names:
+        full_point_data = []
+        for polygon in polygons:
+            point_count = cmds.polyEvaluate(polygon, v=True)
+            bs = find_bs(polygon)
+            if bs and cmds.objExists(bs + '.' + target_name):
+                index = get_attr_logical_index(bs, target_name)
+                ids, points = get_ids_points(bs, index)
+                full_points = bs_api.unzip_points(ids, points, point_count)
+            else:
+                full_points = bs_api.unzip_points([], [], point_count)
+            full_point_data.append(full_points)
+        full_points = bs_api.merge_points(*full_point_data)
+        ids, points = bs_api.zip_points(full_points)
+        add_target(com_polygon, target_name)
+        set_bs_ids_points(com_polygon, target_name, ids, points)
+        if input_attr:
+            bridge_connect(input_attr, com_polygon)
