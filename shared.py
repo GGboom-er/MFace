@@ -54,3 +54,112 @@ def get_skin_cluster(polygon_name):
             for long_shape in cmds.ls(shape, l=1):
                 if long_shape in shapes:
                     return skin_cluster
+
+# === Body Binding Utilities (from adPose) ===
+import os
+import json
+import re
+
+_body_config = None
+
+def get_body_config():
+    global _body_config
+    if _body_config is not None:
+        return _body_config
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "data/body_config.json")).replace("\\", "/")
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as fp:
+            _body_config = json.load(fp)
+            return _body_config
+    else:
+        return []
+
+def get_body_dict_config():
+    return {key: value for _, key, value in get_body_config()}
+
+def get_body_names(name, src_formats, dst_formats):
+    names = []
+    for src, dst in zip(src_formats, dst_formats):
+        keys = re.findall(r"\{\w+\}", src)
+        if not keys:
+            continue
+        for key in keys:
+            src = src.replace(key, r"(\w+)")
+        match = re.match(src+"$", name)
+        if not match:
+            continue
+        keys = [key[1:-1] for key in keys]
+        values = match.groups()
+        if not len(values) == len(keys):
+            continue
+        new_name = dst.format(**dict(zip(keys, values)))
+        names.append(new_name)
+    return names
+
+def get_body_ctrl_names(name):
+    _config = get_body_dict_config()
+    return get_body_names(name, _config.get("joint", []), _config.get("ctrl", []))
+
+def get_body_rl_names(name):
+    _config = get_body_dict_config()
+    names = get_body_names(name, _config.get("right", []), _config.get("left", []))
+    names += get_body_names(name, _config.get("left", []), _config.get("right", []))
+    return names
+
+def get_selected_polygons():
+    """获取当前选中的多边形 transform 节点"""
+    polygons = []
+    for polygon in cmds.ls(sl=True, type="transform") or []:
+        shapes = cmds.listRelatives(polygon, s=True, ni=True) or []
+        if not shapes:
+            continue
+        if cmds.nodeType(shapes[0]) != "mesh":
+            continue
+        polygons.append(polygon)
+    return polygons
+
+def find_node_by_name(name):
+    """按名称精确查找唯一节点"""
+    nodes = cmds.ls(name) or []
+    if len(nodes) == 1:
+        return nodes[0]
+    return None
+
+def find_ctrl_by_joint(joint):
+    """通过骨骼查找对应控制器"""
+    joint_name = joint if isinstance(joint, str) else str(joint)
+    if "Part" in joint_name:
+        return None
+    short_name = joint_name.split("|")[-1].split(":")[-1]
+    ctrl_list = cmds.ls(get_body_ctrl_names(short_name), type="transform") or []
+    if len(ctrl_list) == 1:
+        return ctrl_list[0]
+    return None
+
+def find_mirror_joint(joint):
+    """查找镜像骨骼"""
+    joint_name = joint if isinstance(joint, str) else str(joint)
+    short_name = joint_name.split("|")[-1].split(":")[-1]
+    joints = cmds.ls(get_body_rl_names(short_name), type="joint") or []
+    if len(joints) != 1:
+        return None
+    return joints[0]
+
+def create_group(n="|FaceGroup|SkeletonGroup", d=False, v=None, i=None):
+    """递归创建层级组"""
+    if d:
+        if cmds.objExists(n):
+            cmds.delete(n)
+    if cmds.objExists(n):
+        return n
+    fields = n.split("|")
+    n = fields.pop(-1)
+    if len(fields) > 1:
+        result = cmds.group(em=1, n=n, p=create_group("|".join(fields)))
+    else:
+        result = cmds.group(em=1, n=n)
+    if v is not None:
+        cmds.setAttr(result + ".v", v)
+    if i is not None:
+        cmds.setAttr(result + ".inheritsTransform", i)
+    return result

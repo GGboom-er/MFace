@@ -1,0 +1,34 @@
+[
+    [
+        "左边",
+        "right",
+        [
+            "{name}_R",
+            "{pre}_R_{suf}"
+        ]
+    ],
+    [
+        "右边",
+        "left",
+        [
+            "{name}_L",
+            "{pre}_L_{suf}"
+        ]
+    ],
+    [
+        "骨骼",
+        "joint",
+        [
+            "{name}",
+            "{name}Part{i}_{RL}"
+        ]
+    ],
+    [
+        "控制器",
+        "ctrl",
+        [
+            "FK{name}",
+            "FK{name}_{RL}"
+        ]
+    ]
+]
