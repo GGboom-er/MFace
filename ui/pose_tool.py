@@ -4,24 +4,6 @@ from .. import tools
 from ..logger import logger, MSG
 
 
-class TargetSlider(QHBoxLayout):
-
-    def __init__(self):
-        QHBoxLayout.__init__(self)
-        if hasattr(Qt, 'Horizontal'):
-            self.slider = QSlider(Qt.Horizontal)
-        else:
-            self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setRange(0, 60)
-        self.box = QSpinBox()
-        self.box.setRange(0, 60)
-        self.slider.valueChanged.connect(self.box.setValue)
-        self.box.valueChanged.connect(self.slider.setValue)
-        self.button = QPushButton(u">>>")
-        self.button.setFixedWidth(40)
-        q_add(self, q_prefix(u"控制：", 60), self.slider, self.box, self.button)
-
-
 class ActiveDriverDialog(QDialog):
     u"""弹窗：勾选要保留（不重置）的活跃 Pose 驱动，未勾选的将按常规逻辑被还原。"""
 

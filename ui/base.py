@@ -457,3 +457,139 @@ class MayaObjLayout(QHBoxLayout):
     def clear(self):
         self.obj = None
         self.line.clear()
+
+from .. import corrective_joints
+from .. import bs
+class TargetSlider(QHBoxLayout):
+    def __init__(self):
+        QHBoxLayout.__init__(self)
+        if hasattr(Qt, 'Horizontal'):
+            self.slider = QSlider(Qt.Horizontal)
+        else:
+            self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 60)
+        self.box = QSpinBox()
+        self.box.setRange(0, 60)
+        self.slider.valueChanged.connect(self.box.setValue)
+        self.box.valueChanged.connect(self.slider.setValue)
+        self.button = QPushButton(u">>>")
+        self.button.setFixedWidth(40)
+        q_add(self, q_prefix(u"控制：", 60), self.slider, self.box, self.button)
+
+class BaseTargetList(QListWidget):
+    mirrorTargets = Signal(list)
+    def __init__(self, backend, parent=None):
+        QListWidget.__init__(self, parent)
+        self.backend = backend
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.menu = QMenu(self)
+        self.text = ""
+        self.itemDoubleClicked.connect(self.to_pose)
+    def to_pose(self):
+        targets = self.selected_targets()
+        if not targets: return
+        if hasattr(self.backend, 'set_pose_by_targets'):
+            self.backend.set_pose_by_targets(targets)
+        elif hasattr(self.backend, 'all_to_zero') and hasattr(self.backend, 'to_target'):
+            self.backend.all_to_zero()
+            self.backend.to_target(targets[0], 60)
+    def selected_targets(self):
+        return [item.data(Qt.UserRole) or item.text() for item in self.selectedItems()]
+    def current_target(self):
+        targets = self.selected_targets()
+        if len(targets) != 1:
+            import maya.cmds as cmds
+            cmds.warning("please selected only one target")
+            return ""
+        return targets[0]
+    def contextMenuEvent(self, event):
+        self.menu.exec_(event.globalPos())
+    def reload(self):
+        self.clear()
+        if hasattr(self.backend, 'get_targets'):
+            targets = self.backend.get_targets()
+            for t in targets:
+                item = QListWidgetItem(t)
+                item.setData(Qt.UserRole, t)
+                self.addItem(item)
+        self.query(self.text)
+    def query(self, text):
+        self.text = text
+        for i in range(self.count()):
+            item = self.item(i)
+            if not text or any([f in item.text() for f in text.split(",")]):
+                item.setHidden(False)
+            else:
+                item.setHidden(True)
+    def delete_targets(self):
+        targets = self.selected_targets()
+        if not targets: return
+        if hasattr(self.backend, 'delete_by_targets'):
+            self.backend.delete_by_targets(targets)
+        elif hasattr(self.backend, 'del_targets'):
+            self.backend.del_targets(targets)
+        self.reload()
+    def mirror_targets(self):
+        targets = self.selected_targets()
+        if hasattr(self.backend, 'mirror_targets'):
+            self.backend.mirror_targets(targets)
+            self.reload()
+        else:
+            self.mirrorTargets.emit(targets)
+
+class BaseTargetTool(QDialog):
+    def __init__(self, backend, title=u"Target Tool", parent=None):
+        QDialog.__init__(self, parent)
+        self.backend = backend
+        self.setWindowTitle(title)
+        self.line = QLineEdit()
+        self.slider = TargetSlider()
+        self.button = QPushButton(u"修形")
+        self.button.clicked.connect(self.apply)
+    def setup_layout(self):
+        layout = QVBoxLayout()
+        layout.addLayout(self.slider)
+        layout.addLayout(q_add(QHBoxLayout(), q_prefix(u"搜索：", 40), self.line))
+        layout.addWidget(self.list)
+        layout.addWidget(self.button)
+        self.setLayout(layout)
+        self.line.textChanged.connect(self.list.query)
+    def apply(self):
+        text = self.line.text().strip()
+        if not text:
+            selected = self.list.selected_targets()
+            if selected:
+                target_name = selected[0]
+                from .. import bs
+                if bs.is_on_duplicate_edit():
+                    if hasattr(self.backend, 'set_pose_by_target'):
+                        bs.finish_duplicate_edit(self.backend.set_pose_by_target)
+                    elif hasattr(self.backend, 'to_target'):
+                        bs.finish_duplicate_edit(self.backend.to_target)
+                else:
+                    self._on_duplicate_edit(target_name)
+                self.list.reload()
+                self._update_button_state()
+                return
+        if hasattr(self.backend, 'auto_apply'):
+            if hasattr(self.backend, 'set_pose_by_targets'):
+                self.backend.auto_apply(text.split(","))
+            else:
+                self.backend.auto_apply(text)
+        self.list.reload()
+        self._update_button_state()
+    def _on_duplicate_edit(self, target_name):
+        pass
+    def _update_button_state(self):
+        from .. import bs
+        if bs.is_on_duplicate_edit():
+            target_name = bs.get_editing_target_name() or "?"
+            self.button.setText(u"结束修改: %s" % target_name)
+            self.button.setStyleSheet("background-color: #ff5555; color: white; font-weight: bold;")
+        else:
+            self.button.setText(u"修形")
+            self.button.setStyleSheet("")
+    def load(self):
+        self.list.reload()
+        self._update_button_state()
+
