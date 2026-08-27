@@ -1,7 +1,11 @@
 try:
     from importlib import reload
-except ImportError:
-    pass
+except Exception as _e:
+    try:
+        import MFace2.logger as _mface_logger
+        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+    except ImportError:
+        pass
 from . import rig
 from . import joint
 from . import surface

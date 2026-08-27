@@ -126,15 +126,17 @@ def find_node_by_name(name):
     return None
 
 def find_ctrl_by_joint(joint):
-    """通过骨骼查找对应控制器"""
+    """通过骨骼查找对应控制器
+    多个匹配时返回最短路径（最精确匹配）。"""
     joint_name = joint if isinstance(joint, str) else str(joint)
     if "Part" in joint_name:
         return None
     short_name = joint_name.split("|")[-1].split(":")[-1]
     ctrl_list = cmds.ls(get_body_ctrl_names(short_name), type="transform") or []
-    if len(ctrl_list) == 1:
-        return ctrl_list[0]
-    return None
+    if not ctrl_list:
+        return None
+    ctrl_list.sort(key=lambda x: len(x))
+    return ctrl_list[0]
 
 def find_mirror_joint(joint):
     """查找镜像骨骼"""
@@ -163,7 +165,6 @@ def create_group(n="|FaceGroup|SkeletonGroup", d=False, v=None, i=None):
     if i is not None:
         cmds.setAttr(result + ".inheritsTransform", i)
     return result
-
 
 
 def keep_selected(fun):
@@ -237,5 +238,6 @@ def select_node(name):
 
 def is_transform(name):
     from maya import cmds
-    if not cmds.objExists(name): return False
-    return cmds.objectType(name) == "transform"
+    nodes = cmds.ls(name, l=True)
+    if not nodes: return False
+    return cmds.objectType(nodes[0]) == "transform"

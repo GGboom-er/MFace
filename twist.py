@@ -9,47 +9,9 @@ from maya import cmds
 import math
 from . import bs
 from . import shared
+from .shared import find_node_by_name, get_selected_polygons, find_ctrl_by_joint, find_mirror_joint, create_group
 
 
-def find_node_by_name(name):
-    """根据名称查找节点"""
-    nodes = cmds.ls(name)
-    if len(nodes) == 1:
-        return nodes[0]
-    print("can not find " + name)
-    return None
-
-
-def get_selected_polygons():
-    """获取选中的多边形"""
-    polygons = []
-    for polygon in cmds.ls(sl=True, type="transform") or []:
-        shapes = cmds.listRelatives(polygon, s=True, ni=True)
-        if not shapes:
-            continue
-        if cmds.nodeType(shapes[0]) != "mesh":
-            continue
-        polygons.append(polygon)
-    return polygons
-
-
-def find_ctrl_by_joint(joint):
-    """根据骨骼查找控制器"""
-    joint_name = joint.split("|")[-1].split(":")[-1]
-    ctrl_list = cmds.ls(shared.get_body_ctrl_names(joint_name), type="transform") or []
-    ctrl_list.sort(key=lambda x: len(x))
-    if len(ctrl_list) > 0:
-        return ctrl_list[0]
-    return None
-
-
-def find_mirror_joint(joint):
-    """查找镜像骨骼"""
-    joint_name = joint.split("|")[-1].split(":")[-1]
-    joints = cmds.ls(shared.get_body_rl_names(joint_name), type="joint") or []
-    if len(joints) != 1:
-        return None
-    return joints[0]
 
 
 class Twist(object):
@@ -465,24 +427,6 @@ def get_targets():
 
 
 
-def create_group(n="|FaceGroup|SkeletonGroup", d=False, v=None, i=None):
-    """创建组"""
-    if d:
-        if cmds.objExists(n):
-            cmds.delete(n)
-    if cmds.objExists(n):
-        return n
-    fields = n.split("|")
-    n = fields.pop(-1)
-    if len(fields) > 1:
-        result = cmds.group(em=True, n=n, p=create_group("|".join(fields)))
-    else:
-        result = cmds.group(em=True, n=n)
-    if v is not None:
-        cmds.setAttr(result + ".v", v)
-    if i is not None:
-        cmds.setAttr(result + ".inheritsTransform", i)
-    return result
 
 
 def get_twist_data():
@@ -585,3 +529,40 @@ def esc():
     if bs.is_on_duplicate_edit():
         bs.finish_duplicate_edit(to_target)
     all_to_zero()
+
+
+def tool_add_twist_driver_from_selection():
+    """显式为当前选中的骨骼生成Twist扭转驱动"""
+    try:
+        from .logger import logger
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+
+    targets = []
+    sel_joints = cmds.ls(sl=True, type="joint") or []
+    if not sel_joints:
+        logger.warning(u"请先选择要添加扭转驱动的骨骼 (Please select a joint first).")
+        return []
+
+    for sel in sel_joints:
+        twist = Twist(joint=sel)
+        if not twist.find_ctrl():
+            logger.warning(u"骨骼 %s 没有找到对应的控制器！" % sel)
+            continue
+
+        target_name = twist.get_current_target()
+        if target_name is None:
+            logger.warning(u"骨骼 %s 扭转角度太小！" % sel)
+            continue
+
+        # 添加并记录 target
+        twist.add_current_target()
+        targets.append(target_name)
+
+    if targets:
+        try:
+            logger.hud(u"成功创建 Twist 驱动: %s" % ", ".join(targets))
+        except AttributeError:
+            logger.info(u"成功创建 Twist 驱动: %s" % ", ".join(targets))
+    return targets

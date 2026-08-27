@@ -222,7 +222,7 @@ def liner_regression(data_x, data_y):
 
 
 def mirror_targets(bs_name, orig_name, src_indexes, dst_indexes):
-    print "py, mirror"
+    print("py, mirror")
     dag_path = MDagPath()
     str_to_dag_path(orig_name, dag_path)
     fn_mesh = MFnMesh(dag_path)
@@ -302,7 +302,7 @@ def cache_target_points(bs_name, target_indexes):
     global _CACHE_ID_POINT_MAPS
     if bs_name not in _CACHE_ID_POINT_MAPS:
         _CACHE_ID_POINT_MAPS[bs_name] = {}
-        
+
     target_length = len(target_indexes)
     for target_id in range(target_length):
         _CACHE_ID_POINT_MAPS[bs_name][target_indexes[target_id]] = get_bs_id_point_map(bs_name, target_indexes[target_id])

@@ -3,6 +3,7 @@ import re
 
 from .nodes import *
 from .control import Control, Color
+from .data import mirror_matrix
 from maya.api.OpenMaya import *
 from maya import cmds
 
@@ -160,9 +161,16 @@ class Face(Hierarchy):
             if head_grp not in parents:
                 try:
                     cmds.parent(joints_grp, head_grp)
-                except Exception:
-                    pass
-
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except Exception as _e:
+                        try:
+                            import MFace2.logger as _mface_logger
+                            _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                        except ImportError:
+                            pass
         return self
 
     def add_joint_fmt(self):
@@ -272,9 +280,7 @@ class Ctrl(Hierarchy):
             self.mirror.xform(ws=0, m=list(MMatrix(local).inverse()))
             self.mirror["sx"] = -1
             local = local[:]
-            for i in range(4):
-                local[i * 4 + 0] *= -1
-                local[0 * 4 + i] *= -1
+            local = mirror_matrix(local)
             self.flip.xform(ws=0, m=local)
         if self.is_dn():
             self.flip["sy"] = -1
@@ -388,9 +394,7 @@ class Ctrl(Hierarchy):
                 continue
             # 1. 镜像位置和朝向
             matrix = ctrl.output.xform(q=1, ws=1, m=1)
-            for i in range(4):
-                matrix[i * 4 + 0] *= -1
-                matrix[0 * 4 + i] *= -1
+            matrix = mirror_matrix(matrix)
             mirror_ctrl.edit_matrix(matrix)
             # 2. 拷贝 shape（Mirror sx=-1 已处理视觉翻转，直接拷贝即可）
             src = Control(t=ctrl.ctrl.name)
@@ -535,16 +539,11 @@ class Ctrl(Hierarchy):
 
 def _strip_scale_from_matrix(m):
     """从 4x4 list 矩阵中剥离缩放，返回纯旋转+位移的干净矩阵。
-    归一化前三列（旋转列向量），避免父级缩放污染 BlendWeighted 通道值。"""
-    m = list(m)
-    for col in range(3):  # x, y, z 旋转列
-        off = col * 4
-        length = (m[off] ** 2 + m[off + 1] ** 2 + m[off + 2] ** 2) ** 0.5
-        if length > 1e-8:
-            m[off] /= length
-            m[off + 1] /= length
-            m[off + 2] /= length
-    return m
+    归一化前三列（旋转列向量），避免父级缩放污染 BlendWeighted 通道值。
+    （OpenMaya 加速）"""
+    xform = MTransformationMatrix(MMatrix(m))
+    xform.setScale([1.0, 1.0, 1.0], MSpace.kTransform)
+    return list(xform.asMatrix())
 
 
 class Joint(Hierarchy):
@@ -616,7 +615,7 @@ class Joint(Hierarchy):
         # 剥离缩放后提取旋转值，与 set_matrix 保持一致
         clean_local = _strip_scale_from_matrix(local_matrix)
         values = [clean_local[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
-        
+
         rest_values = [None] * len(values)
         if rest_matrix:
             local_rest = list(MMatrix(rest_matrix) * MMatrix(root_ws_inv))
@@ -624,7 +623,7 @@ class Joint(Hierarchy):
             sr = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [xr, yr, zr]]
             clean_rest = _strip_scale_from_matrix(local_rest)
             rest_values = [clean_rest[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + sr
-            
+
         for bw, value, rest_val in zip(self.bws, values, rest_values):
             bw.add_pose(weight, value, rest_val)
 
@@ -739,21 +738,21 @@ class Joint(Hierarchy):
                     ])
                 r_base = get_rot_mat(y_base, z_base)
                 r_pose = get_rot_mat(y_pose, z_pose)
-                
+
                 # 平移：相对世界 YZ 平面的位移镜像
                 delta_t = t_pose - t_base
                 t_sym = t_base + om.MVector(-delta_t.x, delta_t.y, delta_t.z)
-                
+
                 # 旋转：提取世界空间中的旋转增量
                 delta_r_world = r_base.inverse() * r_pose
-                
+
                 # 对世界变化量进行镜面反射
                 S_x = om.MMatrix([-1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,0,1])
                 delta_r_world_sym = S_x * delta_r_world * S_x
-                
+
                 # 基于同样的基础姿势，应用镜像后的变化量，保证自身朝向基础不被错误倒转
                 r_sym = r_base * delta_r_world_sym
-                
+
                 m_sym_list = list(r_sym)
                 sy = target_vals[10]
                 sz = target_vals[11]
@@ -763,7 +762,7 @@ class Joint(Hierarchy):
                     m_sym_list[8]*sz, m_sym_list[9]*sz, m_sym_list[10]*sz,
                     target_vals[9], target_vals[10], target_vals[11]
                 ]
-                
+
                 mirror_value = [s - d for s, d in zip(sym_vals, default_vals)]
                 mirror_data[name] = mirror_value
             else:

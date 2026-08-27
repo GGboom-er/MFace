@@ -31,33 +31,33 @@ def get_distance(v1, v2):
 
 
 def v_dot(v1, v2):
-    return sum([e1*e2 for e1, e2 in zip(v1, v2)])
+    """向量点乘（OpenMaya 加速）"""
+    return MVector(v1) * MVector(v2)
 
 
 def v_cross(v1, v2):
     u"""
-    叉乘
+    叉乘（OpenMaya 加速）
     """
-    v = []
-    for i in range(3):
-        j = (i + 1) % 3
-        k = (i + 2) % 3
-        v.append(v1[j] * v2[k] - v1[k] * v2[j])
-    return v
+    result = MVector(v1) ^ MVector(v2)
+    return [result.x, result.y, result.z]
 
 
 def v_normal(v):
     u"""
-    归一化
+    归一化（OpenMaya 加速）
     """
-    length = sum([e*e for e in v]) ** 0.5
-    if length < 0.0000001:
+    mv = MVector(v)
+    length = mv.length()
+    if length < 1e-7:
         return [0] * len(v)
-    return [e/length for e in v]
+    mv.normalize()
+    return [mv.x, mv.y, mv.z]
 
 
 def v_length(v):
-    return sum([e*e for e in v]) ** 0.5
+    """向量长度（OpenMaya 加速）"""
+    return MVector(v).length()
 
 
 def m3x3_to_m16(m3x3):
@@ -71,11 +71,16 @@ def get_matrix_distance(m1, m2):
 
 
 def mirror_matrix(matrix):
-    matrix = matrix[:]
-    for i in range(4):
-        matrix[i * 4 + 0] *= -1
-        matrix[0 * 4 + i] *= -1
-    return matrix
+    """X 轴镜像矩阵（OpenMaya 加速）"""
+    m = MMatrix(matrix)
+    # 镜像 = 翻转第 0 列和第 0 行（X 轴反转）
+    sx = MMatrix([
+        -1, 0, 0, 0,
+         0, 1, 0, 0,
+         0, 0, 1, 0,
+         0, 0, 0, 1])
+    result = sx * m * sx
+    return list(result)
 
 
 def check_aim_roll(aim_matrix, roll_matrix, mirror):
@@ -132,8 +137,12 @@ def create_follicle(geometry=None, name="follicle", parent=None, u=0.5, v=0.5):
 
 
 def get_blend_matrix(matrix1, matrix2):
-    matrix = [(v1+v2)/2 for v1, v2 in zip(matrix1, matrix2)]
-    scale_trans = MTransformationMatrix(MMatrix(matrix))
+    """两个矩阵的中间混合（OpenMaya 加速）"""
+    m1 = MMatrix(matrix1)
+    m2 = MMatrix(matrix2)
+    # 元素级平均
+    avg = MMatrix([0.5 * (a + b) for a, b in zip(list(m1), list(m2))])
+    scale_trans = MTransformationMatrix(avg)
     no_scale_trans = MTransformationMatrix()
     no_scale_trans.setRotation(scale_trans.rotation())
     no_scale_trans.setTranslation(scale_trans.translation(MSpace.kTransform), MSpace.kTransform)
@@ -274,7 +283,9 @@ def get_us_by_curve(node):
 
 def get_fit_surface_curve_matrices(number, **kwargs):
     if isinstance(number, int) and number < 0:
-        return get_fit_curve_matrices(**kwargs)
+        points = kwargs.pop('points', [])
+        us = kwargs.pop('us', [])
+        return get_fit_curve_matrices(points=points, us=us, **kwargs)
     else:
         return get_fit_surface_matrices(number=number, **kwargs)
 
@@ -428,4 +439,3 @@ def get_follow_weights(cn, jn, close=False):
                 weights[-1][i+1] = (c-v1)/s
                 weights[-1][i] = (v2-c)/s
     return weights
-

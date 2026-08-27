@@ -1,0 +1,371 @@
+{
+    "Brow_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "main": true,
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "R"
+    },
+    "Brow_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {
+                    "cluster": true
+                }
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "M"
+    },
+    "Lid_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Up"
+                },
+                {
+                    "cluster2": 5,
+                    "joint": 9,
+                    "degree": 2,
+                    "roll": true,
+                    "sample": 0
+                }
+            ],
+            [
+                {
+                    "suf": "Dn"
+                },
+                {
+                    "cluster2": 0,
+                    "joint": -1,
+                    "degree": 2,
+                    "roll": true,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "loop_curve",
+        "rig": "Eye",
+        "pre": "Lid",
+        "name": "Lid",
+        "rml": "R"
+    },
+    "Eye_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {}
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Eye",
+        "pre": "Eye",
+        "name": "Eye",
+        "rml": "R"
+    },
+    "Orbita_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Up"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 12,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ],
+            [
+                {
+                    "suf": "Dn"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 12,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "cluster": 3,
+                    "joint": -1,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "loop_surface",
+        "rig": "Loop",
+        "pre": "",
+        "name": "Orbita",
+        "rml": "R"
+    },
+    "Nose_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {}
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Nose",
+        "pre": "Nose",
+        "name": "Nose",
+        "rml": "M"
+    },
+    "Nostril_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 1,
+                    "sample": 0
+                }
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 1,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Nose",
+        "pre": "Nostril",
+        "name": "Nostril",
+        "rml": "M"
+    },
+    "Dimple_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "main": false,
+                    "cluster": 3,
+                    "joint": -1,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Surface",
+        "pre": "",
+        "name": "Dimple",
+        "rml": "R"
+    },
+    "DimpleA_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "main": true,
+                    "cluster": 3,
+                    "joint": 5,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Surface",
+        "pre": "",
+        "name": "DimpleA",
+        "rml": "R"
+    },
+    "Lip_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Up"
+                },
+                {
+                    "cluster2": 4,
+                    "joint": -1,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ],
+            [
+                {
+                    "suf": "Dn"
+                },
+                {
+                    "cluster2": 7,
+                    "joint": 9,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "loop_curve",
+        "rig": "Lip",
+        "pre": "Lip",
+        "name": "Lip",
+        "rml": "M"
+    },
+    "Jaw_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "zip": true
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {}
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Lip",
+        "pre": "Jaw",
+        "name": "Jaw",
+        "rml": "M"
+    },
+    "Tongue_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "05"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "04"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "03"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "02"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "01"
+                },
+                {}
+            ]
+        ],
+        "fit": "fk",
+        "rig": "Lip",
+        "pre": "Tongue",
+        "name": "Tongue",
+        "rml": "M"
+    },
+    "ToothUp_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {}
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Lip",
+        "pre": "ToothUp",
+        "name": "ToothUp",
+        "rml": "M"
+    },
+    "ToothDn_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {}
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Lip",
+        "pre": "ToothDn",
+        "name": "ToothDn",
+        "rml": "M"
+    }
+}

@@ -106,8 +106,16 @@ class _HudOverlay(QLabel):
                     widget = wrapInstance(int(ptr), QWidget)
                     tl = widget.mapToGlobal(widget.rect().topLeft())
                     return (tl.x(), tl.y(), widget.width(), widget.height())
-        except Exception:
-            pass
+        except Exception as _e:
+            try:
+                import MFace2.logger as _mface_logger
+                _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except ImportError:
+                    pass
         # fallback: Maya 主窗口
         ptr = omui.MQtUtil.mainWindow()
         widget = wrapInstance(int(ptr), QWidget)
@@ -180,7 +188,7 @@ class MFaceLogger(object):
         err_msg = "[MFace2 ERROR] " + str(msg)
         if exc:
             err_msg += "\n" + traceback.format_exc()
-            
+
         if _IS_MAYA:
             MGlobal.displayError(err_msg)
         else:
@@ -217,9 +225,17 @@ class MFaceLogger(object):
         # 关闭上一条（不堆叠）
         if cls._hud_overlay is not None:
             try:
-                cls._hud_overlay.close()
-                cls._hud_overlay.deleteLater()
-            except RuntimeError:
+                try:
+                    import shiboken6 as shiboken
+                except ImportError:
+                    try:
+                        import shiboken2 as shiboken
+                    except ImportError:
+                        import shiboken
+                if shiboken.isValid(cls._hud_overlay):
+                    cls._hud_overlay.close()
+                    cls._hud_overlay.deleteLater()
+            except Exception:
                 pass
             cls._hud_overlay = None
 
@@ -299,10 +315,13 @@ class MSG:
     PRESET_LOAD_CANCEL = u"加载预设已取消。"
 
     # --- 校验与提示 ---
+    NO_COMB_SUPPORT = u"当前选中的目标类型不支持创建组合驱动！"
+    NO_IB_SUPPORT = u"当前选中的目标类型不支持添加中间帧！"
     SELECT_TARGET_FIRST = u"请先选择要操作的目标！"
     SELECT_EDGE_FIRST = u"请先选择边(Edge)！"
     SELECT_MESH_FIRST = u"请先选择模型网格！"
     SELECT_CLUSTER_FIRST = u"请先在场景中选择一个需要修改权重的 Cluster 控制器！"
+    SELECT_JOINT_OR_MESH_FIRST = u"请先在场景中选择要移除影响的骨骼/控制器/模型点！"
     ZERO_DELTA_ERROR = u"[%s] 差值为0！请先在视窗中推拉该控制器数值，再点击添加。"
     CLEAN_BW_DONE = u"已清除全场景 BlendWeighted 中 %d 个废弃属性。"
     CLEAN_BW_EMPTY = u"全场景的 BW 属性非常干净，无废弃隔离槽位！"

@@ -4,8 +4,6 @@ from . import cluster
 from . import pose_tool
 from . import fit
 from . import preset
-from . import body_pose_tool
-from . import twist_tool
 from . import grid_tool
 from . import joint_tool
 from .. import bs
@@ -20,6 +18,7 @@ class MFaceMain(QDialog):
 
     def __init__(self):
         QDialog.__init__(self, get_app())
+        self.setObjectName("MFaceMainUI")
         self.tab = QTabWidget(self)
         self.setLayout(q_add(QVBoxLayout(), self.tab))
         self.setWindowTitle(u"MFace 4.0.4")
@@ -28,16 +27,12 @@ class MFaceMain(QDialog):
 
         self.fit = fit.FitCreateTool()
         self.cluster = cluster.ClusterTool()
-        self.facePose = pose_tool.FacePoseTool()
-        self.bodyPose = body_pose_tool.BodyPoseTool()
-        self.twist = twist_tool.TwistTool()
+        self.facePose = pose_tool.CorrectiveTool()
         self.grid = grid_tool.UVPoseTool()
         self.tab.addTab(self.fit, u"绑定")
         self.tab.addTab(self.cluster, u"跟随")
-        self.tab.addTab(self.facePose, u"姿势")
-        self.tab.addTab(self.bodyPose, u"身体姿态")
+        self.tab.addTab(self.facePose, u"姿势与修型")
         self.tab.addTab(self.grid, u"网格")
-        self.tab.addTab(self.twist, u"身体扭转")
         Theme.apply_fonts(self)
         self.update_presets()
         self.tab.currentChanged.connect(self.change_tab)
@@ -54,26 +49,22 @@ class MFaceMain(QDialog):
         tool_menu.addAction(u"导出BS和驱动", self.export_blend_shape_sdk_data_ui)
         tool_menu.addAction(u"导入BS和驱动", self.load_blend_shape_sdk_data_ui)
         tool_menu.addAction(u"合并模型并保留蒙皮BS", bs.comb_skin_bs)
-        
+
         from .. import hotbox
         tool_menu.addAction(u"使用热盒模式", hotbox.open_tool)
-        
+
         self.create_joint_tool = joint_tool.CreateJointTool(self)
         joints_menu = menu_bar.addMenu(u"骨骼")
         joints_menu.addAction(u"创建骨骼", self.create_joint_tool.showNormal)
         joints_menu.addAction(u"镜像骨骼", corrective_joints.mirror_joints)
-        joints_menu.addAction(u"为骨骼创建Pin驱动", lambda: (corrective_joints.tool_add_selected_joints(), self.bodyPose.list.reload()))
-        joints_menu.addAction(u"移除骨骼Pin驱动", lambda: (corrective_joints.tool_remove_selected_joints(), self.bodyPose.list.reload()))
+        joints_menu.addAction(u"为骨骼创建Pin驱动", lambda: (corrective_joints.tool_add_selected_joints(), self.facePose.reload()))
+        joints_menu.addAction(u"移除骨骼Pin驱动", lambda: (corrective_joints.tool_remove_selected_joints(), self.facePose.reload()))
         joints_menu.addAction(u"导出驱动", lambda: self._save_data_ui(corrective_joints.tool_get_joint_driver_data))
         joints_menu.addAction(u"导入驱动", lambda: self._load_data_ui(corrective_joints.tool_load_joint_driver_data))
 
     def get_selected_targets_list(self):
-        if self.tab.currentIndex() == 3:
-            return self.bodyPose.list.selected_targets()
-        elif self.tab.currentIndex() == 2:
-            return self.facePose.list.selected_targets()
-        elif self.tab.currentIndex() == 5:
-            return self.twist.list.selected_targets()
+        if self.tab.currentIndex() == 2:
+            return self.facePose.list.selected_names()
         return []
 
     def init_targets(self):
@@ -142,20 +133,14 @@ class MFaceMain(QDialog):
             self.facePose.load()
         elif index == 3:
             self.resize(base_size)
-            self.bodyPose.load()
-        elif index == 4:
-            self.resize(base_size)
             self.grid.grid.set_control([0, 0])
             self.grid.reload()
-        elif index == 5:
-            self.resize(base_size)
-            self.twist.load()
         else:
             self.resize(480, 640+24)
 
     def update_presets(self):
-        for i in range(6, self.tab.count()):
-            self.tab.removeTab(6)
+        for i in range(4, self.tab.count()):
+            self.tab.removeTab(4)
         for name in tools.preset.get_presets():
             preset_ui = preset.Preset(name)
             self.tab.addTab(preset_ui, name)
@@ -166,7 +151,7 @@ class MFaceMain(QDialog):
         self.set_preset_by_name(name)
 
     def set_preset_by_name(self, name):
-        for i in range(6, self.tab.count()):
+        for i in range(4, self.tab.count()):
             if self.tab.tabText(i) != name:
                 continue
             self.tab.setCurrentIndex(i)
@@ -174,7 +159,12 @@ class MFaceMain(QDialog):
 
 def show():
     global window
-    if window is None:
-        window = MFaceMain()
-    window.showNormal()
+    try:
+        from maya import cmds
+        if cmds.control("MFaceMainUI", query=True, exists=True):
+            cmds.deleteUI("MFaceMainUI")
+    except Exception:
+        pass
 
+    window = MFaceMain()
+    window.showNormal()

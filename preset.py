@@ -46,7 +46,7 @@ def save_preset_json_data(preset, name, data):
 def get_preset_json_data(preset, name):
     path = get_preset_path(preset, name)
     if not os.path.isfile(path):
-        return 
+        return
     with open(get_preset_path(preset, name), "r") as fp:
         return json.load(fp)
 
@@ -54,7 +54,7 @@ def get_preset_json_data(preset, name):
 def load_preset_json_data(preset, name, fun):
     data = get_preset_json_data(preset, name)
     if data is None:
-        return 
+        return
     fun(data)
 
 
@@ -617,8 +617,16 @@ class RigSnapshot(object):
                 try:
                     if cmds.getAttr(rig_group + "." + attr):
                         return True
-                except Exception:
-                    pass
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except Exception as _e:
+                        try:
+                            import MFace2.logger as _mface_logger
+                            _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                        except ImportError:
+                            pass
         if fits is not None and cls._has_module_outputs_from_fits(fits):
             return True
         return False
@@ -670,9 +678,16 @@ class RigSnapshot(object):
                     names.update(fmt.clusters())
                 if row.get("cluster2"):
                     names.update(fmt.clusters2())
-            except Exception:
-                pass
-
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except ImportError:
+                        pass
         for row in rows:
             if not row.get("name"):
                 continue
@@ -689,10 +704,18 @@ class RigSnapshot(object):
             try:
                 group_rows = sorted(group_rows, key=lambda x: x.get("suf", ""))
                 names.update(Fmt(joint=len(group_rows), **group_rows[0]).fks())
-            except Exception:
-                pass
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except ImportError:
+                        pass
         return names
-        
+
     @classmethod
     def capture(cls, rig_group=None, keep_ctrl=True, keep_ctrl_transform=True,
                 keep_cluster=True, keep_sdk=True, keep_additive=True):
@@ -1036,8 +1059,16 @@ class RigSnapshot(object):
                 if cmds.objExists(plug):
                     try:
                         item["attrs"][attr] = cmds.getAttr(plug)
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        try:
+                            import MFace2.logger as _mface_logger
+                            _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                        except Exception as _e:
+                            try:
+                                import MFace2.logger as _mface_logger
+                                _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                            except ImportError:
+                                pass
             try:
                 if item["type"] == "pointConstraint":
                     aliases = cmds.pointConstraint(con, q=True, wal=True) or []
@@ -1053,8 +1084,16 @@ class RigSnapshot(object):
                     plug = con + "." + alias
                     if cmds.objExists(plug):
                         item["weights"][alias] = cmds.getAttr(plug)
-            except Exception:
-                pass
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except ImportError:
+                        pass
             data.append(item)
         return data
 
@@ -1079,16 +1118,32 @@ class RigSnapshot(object):
                         else:
                             cmds.setAttr(plug, value)
                         restored = True
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        try:
+                            import MFace2.logger as _mface_logger
+                            _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                        except Exception as _e:
+                            try:
+                                import MFace2.logger as _mface_logger
+                                _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                            except ImportError:
+                                pass
             for alias, value in item.get("weights", {}).items():
                 plug = con + "." + alias
                 if cmds.objExists(plug):
                     try:
                         cmds.setAttr(plug, value)
                         restored = True
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        try:
+                            import MFace2.logger as _mface_logger
+                            _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                        except Exception as _e:
+                            try:
+                                import MFace2.logger as _mface_logger
+                                _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                            except ImportError:
+                                pass
         if restored:
             cmds.dgdirty(a=True)
         return restored
@@ -1226,5 +1281,3 @@ class RigSnapshot(object):
                     progress_cb(remainder)
         except Exception as e:
             logger.warning(MSG.SNAP_RESTORE_ERROR % ("Additive 数据", e))
-
-

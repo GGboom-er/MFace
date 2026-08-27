@@ -274,9 +274,16 @@ class ClusterTool(QDialog):
             self.but.setContextMenuPolicy(Qt.NoContextMenu)
             try:
                 self.but.customContextMenuRequested.disconnect(self.show_cancel_menu)
-            except Exception:
-                pass
-
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except Exception as _e:
+                    try:
+                        import MFace2.logger as _mface_logger
+                        _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                    except ImportError:
+                        pass
     def show_cancel_menu(self, pos):
         menu = QMenu(self.but)
         menu.addAction(u"放弃修改", self.cancel_edit)

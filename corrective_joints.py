@@ -2,6 +2,7 @@
 from maya.api.OpenMaya import *
 from maya import cmds
 from . import shared
+from .shared import find_mirror_joint
 
 
 
@@ -57,15 +58,6 @@ def create_direction_joint(polygon, joint, i, matrix):
             point = ray_point(polygon, matrix, direction, point)
     cmds.xform(deform_joint, t=[point.x, point.y, point.z], ws=1)
     return deform_joint
-
-
-def find_mirror_joint(joint):
-    joint_name = joint if isinstance(joint, str) else joint
-    short_name = joint_name.split("|")[-1].split(":")[-1]
-    joints = cmds.ls(shared.get_body_rl_names(short_name), type="joint") or []
-    if len(joints) != 1:
-        return None
-    return joints[0]
 
 
 def create_joint(polygon, joint, directions, rotate_offset):
@@ -156,5 +148,124 @@ def create_joints(polygon, joints, directions, rotate_offset, mirror):
         deform_joints += create_joint(polygon, joint, directions, rotate_offset)
     if mirror:
         mirror_joints(deform_joints)
+class BodyDeform(object):
+    def __init__(self):
+        from .proxy_pin import ProxyPin
+        self.fp = ProxyPin("adPoseJointDeform")
+        self.fp.body = True
+
+    def add_selected_joints(self, joints, clusters=None, weights=None):
+        self.fp.load()
+        for i, joint in enumerate(joints):
+            self.fp.add_pin(joint, cmds.xform(joint, q=1, ws=1, m=1))
+            if clusters is None:
+                parent = (cmds.listRelatives(joint, p=1) or [None])[0]
+                if parent and cmds.nodeType(joint) == "joint":
+                    self.fp.set_follow(parent, joint, 1.0)
+                    parent = (cmds.listRelatives(parent, p=1) or [None])[0]
+                    if parent and cmds.nodeType(joint) == "joint":
+                        self.fp.set_follow(parent, joint, 1.0)
+            else:
+                for cluster, weight in zip(clusters, weights[i]):
+                    self.fp.set_follow(cluster, joint, weight)
+        self.fp.build()
+        self.constraint_joints(joints)
+
+    @staticmethod
+    def constraint_joints(joints):
+        for joint in joints:
+            pc = joint + "_parentConstraint"
+            if cmds.objExists(pc):
+                cmds.delete(pc)
+            pc = cmds.parentConstraint(joint + "Pin", joint, n=pc)
+            cmds.parent(pc, joint + "Pin")
+
+    def edit_target(self, edit_target_fun):
+        src, dst = self.fp.driver_name(), self.fp.plane_name()
+        if not cmds.objExists(dst):
+            return
+        if not cmds.objExists(src):
+            return
+        temp = cmds.duplicate(src, n="temp_"+src)[0]
+        try:
+            cmds.select(temp, dst)
+            edit_target_fun()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            cmds.warning(u"Pin变形驱动编辑失败: %s" % e)
+        finally:
+            if cmds.objExists(temp):
+                cmds.delete(temp)
+
+    def remove_selected_joints(self, joints):
+        self.fp.load()
+        joint_matrix = {joint: cmds.xform(joint, q=1, ws=0, m=1) for joint in joints}
+        for joint in joints:
+            self.fp.remove_pin(joint)
+        for joint, matrix in joint_matrix.items():
+            cmds.xform(joint, m=matrix, ws=0)
+        self.fp.build()
+
+    def load_joint_driver_data(self, data):
+        from . import tools
+        tools.set_blend_shape_sdk_data(data["bs_sdk"])
+        joints = self.create_joints(data)
+        self.fp.load()
+        self.fp.update_data(data)
+        self.fp.build()
+        self.constraint_joints(joints)
+
+    @staticmethod
+    def create_joints(data):
+        joints = []
+        for joint in data["pins"]:
+            if cmds.objExists(joint):
+                continue
+            parent = data.get('parents', dict()).get(joint)
+            joint_name = cmds.joint(parent, n=joint)
+            joints.append(joint_name)
+            matrix = data.get("pin_matrices", dict()).get(joint)
+            if matrix:
+                cmds.xform(joint_name, ws=1, m=matrix)
+        return joints
+
+    def get_joint_driver_data(self):
+        from . import tools
+        self.fp.load()
+        data = self.fp.get_all_data()
+        parents = dict()
+        for joint in self.fp.pins:
+            if not cmds.objExists(joint):
+                parents[joint] = None
+                continue
+            parent_nodes = cmds.listRelatives(joint, p=1)
+            if not parent_nodes:
+                parents[joint] = None
+                continue
+            parents[joint] = parent_nodes[0]
+        data["parents"] = parents
+        if cmds.objExists(self.fp.plane_name()):
+            cmds.select(self.fp.plane_name())
+            data["bs_sdk"] = tools.get_blend_shape_sdk_data()
+            if "bs_sdk" in data and "bs_data" in data["bs_sdk"]:
+                data["bs_sdk"]["bs_data"] = []
+        return data
 
 
+def tool_add_selected_joints():
+    joints = cmds.ls(sl=1, type="joint") or []
+    if joints: BodyDeform().add_selected_joints(joints)
+
+def tool_edit_target(edit_target_fun):
+    BodyDeform().edit_target(edit_target_fun)
+
+def tool_remove_selected_joints():
+    joints = cmds.ls(sl=1, type="joint") or []
+    if joints: BodyDeform().remove_selected_joints(joints)
+
+def tool_get_joint_driver_data():
+    return BodyDeform().get_joint_driver_data()
+
+def tool_load_joint_driver_data(data):
+    BodyDeform().load_joint_driver_data(data)

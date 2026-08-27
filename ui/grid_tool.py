@@ -339,8 +339,12 @@ class UVPoseTool(Tool):
             self.button.setContextMenuPolicy(Qt.CustomContextMenu)
             try:
                 self.button.customContextMenuRequested.disconnect(self._show_cancel_menu)
-            except (RuntimeError, TypeError):
-                pass
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except ImportError:
+                    pass
             self.button.customContextMenuRequested.connect(self._show_cancel_menu)
         else:
             self.button.setText(u"复制/修改")
@@ -348,9 +352,12 @@ class UVPoseTool(Tool):
             self.button.setContextMenuPolicy(Qt.DefaultContextMenu)
             try:
                 self.button.customContextMenuRequested.disconnect(self._show_cancel_menu)
-            except (RuntimeError, TypeError):
-                pass
-
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except ImportError:
+                    pass
     def _show_cancel_menu(self, pos):
         target_name = bs.get_editing_target_name() or "?"
         menu = QMenu(self.button)

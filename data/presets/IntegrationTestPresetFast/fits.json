@@ -1,0 +1,46 @@
+{
+    "Brow_R": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Curve"
+                },
+                {}
+            ],
+            [
+                {
+                    "suf": "Surface"
+                },
+                {
+                    "main": true,
+                    "cluster": 3,
+                    "joint": -1,
+                    "degree": 2,
+                    "sample": 0
+                }
+            ]
+        ],
+        "fit": "surface",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "R"
+    },
+    "Brow_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Joint"
+                },
+                {
+                    "cluster": true
+                }
+            ]
+        ],
+        "fit": "joint",
+        "rig": "Brow",
+        "pre": "Brow",
+        "name": "Brow",
+        "rml": "M"
+    }
+}

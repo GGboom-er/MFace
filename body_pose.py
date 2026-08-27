@@ -5,6 +5,7 @@ from functools import wraps
 from maya import cmds
 from . import bs
 from . import shared
+from .shared import find_node_by_name, get_selected_polygons, find_mirror_joint, create_group
 from maya.api.OpenMaya import *
 
 
@@ -28,23 +29,7 @@ def undo_chunk(func):
 
 
 
-def create_group(n="|FaceGroup|SkeletonGroup", d=False, v=None, i=None):
-    if d:
-        if cmds.objExists(n):
-            cmds.delete(n)
-    if cmds.objExists(n):
-        return n
-    fields = n.split("|")
-    n = fields.pop(-1)
-    if len(fields) > 1:
-        result = cmds.group(em=1, n=n, p=create_group("|".join(fields)))
-    else:
-        result = cmds.group(em=1, n=n)
-    if v is not None:
-        cmds.setAttr(result + ".v", v)
-    if i is not None:
-        cmds.setAttr(result + ".inheritsTransform", i)
-    return result
+
 
 
 def free_joints():
@@ -72,11 +57,7 @@ def free_joints():
         cmds.setAttr(joint + ".jointOrient", rotate[0]/math.pi*180.0, rotate[1]/math.pi*180.0, rotate[2]/math.pi*180.0)
 
 
-def find_node_by_name(name):
-    nodes = cmds.ls(name) or []
-    if len(nodes) == 1:
-        return nodes[0]
-    return None
+
 
 
 def find_reference_node_by_name(name):
@@ -106,16 +87,7 @@ def comb_target_to_targets(targets):
     return list(set([target for comb in new_targets for target in comb.split("_COMB_") if target]))
 
 
-def get_selected_polygons():
-    polygons = []
-    for polygon in cmds.ls(sl=True, type="transform") or []:
-        shapes = cmds.listRelatives(polygon, s=True, ni=True) or []
-        if not shapes:
-            continue
-        if cmds.nodeType(shapes[0]) != "mesh":
-            continue
-        polygons.append(polygon)
-    return polygons
+
 
 
 # 会话级缓存：避免 find_ctrl_by_joint 在全场景扫描时重复执行 cmds.ls
@@ -142,13 +114,7 @@ def clear_ctrl_cache():
     _ctrl_cache.clear()
 
 
-def find_mirror_joint(joint):
-    joint_name = joint if isinstance(joint, str) else joint
-    short_name = joint_name.split("|")[-1].split(":")[-1]
-    joints = cmds.ls(shared.get_body_rl_names(short_name), type="joint") or []
-    if len(joints) != 1:
-        return None
-    return joints[0]
+
 
 
 def create_node(typ, n):
@@ -300,8 +266,12 @@ def dup_target(target_name, polygons):
         if cmds.modelPanel(panel, ex=1):
             try:
                 cmds.modelEditor(panel, e=1, wireframeOnShaded=True)
-            except RuntimeError:
-                pass
+            except Exception as _e:
+                try:
+                    import MFace2.logger as _mface_logger
+                    _mface_logger.MFaceLogger.debug("Ignored exception in %s: %s" % (__name__, _e))
+                except ImportError:
+                    pass
     cmds.select(cl=1)
     return dup_polygons
 
@@ -326,8 +296,6 @@ class ADPoses(object):
             if not cmds.attributeQuery("angle", node=joint, exists=True):
                 continue
             ctrl = find_ctrl_by_joint(joint)
-            if ctrl is None:
-                continue
             ad_poses.append(cls(joint, ctrl))
 
         targets = []
@@ -927,10 +895,11 @@ class ADPoses(object):
             return cmds.getAttr(ad.reference + ".angle")
         if ad._is_opm_rig():
             parents = cmds.listRelatives(ad.joint, parent=True, fullPath=True) or []
-            if (parents and cmds.objExists(ad.joint + ".bindPose") and
-                    cmds.objExists(parents[0] + ".bindPose")):
-                child_bind = MMatrix(cmds.getAttr(ad.joint + ".bindPose"))
-                parent_bind = MMatrix(cmds.getAttr(parents[0] + ".bindPose"))
+            if parents:
+                cb_attr = cmds.getAttr(ad.joint + ".bindPose") if cmds.objExists(ad.joint + ".bindPose") else None
+                pb_attr = cmds.getAttr(parents[0] + ".bindPose") if cmds.objExists(parents[0] + ".bindPose") else None
+                child_bind = MMatrix(cb_attr) if cb_attr else MMatrix()
+                parent_bind = MMatrix(pb_attr) if pb_attr else MMatrix()
                 rest_inverse = (child_bind * parent_bind.inverse()).inverse()
                 local_matrix = MMatrix(cmds.getAttr(ad.joint + ".dagLocalMatrix"))
                 rotation = MTransformationMatrix(rest_inverse * local_matrix).rotation(asQuaternion=True)
@@ -1075,8 +1044,6 @@ class ADPoses(object):
         joints_with_ctrl = 0
         for joint in joints:
             ctrl = find_ctrl_by_joint(joint)
-            if ctrl is None:
-                continue
             joints_with_ctrl += 1
             ad = cls(joint, ctrl)
             if cls.get_pose_activity(ad) > 5.0:
@@ -1109,8 +1076,6 @@ class ADPoses(object):
                     if jnt in joints:
                         continue
                     ctrl = find_ctrl_by_joint(jnt)
-                    if ctrl is None:
-                        continue
                     ad = cls(jnt, ctrl)
                     if cls.get_pose_activity(ad) > 5.0:
                         outside_active.append(jnt)
@@ -1323,47 +1288,19 @@ class ADPoses(object):
         self.update_reference()
 
     def update_reference(self):
-        u"""
-        :return:
-        在骨骼引用的情况下，创建一个组来代替骨骼。
-        """
-        reference_name = self.joint + "_Reference"
-        nodes = cmds.ls(reference_name) or []
-        if len(nodes) >= 1:
-            self.reference = nodes[0]
-            return
-        is_ref = cmds.referenceQuery(self.joint, isNodeReferenced=True) if cmds.objExists(self.joint) else False
-        if not is_ref:
-            return
-        poses = self.get_poses()
-        self.reference = cmds.group(em=1, n=reference_name)
-        cmds.addAttr(self.reference, ln="angle", k=1, at="double", min=0, max=180)
-        cmds.addAttr(self.reference, ln="direction", k=1, at="double", min=0, max=360)
-        self.update_angle_direction()
-        cmds.connectAttr(self.joint + ".angle", self.reference + ".angle")
-        cmds.connectAttr(self.joint + ".direction", self.reference + ".direction")
-        self.update_poses(poses)
-        connections = cmds.listConnections(self.joint, type="blendShape", p=1, c=1, s=False, d=True) or []
-        for i in range(0, len(connections), 2):
-            src = connections[i]
-            dst = connections[i+1]
-            dst_node = dst.split(".")[0]
-            if cmds.referenceQuery(dst_node, isNodeReferenced=True):
-                continue
-            target_name = src.split(".")[-1]
-            if cmds.attributeQuery(target_name, node=self.reference, exists=True):
-                cmds.connectAttr(self.reference + "." + target_name, dst, f=1)
-        for pose in poses:
-            target_name = self.target_name(pose)
-            comb_name = "COMB_" + target_name
-            if not cmds.attributeQuery(comb_name, node=self.joint, exists=True):
-                continue
-            for node in cmds.listConnections(self.joint + "." + comb_name, type="combinationShape") or []:
-                if target_name not in node:
-                    continue
-                for attr in cmds.listAttr(node, ud=1) or []:
-                    comb_target_name = attr.split(".")[-1]
-                    self.add_by_target(comb_target_name)
+        # adPose compatibility: look for _Reference locator
+        prefix = self.joint.split("_")[0]
+        refs = cmds.ls(prefix + "_*", type="locator") or []
+        for ref in refs:
+            if ref.endswith("_Reference"):
+                parent = cmds.listRelatives(ref, parent=True)
+                if parent:
+                    self.reference = parent[0]
+                    return
+        # Original MFace2 logic
+        if cmds.referenceQuery(self.joint, isNodeReferenced=True):
+            if cmds.objExists(self.joint + "_reference"):
+                self.reference = self.joint + "_reference"
 
     def convert_old_to_new(self):
         old_ads = []
@@ -1497,12 +1434,10 @@ class ADPoses(object):
         if is_opm_rig:
             # === OPM 矩阵模式 ===
             # dagLocalMatrix 已包含 OPM；四元数 swing/twist 避开 Euler 90 度换解。
-            if not (cmds.objExists(self.joint + ".bindPose") and
-                    cmds.objExists(parent + ".bindPose")):
-                raise RuntimeError("{} and its parent require bindPose matrices".format(self.joint))
-
-            child_bind = MMatrix(cmds.getAttr(self.joint + ".bindPose"))
-            parent_bind = MMatrix(cmds.getAttr(parent + ".bindPose"))
+            cb_attr = cmds.getAttr(self.joint + ".bindPose") if cmds.objExists(self.joint + ".bindPose") else None
+            pb_attr = cmds.getAttr(parent + ".bindPose") if cmds.objExists(parent + ".bindPose") else None
+            child_bind = MMatrix(cb_attr) if cb_attr else MMatrix()
+            parent_bind = MMatrix(pb_attr) if pb_attr else MMatrix()
             rest_relative_inverse = (child_bind * parent_bind.inverse()).inverse()
 
             delta = create_node("multMatrix", n=self.prefix + "_deltaMatrix")
@@ -1739,8 +1674,6 @@ class ADPoses(object):
             if joint is None:
                 continue
             ctrl = find_ctrl_by_joint(joint)
-            if ctrl is None:
-                continue
             ad = cls(joint, ctrl)
             ad_poses.append([ad, poses])
         result_attr_list = []
@@ -1809,3 +1742,46 @@ class ADPoses(object):
         for src, dst in zip(dup_polygons, polygons):
             bs.edit_connect_target(attr, src, dst)
         cmds.delete(dup_polygons)
+
+
+def tool_add_angle_driver_from_selection():
+    """显式为当前选中的骨骼生成极坐标角度驱动"""
+    try:
+        from .logger import logger
+    except ImportError:
+        import logging
+        logger = logging.getLogger(__name__)
+
+    targets = []
+    sel_joints = cmds.ls(sl=True, type="joint") or []
+    if not sel_joints:
+        logger.warning(u"请先选择要添加角度驱动的骨骼 (Please select a joint first).")
+        return []
+
+    for sel in sel_joints:
+        ctrl = find_ctrl_by_joint(sel)
+        ad = ADPoses(sel, ctrl)
+        # 获取当前骨骼的极坐标角度和方向
+        pose = ad.get_control_pose(init=False, int_round=True)
+        angle, direction = pose
+        if angle < 1:
+            logger.warning(u"骨骼 %s 角度过小 (%.1f度)，不足以创建驱动姿势！" % (sel, angle))
+            continue
+
+        target_name = ad.target_name(pose)
+
+        # Capture current control matrix as reference for the pose
+        control_matrix = None
+        if ad.control:
+            control_matrix = cmds.xform(ad.control, query=True, matrix=True, objectSpace=True)
+
+        # 这一步会自动创建 animCurve 以及 target (在 MFaceAdditives 节点上)
+        ADPoses.add_by_target(target_name, control_matrix=control_matrix)
+        targets.append(target_name)
+
+    if targets:
+        try:
+            logger.hud(u"成功创建骨骼角度驱动: %s" % ", ".join(targets))
+        except AttributeError:
+            logger.info(u"成功创建骨骼角度驱动: %s" % ", ".join(targets))
+    return targets

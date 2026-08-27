@@ -31,13 +31,13 @@ try:
         _patch(Qt, 'Key_X', Qt.Key.Key_X)
     if hasattr(Qt, 'KeyboardModifier'):
         _patch(Qt, 'ControlModifier', Qt.KeyboardModifier.ControlModifier)
-        
+
     if hasattr(QIcon, 'Mode'):
         _patch(QIcon, 'Normal', QIcon.Mode.Normal)
         _patch(QIcon, 'Disabled', QIcon.Mode.Disabled)
         _patch(QIcon, 'Active', QIcon.Mode.Active)
         _patch(QIcon, 'Selected', QIcon.Mode.Selected)
-        
+
     if hasattr(QAbstractItemView, 'SelectionMode'):
         _patch(QAbstractItemView, 'ExtendedSelection', QAbstractItemView.SelectionMode.ExtendedSelection)
         _patch(QListWidget, 'ExtendedSelection', QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -215,7 +215,7 @@ class TargetGrid(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.menu = QMenu(self)
         self._target_items = {}
-        
+
         font = self.font()
         if font.pointSize() > 0:
             font.setPointSize(font.pointSize() + 6)
@@ -253,7 +253,7 @@ class TargetGrid(QTableWidget):
             if t and t not in names:
                 names.append(t)
         return names
-        
+
     def select_targets(self, targets):
         for t in targets:
             if t in self._target_items:
@@ -267,20 +267,20 @@ class TargetGrid(QTableWidget):
         self.setRowCount(0)
         self.setColumnCount(2)
         self.setHorizontalHeaderLabels([u"最小值驱动", u"最大值驱动"])
-        
+
         from .. import facs as facs_module
         attrs = facs_module.get_controller_attrs(ctrl)
-                     
+
         row_count = len(attrs)
         self.setRowCount(row_count)
-        
+
         ctrl_base_name = tools.facs.parse_base_name(ctrl)
         self._target_items = {}
-        
+
         for i, attr in enumerate(attrs):
             min_target = ctrl_base_name + "_" + attr + "_min"
             max_target = ctrl_base_name + "_" + attr + "_max"
-            
+
             item_min = QTableWidgetItem(attr.capitalize() + "---Min")
             item_min.setFlags(item_min.flags() & ~Qt.ItemIsEditable)
             item_min.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -294,7 +294,7 @@ class TargetGrid(QTableWidget):
                 item_min.setData(Qt.UserRole + 1, False)
             self.setItem(i, 0, item_min)
             self._target_items[min_target] = item_min
-            
+
             item_max = QTableWidgetItem(attr.capitalize() + "---Max")
             item_max.setFlags(item_max.flags() & ~Qt.ItemIsEditable)
             item_max.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -311,9 +311,27 @@ class TargetGrid(QTableWidget):
 
         other_targets = []
         for t in all_existing:
-            if ctrl_base_name in t and t not in self._target_items:
-                 other_targets.append(t)
-                 
+            if t in self._target_items: continue
+
+            match = False
+            if ctrl_base_name in t:
+                match = True
+            elif "_a" in t and "_d" in t:
+                joint_name = t.split("_a")[0]
+                if joint_name in ctrl_base_name or ctrl_base_name in joint_name:
+                    match = True
+            elif "_twist" in t:
+                joint_name = t.split("_twist")[0]
+                if joint_name in ctrl_base_name or ctrl_base_name in joint_name:
+                    match = True
+            elif "_pin" in t:
+                joint_name = t.split("_pin")[0]
+                if joint_name in ctrl_base_name or ctrl_base_name in joint_name:
+                    match = True
+
+            if match and t not in other_targets:
+                other_targets.append(t)
+
         if other_targets:
              import math
              other_rows = int(math.ceil(len(other_targets) / 2.0))
@@ -322,21 +340,21 @@ class TargetGrid(QTableWidget):
                   short_name = t.replace(ctrl_base_name + "_", "")
                   item = QTableWidgetItem(short_name)
                   item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                  
+
                   r = row_count + (k // 2)
                   c = k % 2
-                  
+
                   if c == 0:
                       item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                   else:
                       item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                      
+
                   item.setData(Qt.UserRole, t)
                   item.setData(Qt.UserRole + 1, True)
                   item.setForeground(QColor(Theme.COLOR_ACTIVE))
                   self.setItem(r, c, item)
                   self._target_items[t] = item
-                  
+
         self.update_selection_colors()
         _apply_stretch_header(self)
 
@@ -345,28 +363,33 @@ class TargetGrid(QTableWidget):
         self.setRowCount(0)
         self.setColumnCount(1)
         self.setHorizontalHeaderLabels([u"驱动目标"])
-        
+
         from ..facs import parse_base_name
         clean_fields = []
         for field in search_text.split(","):
             if field.strip():
                 clean_fields.append(parse_base_name(field.strip()))
         clean_search_text = ",".join(clean_fields)
-        
+
         filtered_targets = [t for t in all_existing if _match_filter(clean_search_text, t)]
-              
+
         self.setRowCount(len(filtered_targets))
         self._target_items = {}
+        from .. import tools
+        initial_weights = tools.get_target_driver_values(filtered_targets) if filtered_targets else {}
         for i, t in enumerate(filtered_targets):
-             item = QTableWidgetItem(t)
+             w = initial_weights.get(t, 0.0)
+             is_active = (w > 0.01)
+             display_text = u"%s  ---  %.2f" % (t, w)
+             item = QTableWidgetItem(display_text)
              item.setFlags(item.flags() & ~Qt.ItemIsEditable)
              item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
              item.setData(Qt.UserRole, t)
-             item.setData(Qt.UserRole + 1, True)
-             item.setForeground(QColor(Theme.COLOR_ACTIVE))
+             item.setData(Qt.UserRole + 1, is_active)
+             item.setForeground(QColor(Theme.COLOR_ACTIVE) if is_active else QColor(Theme.COLOR_INACTIVE))
              self.setItem(i, 0, item)
              self._target_items[t] = item
-              
+
         _apply_stretch_header(self)
 
 
@@ -446,6 +469,16 @@ class MayaObjLayout(QHBoxLayout):
 
 from .. import corrective_joints
 from .. import bs
+
+class MayaObjLayouts(MayaObjLayout):
+    """多对象选择布局"""
+
+    def load_selected(self):
+        from .. import shared
+        selected = shared.get_selected_nodes(transforms_only=False)
+        self.line.setText(",".join(selected))
+        self.objChanged.emit(self.line.text())
+
 class TargetSlider(QHBoxLayout):
     def __init__(self):
         QHBoxLayout.__init__(self)
@@ -471,42 +504,198 @@ class BaseTargetList(QListWidget):
         self.menu = QMenu(self)
         self.text = ""
         self.itemDoubleClicked.connect(self.to_pose)
+
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setInterval(100)
+        self._refresh_timer.timeout.connect(self._do_update_weights)
+        self.destroyed.connect(lambda *args: self._stop_refresh())
+
+    @staticmethod
+    def _weight_color(w):
+        """0→红  0.5→黄  1→绿  线性插值"""
+        w = max(0.0, min(1.0, w))
+        r = int(220 * (1.0 - w) + 80 * w)
+        g = int(80 * (1.0 - w) + 220 * w)
+        return QColor(r, g, 80)
+
+    def _has_pin(self, target_name):
+        from maya import cmds
+        import re
+        m = re.match(r'(.+)_a\d+_d\d+', target_name)
+        if not m:
+            return False
+        joint_name = m.group(1)
+        return cmds.objExists(joint_name + 'Pin')
+
     def to_pose(self):
         targets = self.selected_targets()
         if not targets: return
-        if hasattr(self.backend, 'set_pose_by_targets'):
-            self.backend.set_pose_by_targets(targets)
-        elif hasattr(self.backend, 'all_to_zero') and hasattr(self.backend, 'to_target'):
-            self.backend.all_to_zero()
-            self.backend.to_target(targets[0], 60)
+        from .. import tools, shared
+        tools.set_pose_by_targets(targets, 60, True)
+        for target in targets:
+            driver_attr = tools.facs.get_driver_attr(target) or tools.body_pose.ADPoses.get_target_driver_attr(target)
+            if driver_attr:
+                ctrl_node = driver_attr.split(".")[0]
+                if shared.obj_exists(ctrl_node):
+                    shared.select_node(ctrl_node)
+
     def selected_targets(self):
         return [item.data(Qt.UserRole) or item.text() for item in self.selectedItems()]
+
+    def selected_names(self):
+        return self.selected_targets()
+
     def current_target(self):
         targets = self.selected_targets()
-        if len(targets) != 1:
-            from ..logger import logger
-            logger.warning("please selected only one target")
+        if not targets:
             return ""
         return targets[0]
+
+    def current_name(self):
+        return self.current_target()
+
+    def select_targets(self, targets):
+        if not targets: return
+        if isinstance(targets, (str, bytes)):
+            targets = [targets]
+        self.blockSignals(True)
+        for i in range(self.count()):
+            item = self.item(i)
+            if not item: continue
+            name = item.data(Qt.UserRole) or item.text()
+            if name in targets:
+                item.setSelected(True)
+                self.setCurrentItem(item)
+        self.blockSignals(False)
+
     def contextMenuEvent(self, event):
         self.menu.exec_(event.globalPos())
+
     def reload(self):
+        self.blockSignals(True)
         self.clear()
         if hasattr(self.backend, 'get_targets'):
-            targets = self.backend.get_targets()
-            for t in targets:
-                item = QListWidgetItem(t)
-                item.setData(Qt.UserRole, t)
+            all_targets = self.backend.get_targets()
+
+            # Use backend weights if available
+            weights = {}
+            if hasattr(self.backend, 'get_target_driver_values'):
+                weights = self.backend.get_target_driver_values(all_targets)
+
+            for target_name in all_targets:
+                w = max(0.0, min(1.0, weights.get(target_name, 0.0)))
+                pin_tag = u" [Pin]" if self._has_pin(target_name) else u""
+
+                item = QListWidgetItem()
+                item.setData(Qt.UserRole, target_name)
                 self.addItem(item)
+
+                # Check if we should use fancy weight display
+                if hasattr(self.backend, 'get_target_driver_values'):
+                    widget = QWidget()
+                    widget.setStyleSheet("background: transparent;")
+                    layout = QHBoxLayout(widget)
+                    layout.setContentsMargins(5, 2, 5, 2)
+
+                    name_label = QLabel(target_name)
+                    font = name_label.font()
+                    if font.pointSize() > 0:
+                        font.setPointSize(font.pointSize() + 4)
+                    elif font.pixelSize() > 0:
+                        font.setPixelSize(font.pixelSize() + 5)
+                    else:
+                        font.setPointSize(13)
+                    name_label.setFont(font)
+
+                    weight_label = QLabel(u"%.2f%s" % (w, pin_tag))
+                    weight_label.setFont(font)
+                    weight_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+                    layout.addWidget(name_label)
+                    layout.addWidget(weight_label)
+
+                    color_str = self._weight_color(w).name()
+                    name_label.setStyleSheet("color: %s;" % color_str)
+                    weight_label.setStyleSheet("color: %s;" % color_str)
+
+                    widget.name_label = name_label
+                    widget.weight_label = weight_label
+                    widget.pin_tag = pin_tag
+
+                    item.setSizeHint(widget.sizeHint())
+                    self.setItemWidget(item, widget)
+                else:
+                    item.setText(target_name)
+
+        self.blockSignals(False)
         self.query(self.text)
+        self._start_refresh()
+
+    def _do_update_weights(self):
+        if not hasattr(self.backend, 'get_target_driver_values'):
+            return
+
+        try:
+            import shiboken6 as shiboken
+        except ImportError:
+            try:
+                import shiboken2 as shiboken
+            except ImportError:
+                import shiboken
+        try:
+            if not shiboken.isValid(self) or self.count() == 0:
+                return
+            names = []
+            for i in range(self.count()):
+                item = self.item(i)
+                if item:
+                    names.append(item.data(Qt.UserRole) or '')
+                else:
+                    names.append('')
+            weights = self.backend.get_target_driver_values(names)
+            self.blockSignals(True)
+            for i in range(self.count()):
+                item = self.item(i)
+                if not item: continue
+                widget = self.itemWidget(item)
+                if widget and shiboken.isValid(widget) and hasattr(widget, 'update_weight'):
+                    val = weights.get(names[i], 0.0)
+                    widget.update_weight(val)
+            self.blockSignals(False)
+        except (RuntimeError, Exception):
+            return
+
+    def _start_refresh(self):
+        if hasattr(self.backend, 'get_target_driver_values'):
+            if not self._refresh_timer.isActive():
+                self._refresh_timer.start()
+
+    def _stop_refresh(self):
+        self._refresh_timer.stop()
+
+    def closeEvent(self, event):
+        self._stop_refresh()
+        super(BaseTargetList, self).closeEvent(event)
+
     def query(self, text):
         self.text = text
         for i in range(self.count()):
             item = self.item(i)
-            if not text or any([f in item.text() for f in text.split(",")]):
+            target_name = item.data(Qt.UserRole) or item.text()
+
+            # Handle text being a list
+            if isinstance(text, list):
+                search_terms = text
+            elif isinstance(text, (str, bytes)):
+                search_terms = str(text).split(",")
+            else:
+                search_terms = []
+
+            if not text or any([f in target_name for f in search_terms]):
                 item.setHidden(False)
             else:
                 item.setHidden(True)
+
     def delete_targets(self):
         targets = self.selected_targets()
         if not targets: return
@@ -515,6 +704,7 @@ class BaseTargetList(QListWidget):
         elif hasattr(self.backend, 'del_targets'):
             self.backend.del_targets(targets)
         self.reload()
+
     def mirror_targets(self):
         targets = self.selected_targets()
         if hasattr(self.backend, 'mirror_targets'):
@@ -528,25 +718,56 @@ class BaseTargetTool(QDialog):
         QDialog.__init__(self, parent)
         self.backend = backend
         self.setWindowTitle(title)
+        self.polygons = MayaObjLayout(u"模型：", 40)
         self.line = QLineEdit()
         self.slider = TargetSlider()
-        self.button = QPushButton(u"修形")
+        self.button = QPushButton(u"复制/修改")
         self.button.clicked.connect(self.apply)
+
     def setup_layout(self):
         layout = QVBoxLayout()
         layout.addLayout(self.slider)
+        layout.addLayout(self.polygons)
         layout.addLayout(q_add(QHBoxLayout(), q_prefix(u"搜索：", 40), self.line))
         layout.addWidget(self.list)
         layout.addWidget(self.button)
         self.setLayout(layout)
         self.line.textChanged.connect(self.list.query)
+        self.list.itemSelectionChanged.connect(self._sync_slider)
+
+    def _sync_slider(self):
+        """读取选中 target 的真实驱动值，静默同步到滑栏。"""
+        if not hasattr(self.backend, 'get_target_driver_values'):
+            return
+        targets = self.list.selected_targets()
+        if not targets:
+            return
+        target = targets[0]
+        weights = self.backend.get_target_driver_values([target])
+        weight = weights.get(target, 0.0)
+        slider_val = int(round(weight * 60))
+        slider_val = max(0, min(60, slider_val))
+        self.slider.slider.blockSignals(True)
+        self.slider.box.blockSignals(True)
+        self.slider.slider.setValue(slider_val)
+        self.slider.box.setValue(slider_val)
+        self.slider.box.blockSignals(False)
+        self.slider.slider.blockSignals(False)
+
     def apply(self):
+        from maya import cmds
+        polygon_names = self.polygons.line.text().split(",")
+        polygons = cmds.ls(polygon_names, type="transform") or []
+        from .. import bs
+        polygons = [poly for poly in polygons if bs.is_polygon(poly)]
+        if polygons:
+            cmds.select(polygons)
+
         text = self.line.text().strip()
         if not text:
             selected = self.list.selected_targets()
             if selected:
                 target_name = selected[0]
-                from .. import bs
                 if bs.is_on_duplicate_edit():
                     if hasattr(self.backend, 'set_pose_by_target'):
                         bs.finish_duplicate_edit(self.backend.set_pose_by_target)
@@ -564,18 +785,43 @@ class BaseTargetTool(QDialog):
                 self.backend.auto_apply(text)
         self.list.reload()
         self._update_button_state()
+
     def _on_duplicate_edit(self, target_name):
         pass
+
     def _update_button_state(self):
+        if not hasattr(self, '_cancel_connected'):
+            self._cancel_connected = False
         from .. import bs
         if bs.is_on_duplicate_edit():
             target_name = bs.get_editing_target_name() or "?"
             self.button.setText(u"结束修改: %s" % target_name)
             self.button.setStyleSheet("background-color: #ff5555; color: white; font-weight: bold;")
+            self.button.setContextMenuPolicy(Qt.CustomContextMenu)
+            if not self._cancel_connected:
+                self.button.customContextMenuRequested.connect(self._show_cancel_menu)
+                self._cancel_connected = True
         else:
-            self.button.setText(u"修形")
+            self.button.setText(u"复制/修改")
             self.button.setStyleSheet("")
+            self.button.setContextMenuPolicy(Qt.DefaultContextMenu)
+            if self._cancel_connected:
+                self.button.customContextMenuRequested.disconnect(self._show_cancel_menu)
+                self._cancel_connected = False
+
+    def _show_cancel_menu(self, pos):
+        from .. import bs
+        target_name = bs.get_editing_target_name() or "?"
+        menu = QMenu(self.button)
+        menu.addAction(u"放弃 %s 的修改" % target_name, self._cancel_edit)
+        menu.exec_(self.button.mapToGlobal(pos))
+
+    def _cancel_edit(self):
+        from .. import bs
+        bs.cancel_duplicate_edit()
+        self._update_button_state()
+        self.list.reload()
+
     def load(self):
         self.list.reload()
         self._update_button_state()
-
