@@ -1,5 +1,6 @@
 # coding:utf-8
 from .base import *
+from .base import _safe_exec
 from .. import tools
 from maya import cmds
 import os
@@ -7,22 +8,15 @@ import os
 
 class Image(QWidget):
 
-    def __init__(self, parent, path, auto_update=True):
+    def __init__(self, parent, path):
         QWidget.__init__(self, parent)
         self.icon = QIcon(path)
         self.setFixedSize(QImage(path).size())
         self.mode = QIcon.Normal
-        self._fit_loaded = False
-        self._auto_update = auto_update
         self.path = path
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        if self._auto_update:
-            if self._fit_loaded:
-                painter.setOpacity(1.0)
-            else:
-                painter.setOpacity(0.4)
         painter.drawPixmap(0, 0, self.width(), self.height(), self.icon.pixmap(self.width(), self.height(), self.mode))
         painter.end()
 
@@ -30,12 +24,10 @@ class Image(QWidget):
 class IconButton(Image):
     clicked = Signal()
 
-    def __init__(self, parent, path, auto_update=True):
-        Image.__init__(self, parent, path, auto_update)
+    def __init__(self, parent, path):
+        Image.__init__(self, parent, path)
         self.icon = QIcon(path)
-        pixmap = QPixmap(path).scaled(QImage(path).size())
-        mask = pixmap.createMaskFromColor(Qt.transparent, Qt.MaskInColor)
-        self.setMask(mask)
+        self.setMask(QBitmap(QPixmap(path).mask().scaled(QImage(path).size())))
         self.setMouseTracking(True)
 
     def update_mode(self):
@@ -64,7 +56,6 @@ class IconButton(Image):
 
 
 class FitButton(IconButton):
-    update_build_button = Signal()
 
     def __init__(self, parent, path):
         IconButton.__init__(self, parent, path)
@@ -74,22 +65,21 @@ class FitButton(IconButton):
 
     def is_fit_exist(self):
         name = os.path.basename(self.path).split(".")[0]
-        obj_name = name.replace('Button', 'Fit')
-        return cmds.objExists(obj_name)
+        return cmds.objExists(name)
 
     def update_mode(self):
-        if self.mode in [QIcon.Disabled, QIcon.Normal]:
+        disabled_mode = QIcon.Disabled
+        normal_mode = QIcon.Normal
+        
+        if self.mode in [disabled_mode, normal_mode]:
             if self.is_fit_exist():
-                self.setWindowOpacity(1.0)
-                self._fit_loaded = True
+                self.mode = disabled_mode
             else:
-                self.setWindowOpacity(0.4)
-                self._fit_loaded = False
+                self.mode = normal_mode
         self.update()
 
     def create_fit(self):
         tools.create_fit_by_png(self.path)
-        self.update_build_button.emit()
 
 
 class Preset(QDialog):
@@ -98,45 +88,31 @@ class Preset(QDialog):
     def __init__(self, preset="default"):
         QDialog.__init__(self, get_app())
         self.preset = preset
-        self.__fit_buttons = {}
-        self.__build_button = None
+        self.dynamic_widgets = []
         self.build_children()
-
-    @property
-    def fit_buttons(self):
-        return self.__fit_buttons
-
-    @property
-    def build_button(self):
-        return self.__build_button
 
     def build_children(self):
         root = os.path.abspath("{}/../../data/presets/{}".format(__file__, self.preset)).replace("\\", "/")
-        bg = Image(self, root + "/background.jpg", False)
-        bg.setContextMenuPolicy(Qt.CustomContextMenu)
+        bg = Image(self, root + "/background.jpg")
+        policy = getattr(Qt, 'CustomContextMenu', Qt.ContextMenuPolicy.CustomContextMenu) if hasattr(Qt, 'ContextMenuPolicy') else Qt.CustomContextMenu
+        bg.setContextMenuPolicy(policy)
         bg.customContextMenuRequested.connect(self.show_menu)
+        self.dynamic_widgets.append(bg)
 
         for name in os.listdir(root):
             if not name.endswith("png"):
                 continue
             button_path = os.path.join(root, name).replace("\\", "/")
-            fit_button = FitButton(self, button_path)
-            fit_button.update_build_button.connect(self.update_build_button)
-            self.__fit_buttons[name] = fit_button
+            btn = FitButton(self, button_path)
+            self.dynamic_widgets.append(btn)
 
         build_path = os.path.abspath("{}/../../data/presets/build.png".format(__file__)).replace("\\", "/")
-        self.__build_button = IconButton(self, build_path, False)
-        self.build_button.setFixedSize(32, 32)
-
-        # 使用 PNG 自带的 Alpha Mask，而不是透明色
-        pix = QPixmap(build_path).scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.build_button.setMask(pix.mask())
-
-        # 放到最前层
-        self.build_button.raise_()
-        self.build_button.move(QImage(root + "/background.jpg").size().width() - 64, 32)
-        self.build_button.clicked.connect(self.build)
-        self.update_build_button()
+        build_button = IconButton(self, build_path)
+        build_button.setFixedSize(32, 32)
+        build_button.setMask(QBitmap(QPixmap(build_path).mask().scaled(32, 32)))
+        build_button.move(QImage(root + "/background.jpg").size().width()-64, 32)
+        build_button.clicked.connect(self.build)
+        self.dynamic_widgets.append(build_button)
 
     def show_menu(self):
         menu = QMenu(self)
@@ -145,28 +121,28 @@ class Preset(QDialog):
 
         def sub_save_load_delete(name, suf):
             sub_menu = menu.addMenu(name)
-            sub_menu.addAction(u"保存", self.run_preset(getattr(tools, "save_preset_" + suf)))
-            sub_menu.addAction(u"加载", self.run_preset(getattr(tools, "load_preset_" + suf)))
-            sub_menu.addAction(u"删除", self.run_preset(getattr(tools, "delete_preset_" + suf)))
-
+            sub_menu.addAction(u"保存", self.run_preset(getattr(tools, "save_preset_"+suf)))
+            sub_menu.addAction(u"加载", self.run_preset(getattr(tools, "load_preset_"+suf)))
+            sub_menu.addAction(u"删除", self.run_preset(getattr(tools, "delete_preset_"+suf)))
         sub_save_load_delete(u"面板", "plane")
         sub_save_load_delete(u"控制器", "ctrl")
         sub_save_load_delete(u"簇权重", "cluster_weight")
         sub_save_load_delete(u"表情姿势", "face_sdk")
         sub_save_load_delete(u"骨骼驱动", "joint_additive")
         sub_save_load_delete(u"融合变形", "blend_shape")
-        sub_save_load_delete(u"蒙皮权重", "blend_shape")
+        sub_save_load_delete(u"蒙皮权重", "skin_weights")
         menu.addAction(u"删除预设", self.delete_preset)
-        menu.exec_(QCursor.pos())
+        _safe_exec(menu, QCursor.pos())
 
     def update_pngs(self):
         tools.save_preset_pngs(self.preset)
-        for children in self.findChildren(QWidget):
-            children.setParent(None)
-            children.deleteLater()
+        for widget in self.dynamic_widgets:
+            widget.setParent(None)
+            widget.deleteLater()
+        self.dynamic_widgets = []
         self.build_children()
-        for children in self.findChildren(QWidget):
-            children.setVisible(True)
+        for widget in self.dynamic_widgets:
+            widget.setVisible(True)
         self.update()
 
     def build(self):
@@ -175,20 +151,11 @@ class Preset(QDialog):
     def run_preset(self, fun):
         def wrapper():
             fun(self.preset)
-
         return wrapper
 
     def delete_preset(self):
         tools.preset.delete_preset(self.preset)
         self.presetDeleted.emit()
-
-    def update_build_button(self):
-        judge = False
-        for button in self.fit_buttons.values():
-            if not button.is_fit_exist():
-                judge = True
-                break
-        self.build_button.setHidden(judge)
 
 
 class CreatePreset(QDialog):
@@ -197,20 +164,30 @@ class CreatePreset(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent)
         self.line = QLineEdit()
+        self.full_save_checkbox = QCheckBox(u"是否全量备份 (包含控制器、驱动动作、簇等，不包含表面修形BS)")
+        self.full_save_checkbox.setChecked(True)
         self.setWindowTitle(u"预设")
         self.setLayout(q_add(
             QVBoxLayout(),
             q_add(QHBoxLayout(), q_prefix(u"名称：", 60), self.line),
+            self.full_save_checkbox,
             q_add(QHBoxLayout(), q_button(u"创建", self.apply), q_button(u"取消", self.close))
         ))
-        self.setFont(QFont(u"楷体", 12))
+        Theme.apply_fonts(self)
 
     def apply(self):
         preset = self.line.text()
         if preset:
             tools.create_preset(preset)
+            if self.full_save_checkbox.isChecked():
+                tools.save_preset_plane(preset)
+                tools.save_preset_ctrl(preset)
+                tools.save_preset_cluster_weight(preset)
+                tools.save_preset_face_sdk(preset)
+                tools.save_preset_joint_additive(preset)
             self.presetCreated.emit(preset)
         self.close()
+
 
 
 window = None
@@ -218,6 +195,9 @@ window = None
 
 def show():
     global window
-    window = Preset('Face')
+    if window is None:
+        window = Preset()
     window.showNormal()
-    return window
+
+
+

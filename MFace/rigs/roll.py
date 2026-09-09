@@ -27,6 +27,7 @@ def rig_roll(root, name, aim_matrix, roll_matrix):
     ctrl.output["rotate"].cnt(hry["RollZ"]["rotate"])
     Cons.parent(hry["RollZ"], cluster.cluster)
     ctrl.follow_joint(cluster.cluster)
+    ctrl.set_typ("roll")
     return cluster, ctrl
 
 

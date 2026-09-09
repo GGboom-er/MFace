@@ -6,13 +6,7 @@
 """
 from maya.api.OpenMaya import *
 from maya import cmds
-
-
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import api_ls, Shape, is_shape
 
 
 def get_points_by_curve(curve, number):
@@ -22,7 +16,7 @@ def get_points_by_curve(curve, number):
     else:
         step = curve.length()/(number-1)
         lengths = [step*i for i in range(number)]
-    return list(map(lambda x: list(curve.getPointAtParam(curve.findParamFromLength(x)))[:3], lengths))
+    return list(map(lambda x: list(curve.getPointAtParam(curve.findParamFromLength(x), space=MSpace.kWorld))[:3], lengths))
 
 
 def get_points_by_cv(curve):
@@ -115,27 +109,7 @@ def get_fit_cv_points(node, mirror, **kwargs):
 # ----------- follicle matrix ------------
 
 
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
+# Shape / is_shape / api_ls 已提取到 shared.py
 
 
 def create_follicle(geometry=None, name="follicle", parent=None, u=0.5, v=0.5):
@@ -223,14 +197,68 @@ def create_surface_by_point_matrix(points, matrix):
 
 
 def get_us_by_points(points, close=False):
+    if not points:
+        return []
     if close:
         points = list(points) + [points[0]]
+    if len(points) == 1:
+        return [0.5]
     distances = [get_distance(p1, p2) for p1, p2 in zip(points, points[1:])]
     sum_distance = sum(distances)
-    us = [sum(distances[:i])/sum_distance for i in range(len(points))]
+    if sum_distance < 0.0000001:
+        return get_curve_parameter_list(len(points), close)
+    us = [sum(distances[:i]) / sum_distance for i in range(len(points))]
     if close:
         us.pop(-1)
     return us
+
+
+def resample_polyline_points(points, count, close=False):
+    if count <= 0 or not points:
+        return []
+    if close:
+        pts = list(points) + [points[0]]
+    else:
+        pts = list(points)
+    if len(pts) == 1:
+        return [list(pts[0]) for _ in range(count)]
+    seg_lengths = []
+    total = 0.0
+    for p1, p2 in zip(pts, pts[1:]):
+        d = get_distance(p1, p2)
+        seg_lengths.append(d)
+        total += d
+    if total < 0.0000001:
+        return [list(pts[0]) for _ in range(count)]
+
+    def point_at_distance(dist):
+        if dist <= 0:
+            return list(pts[0])
+        if dist >= total:
+            return list(pts[-1])
+        acc = 0.0
+        for i, seg in enumerate(seg_lengths):
+            nxt = acc + seg
+            if dist <= nxt or i == len(seg_lengths) - 1:
+                if seg < 0.0000001:
+                    return list(pts[i + 1])
+                t = (dist - acc) / seg
+                p1 = pts[i]
+                p2 = pts[i + 1]
+                return [p1[j] + (p2[j] - p1[j]) * t for j in range(3)]
+            acc = nxt
+        return list(pts[-1])
+
+    if close:
+        step = total / count
+        distances = [step * i for i in range(count)]
+    else:
+        if count == 1:
+            distances = [total * 0.5]
+        else:
+            step = total / (count - 1)
+            distances = [step * i for i in range(count)]
+    return [point_at_distance(d) for d in distances]
 
 
 def get_fit_curve_matrices(points, us, **kwargs):
@@ -245,7 +273,7 @@ def get_us_by_curve(node):
 
 
 def get_fit_surface_curve_matrices(number, **kwargs):
-    if number < 0:
+    if isinstance(number, int) and number < 0:
         return get_fit_curve_matrices(**kwargs)
     else:
         return get_fit_surface_matrices(number=number, **kwargs)

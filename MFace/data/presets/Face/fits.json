@@ -75,7 +75,7 @@
                     "suf": "Aim"
                 },
                 {
-                    "zip": false,
+                    "zip": true,
                     "lockInfluenceWeights": false
                 }
             ],
@@ -289,32 +289,6 @@
         "rig": "Eye",
         "pre": "Lid",
         "name": "Lid",
-        "rml": "L"
-    },
-    "Ear_L": {
-        "kwargs": [
-            [
-                {
-                    "suf": "Curve"
-                },
-                {}
-            ],
-            [
-                {
-                    "suf": "Surface"
-                },
-                {
-                    "main": true,
-                    "cluster": 3,
-                    "joint": 5,
-                    "degree": 3
-                }
-            ]
-        ],
-        "fit": "surface",
-        "rig": "Surface",
-        "pre": "Ear",
-        "name": "Ear",
         "rml": "L"
     }
 }

@@ -3,54 +3,7 @@ import os
 from maya.api.OpenMaya import *
 from maya.api.OpenMayaAnim import *
 from maya import cmds
-
-
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
-
-
-def get_skin_cluster(polygon_name):
-    if not is_shape(polygon_name, "mesh"):
-        return
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    for skin_cluster in cmds.ls(cmds.listHistory(polygon_name), type="skinCluster"):
-        for shape in cmds.skinCluster(skin_cluster, q=1, geometry=1):
-            for long_shape in cmds.ls(shape, l=1):
-                if long_shape in shapes:
-                    return skin_cluster
-
-
-def py_to_m_array(cls, _list):
-    result = cls()
-    for elem in _list:
-        result.append(elem)
-    return result
-
-
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import Shape, is_shape, get_skin_cluster, api_ls
 
 
 def get_weights_args(polygon_name):
@@ -191,7 +144,7 @@ def set_selected_skin_data(data):
 
 def set_skin_data_by_short_name(data):
     for polygon, skin_data in data.items():
-        if cmds.ls(polygon) != 1:
+        if len(cmds.ls(polygon)) != 1:
             continue
         set_skin_data(polygon, **skin_data)
 

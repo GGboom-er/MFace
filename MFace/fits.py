@@ -17,6 +17,8 @@ suf: suffix后缀，有的创建定位器会创建多个节点。用于区分.
 from maya import cmds
 from maya.api.OpenMaya import *
 from . import data
+from .logger import logger, MSG
+from .shared import api_ls
 
 ROOT = "MFaceFits"
 
@@ -26,15 +28,14 @@ def is_mirror(name):
 
 
 def joint_as_local(joint):
-    locator = cmds.createNode("locator", p=joint, n=joint.split("|")[-1] + "Shape")
-    cmds.connectAttr(joint + '.radius', locator + ".localScaleX")
-    cmds.connectAttr(joint + '.radius', locator + ".localScaleY")
-    cmds.connectAttr(joint + '.radius', locator + ".localScaleZ")
-    cmds.setAttr(joint + ".overrideEnabled", True)
-    cmds.setAttr(joint + ".overrideColor", 13)
-    cmds.setAttr('%s.displayLocalAxis' % joint, True)
-    if cmds.objExists(ROOT + ".radius"):
-        cmds.connectAttr(ROOT + ".radius", joint + ".radius")
+    locator = cmds.createNode("locator", p=joint, n=joint.split("|")[-1]+"Shape")
+    cmds.connectAttr(joint+'.radius', locator+".localScaleX")
+    cmds.connectAttr(joint+'.radius', locator+".localScaleY")
+    cmds.connectAttr(joint+'.radius', locator+".localScaleZ")
+    cmds.setAttr(joint+".overrideEnabled", True)
+    cmds.setAttr(joint+".overrideColor", 13)
+    if cmds.objExists(ROOT+".radius"):
+        cmds.connectAttr(ROOT+".radius", joint + ".radius")
     cmds.dgdirty(joint)
     return joint
 
@@ -45,12 +46,14 @@ def create_joint_locator(parent=None, name="jointLocator"):
 
 def get_selected_vtx_center():
     points = [cmds.xform(sel, q=1, t=1, ws=1) for sel in cmds.ls(sl=1, fl=1)]
-    center = [xyz / len(points) for xyz in map(sum, zip(*points))]
+    center = [xyz/len(points) for xyz in map(sum, zip(*points))]
     return center
 
 
 def get_selected_vtx_normal():
     sel = MGlobal.getActiveSelectionList()
+    if not sel.length():
+        return
     dag_path, component = sel.getComponent(0)
     if component.apiTypeStr != "kMeshVertComponent":
         return
@@ -59,42 +62,11 @@ def get_selected_vtx_normal():
     while not mit_vtx.isDone():
         normals.append(list(mit_vtx.getNormal())[:3])
         mit_vtx.next()
-    normal = [xyz / len(normals) for xyz in map(sum, zip(*normals))]
+    normal = [xyz/len(normals) for xyz in map(sum, zip(*normals))]
     return normal
 
 
-def v_dot(v1, v2):
-    return sum([e1 * e2 for e1, e2 in zip(v1, v2)])
-
-
-def v_cross(v1, v2):
-    u"""
-    叉乘
-    """
-    v = []
-    for i in range(3):
-        j = (i + 1) % 3
-        k = (i + 2) % 3
-        v.append(v1[j] * v2[k] - v1[k] * v2[j])
-    return v
-
-
-def v_normal(v):
-    u"""
-    归一化
-    """
-    length = sum([e * e for e in v]) ** 0.5
-    if length < 0.0000001:
-        return [0] * len(v)
-    return [e / length for e in v]
-
-
-def v_length(v):
-    return sum([e * e for e in v]) ** 0.5
-
-
-def m3x3_to_m16(m3x3):
-    return sum([row + [0] for row in m3x3], []) + [0.0, 0.0, 0.0, 1.0]
+from .data import v_dot, v_cross, v_normal, v_length, m3x3_to_m16
 
 
 def get_selected_vtx_matrix(mirror):
@@ -118,12 +90,33 @@ def get_selected_vtx_matrix(mirror):
 
 
 def fit_joint(name):
-    matrix = get_selected_vtx_matrix(is_mirror(name))
-    joint = create_joint_locator(name, name + "Joint")
+    return create_fit_joint(name, name+"Joint", get_selected_vtx_matrix(is_mirror(name)))
+
+
+def create_fit_joint(parent, name, matrix):
+    joint = create_joint_locator(parent, name)
     cmds.xform(joint, ws=1, m=matrix)
     cmds.toggle(joint, la=1)
     cmds.select(joint)
     return joint
+
+
+def fit_joints(name):
+    joints = []
+    sel_obj_list = cmds.ls(sl=1, type=("joint", "transform"))
+    sel_vtx_list = cmds.ls(sl=1, fl=1)
+    for i, obj in enumerate(sorted(sel_obj_list)):
+        matrix = cmds.xform(obj, q=1, ws=1, m=1)
+        joints.append(create_fit_joint(name, name + "%03dJoint" % (i+1), matrix))
+    for vtx in sel_vtx_list:
+        if ".vtx[" not in vtx:
+            continue
+        cmds.select(vtx)
+        i = int(vtx.split("[")[-1].split("]")[0])
+        matrix = get_selected_vtx_matrix(is_mirror(name))
+        joints.append(create_fit_joint(name, name + "%03dJoint" % i, matrix))
+    cmds.select(joints)
+    return tuple(joints)
 
 
 def polygon_to_curve(side_length):
@@ -134,7 +127,7 @@ def polygon_to_curve(side_length):
     # 获取所有选择的边
     edges = [sel for sel in cmds.ls(sl=1, fl=1) if ".e[" in sel]
     if len(edges) < 2:
-        return cmds.warning("please select edge")
+        return logger.warning(MSG.SELECT_EDGE_FIRST)
     # 获取选择边的id,与临接边的id
     indexes = set()
     connects = []
@@ -149,15 +142,15 @@ def polygon_to_curve(side_length):
     # 移除非选择的相邻边
     connects = [es & indexes for es in connects]
     # 相邻边为1的, 为两端的边
-    sides = [es for es in connects if len(es) == 1]
+    sides = [es for es in connects if len(es)==1]
     if len(sides) != side_length:
-        return cmds.warning("please select edge")
+        return logger.warning(MSG.SELECT_EDGE_FIRST)
     f = 0 if side_length else 1
     return cmds.polyToCurve(degree=1, ch=0, usm=0, f=f)[0]
 
 
 def init_curve(curve, parent, name):
-    cvs = cmds.ls(curve + ".cv[*]", fl=1)
+    cvs = cmds.ls(curve+".cv[*]", fl=1)
     p1 = cmds.xform(cvs[0], q=1, ws=1, t=1)
     p2 = cmds.xform(cvs[-1], q=1, ws=1, t=1)
     # d为曲线方向，由外往内，由上往下
@@ -166,7 +159,7 @@ def init_curve(curve, parent, name):
     if p1[0] > 0 and p2[0] > 0:
         # 若曲线在+x侧，由右往左
         d = [-0.5, -0.5]
-    v = [p2[0] - p1[0], p2[1] - p1[1]]
+    v = [p2[0]-p1[0], p2[1]-p1[1]]
     # 若dot小于0，说明v与d方向相反，重置曲线
     dot = d[0] * v[0] + d[1] * v[1]
     if dot < 0:
@@ -178,38 +171,34 @@ def init_curve(curve, parent, name):
 
 def fit_curve(name):
     curve = polygon_to_curve(2)
-    curve = init_curve(curve, name, name + "Curve")
+    curve = init_curve(curve, name, name+"Curve")
     return curve
 
 
 def fit_loop_curve(name):
     ps = [cmds.xform(vtx, q=1, t=1, ws=1) for vtx in cmds.ls(sl=1, fl=1) if ".vtx[" in vtx]
     curve = polygon_to_curve(0)
-    points = [cmds.xform(cv, q=1, t=1, ws=1) for cv in cmds.ls(curve + ".cv[*]", fl=1)]
+    points = [cmds.xform(cv, q=1, t=1, ws=1) for cv in cmds.ls(curve+".cv[*]", fl=1)]
     cmds.delete(curve)
     if len(ps) == 2:
-        ds1 = [(MVector(ps[0]) - MVector(p)).length() for p in points]
-        ds2 = [(MVector(ps[1]) - MVector(p)).length() for p in points]
+        ds1 = [(MVector(ps[0])-MVector(p)).length() for p in points]
+        ds2 = [(MVector(ps[1])-MVector(p)).length() for p in points]
         ids = sorted([ds1.index(min(ds1)), ds2.index(min(ds2))])
     else:
         xs = [p[0] for p in points]
         ids = sorted([xs.index(min(xs)), xs.index(max(xs))])
-    up_points = points[ids[0]:ids[1] + 1]
-    dn_points = points[ids[1]:] + points[:ids[0] + 1]
-    if sum([p[1] for p in up_points]) / len(up_points) < sum([p[1] for p in dn_points]) / len(dn_points):
+    up_points = points[ids[0]:ids[1]+1]
+    dn_points = points[ids[1]:]+points[:ids[0]+1]
+    if sum([p[1] for p in up_points])/len(up_points) < sum([p[1] for p in dn_points])/len(dn_points):
         up_points, dn_points = dn_points, up_points
     up_curve = cmds.curve(p=up_points, d=1)
     dn_curve = cmds.curve(p=dn_points, d=1)
-    up_curve = init_curve(up_curve, name, name + "Up")
-    dn_curve = init_curve(dn_curve, name, name + "Dn")
+    up_curve = init_curve(up_curve, name, name+"Up")
+    dn_curve = init_curve(dn_curve, name, name+"Dn")
     return up_curve, dn_curve
 
 
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+# api_ls 已在头部从 shared 导入
 
 
 def get_surface_matrices(polygon, points, mirror, close):
@@ -224,7 +213,7 @@ def get_surface_matrices(polygon, points, mirror, close):
         x_vector = v_normal(list(normal)[:3])
         if mirror:
             x_vector = [-e for e in x_vector]
-        z_vector = v_normal([e1 - e2 for e1, e2 in zip(p1, p2)])
+        z_vector = v_normal([e1-e2 for e1, e2 in zip(p1, p2)])
         y_vector = v_normal(v_cross(z_vector, x_vector))
         z_vector = v_cross(x_vector, y_vector)
         matrix = m3x3_to_m16([x_vector, y_vector, z_vector])
@@ -238,19 +227,19 @@ def create_surface_by_polygon_points(name, polygon, points, close):
     curves = []
     joints = []
     for i, m in enumerate(matrices):
-        n = "{name}{i:0>2}".format(name=name, i=i + 1)
-        joint = create_joint_locator(name, n + "Joint")
-        curve = cmds.curve(d=1, p=[[0, -0.5, 0], [0, 0.5, 0]], n=n + "Curve")
+        n = "{name}{i:0>2}".format(name=name, i=i+1)
+        joint = create_joint_locator(name, n+"Joint")
+        curve = cmds.curve(d=1, p=[[0, -0.5, 0], [0, 0.5, 0]], n=n+"Curve")
         cmds.parent(curve, joint)
         cmds.xform(joint, ws=1, m=m)
         curves.append(curve)
-        cmds.setAttr(curve + '.v', 0)
+        cmds.setAttr(curve+'.v', 0)
         joints.append(joint)
-        cmds.connectAttr(joint + ".radius", curve + ".sy")
+        cmds.connectAttr(joint+".radius", curve+".sy")
 
     surface = cmds.loft(curves, ch=1, d=3, ss=4, u=1, close=close)[0]
     cmds.parent(surface, name)
-    surface = cmds.rename(surface, name + "Surface")
+    surface = cmds.rename(surface, name+"Surface")
     if close:
         follicle_number = len(points) * 2
         step = 1.0 / follicle_number
@@ -260,14 +249,14 @@ def create_surface_by_polygon_points(name, polygon, points, close):
 
     matrices = []
     for i in range(follicle_number):
-        n = "{name}{i:0>2}".format(name=name, i=i + 1)
-        follicle = data.create_follicle(surface, n + "Follicle", parent=name, v=0.5, u=step * i)
-        offset = cmds.group(em=1, n=n + "Offset", p=follicle)
+        n = "{name}{i:0>2}".format(name=name, i=i+1)
+        follicle = data.create_follicle(surface, n+"Follicle", parent=name, v=0.5, u=step*i)
+        offset = cmds.group(em=1, n=n+"Offset", p=follicle)
         cmds.toggle(offset, la=1)
-        cmds.setAttr(offset + ".ry", -90)
+        cmds.setAttr(offset+".ry", -90)
         matrices.append(cmds.xform(offset, q=1, m=1, ws=1))
     for i, joint in enumerate(joints):
-        cmds.xform(joint, ws=1, m=matrices[i * 2])
+        cmds.xform(joint, ws=1, m=matrices[i*2])
     cmds.select(surface)
     return surface
 
@@ -296,33 +285,32 @@ def fit_loop_surface(name):
 
 def fit_roll(name="Jaw"):
     center = get_selected_vtx_center()
-    aim = create_joint_locator(name, name + "Aim")
+    aim = create_joint_locator(name, name+"Aim")
     cmds.xform(aim, ws=1, t=center)
-    roll = create_joint_locator(name, name + "Roll")
+    roll = create_joint_locator(name, name+"Roll")
     center[2] -= 1
     cmds.xform(roll, ws=1, t=center)
-    sphere = cmds.polySphere(n=name + "Sphere", ch=0)[0]
+    sphere = cmds.polySphere(n=name+"Sphere", ch=0)[0]
     cmds.parent(sphere, roll)
-    cmds.setAttr(sphere + '.t', 0, 0, 0)
-    cmds.setAttr(sphere + '.overrideEnabled', 1)
-    cmds.setAttr(sphere + '.overrideDisplayType', 1)
+    cmds.setAttr(sphere+'.t', 0, 0, 0)
+    cmds.setAttr(sphere+'.overrideEnabled', 1)
+    cmds.setAttr(sphere+'.overrideDisplayType', 1)
     aim_vector = [1, 0, 0]
     if is_mirror(name):
-        aim_vector = [-1, 0, 0]
+        aim_vector = [-1, 0,  0]
     cmds.aimConstraint(aim, roll, aim=aim_vector, u=[0, 1, 0], wu=[0, 1, 0], wuo=aim, wut="objectrotation")
-    cmds.xform(aim, ws=1, ro=cmds.xform(roll, q=1, ws=1, ro=1))
-    distance = cmds.createNode("distanceBetween", n=name + "Distance")
-    cmds.connectAttr(roll + '.t', distance + ".point1")
-    cmds.connectAttr(aim + '.t', distance + ".point2")
-    cmds.connectAttr(distance + '.distance', sphere + ".sx")
-    cmds.connectAttr(distance + '.distance', sphere + ".sy")
-    cmds.connectAttr(distance + '.distance', sphere + ".sz")
+    cycle_state = cmds.cycleCheck(q=True, e=True)
+    cmds.cycleCheck(e=False)
+    tmp_orient = cmds.orientConstraint(roll, aim, mo=False)[0]
+    cmds.delete(tmp_orient)
+    cmds.cycleCheck(e=cycle_state)
+    distance = cmds.createNode("distanceBetween", n=name+"Distance")
+    cmds.connectAttr(roll+'.t', distance + ".point1")
+    cmds.connectAttr(aim+'.t', distance + ".point2")
+    cmds.connectAttr(distance+'.distance', sphere+".sx")
+    cmds.connectAttr(distance+'.distance', sphere+".sy")
+    cmds.connectAttr(distance+'.distance', sphere+".sz")
     cmds.toggle(roll, la=1)
-    cmds.aimConstraint(roll, aim, o=[0, 0, 0], w=1, aimVector=[-1, 0, 0], upVector=[0, 1, 0], worldUpType='vector',
-                       worldUpVector=[0, 1, 0])
-    for obj in [aim,roll]:
-        cmds.setAttr(f'{obj}.ove', True)
-        cmds.setAttr( f'{obj}.ovc', 17)
     cmds.select(roll)
     return aim, roll
 
@@ -331,7 +319,7 @@ def fit_fk(name):
     tops = cmds.ls(sl=1, o=1, type="joint")
     if len(tops) != 1:
         return tuple()
-    joint = cmds.duplicate(tops[0], n=name + "01")[0]
+    joint = cmds.duplicate(tops[0], n=name+"01")[0]
     joint = cmds.parent(joint, name)[0]
     for child in cmds.listRelatives(joint, ad=1, f=1):
         if not cmds.nodeType(child) == "joint":
@@ -339,12 +327,12 @@ def fit_fk(name):
     children = cmds.listRelatives(joint, ad=1, f=1)
     children.sort(key=lambda x: x.count("|"), reverse=True)
     for i, child in enumerate(children):
-        cmds.rename(child, name + "%02d" % (len(children) - i + 1))
-    joints = [joint] + cmds.listRelatives(joint, ad=1, f=1)
+        cmds.rename(child, name+"%02d" % (len(children)-i+1))
+    joints = [joint] + (cmds.listRelatives(joint, ad=1) or [])
     list(map(joint_as_local, joints))
     for joint in joints:
         if not cmds.listRelatives(joint, s=0, type="joint"):
-            cmds.setAttr(joint + ".jointOrient", 0, 0, 0)
+            cmds.setAttr(joint+".jointOrient", 0, 0, 0)
     cmds.select(joints[0])
     return tuple(joints)
 
@@ -353,6 +341,18 @@ def save_data(node, **kwargs):
     for attr, value in kwargs.items():
         if cmds.attributeQuery(attr, node=node, ex=1):
             return
+        if attr == "sample":
+            labels = ["param", "length", "topo"]
+            if isinstance(value, int):
+                dv = max(0, min(len(labels) - 1, value))
+            else:
+                try:
+                    dv = labels.index(value)
+                except Exception:
+                    dv = 0
+            cmds.addAttr(node, ln=attr, at="enum", en=":".join(labels), k=1, dv=dv)
+            cmds.setAttr(node + "." + attr, dv)
+            continue
         if isinstance(value, bool):
             cmds.addAttr(node, ln=attr, dv=value, at="bool", k=1)
         elif isinstance(value, int):
@@ -385,7 +385,7 @@ class Fits(object):
         for node in nodes:
             row = dict(node=node, mirror=False)
             for attr in cmds.listAttr(node, ud=1):
-                row[attr] = cmds.getAttr(node + "." + attr)
+                row[attr] = cmds.getAttr(node+"."+attr)
             self.data.append(row)
         for row in self.data[:]:
             if row["rml"] == "M":
@@ -418,35 +418,30 @@ class Fits(object):
 
     def __iter__(self):
         return iter(self.data)
-
+    
     @staticmethod
     def create(fit, rig, pre, name, rml, kwargs):
         group = "Fit{name}_{rml}".format(**locals())
         if cmds.objExists(group):
             cmds.delete(group)
         classify = name[len(pre):]
-        cmds.createNode("transform", n=group, p=ROOT, ss=1)
-        cmds.setAttr(f'{ROOT}.inheritsTransform', False)
-        base_joints = cmds.ls(sl=True, o=1, type="joint")
-        cls = globals()["fit_" + fit]
-        print(cls)
+        # 先在世界根创建 group，保证所有 fit_* 函数在干净的世界坐标系下运行
+        # 避免 MFaceFits 有位移/旋转时，曲线、surface、joint 的局部坐标计算出现偏移
+        cmds.createNode("transform", n=group, ss=1)
         nodes = globals()["fit_" + fit](group)
         nodes = nodes if isinstance(nodes, tuple) else [nodes]
-        for node in nodes:
-            save_data(node, fit=fit, rig=rig, pre=pre, classify=classify, name=name, rml=rml, suf=node[len(group):])
+        uuids = cmds.ls(list(nodes), uuid=True)
+        
+        # fit 完成后再 parent 进 ROOT，保留世界位置
+        cmds.parent(group, ROOT)
+        
+        resolved_nodes = [cmds.ls(u)[0] for u in uuids]
+        for node in resolved_nodes:
+            short_name = node.split("|")[-1]
+            save_data(node, fit=fit, rig=rig, pre=pre, classify=classify, name=name, rml=rml, suf=short_name[len(group):])
         for query, _data in kwargs:
             for row in Fits().all().finds(rig=rig, name=name, **query):
                 save_data(row["node"], **_data)
-        if pre == 'Tongue':
-            from MFace import core
-            fit_loc = cmds.listRelatives(group, c=True)
-            if fit_loc:
-                core.correct_tongue_joint_axis(fit_loc[0])
-            if base_joints:
-                cmds.delete(base_joints)
-        if name == 'Brow' and rml == 'M':
-            for node in nodes:
-                cmds.setAttr(f'{node}.overrideColor', 17)
 
     def __getitem__(self, item):
         for row in self.data:

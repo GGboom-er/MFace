@@ -1,8 +1,55 @@
 # coding:utf-8
 import json
 import re
+from contextlib import contextmanager
 from .core import *
 from . import bs
+from .logger import logger, MSG
+
+# 可驱动的数值属性类型集合（统一 UI 过滤 + 自动检测共用）
+_NUMERIC_ATTR_TYPES = {"double", "float", "long", "short", "doubleAngle", "doubleLinear", "byte", "bool", "enum"}
+
+# 模块级变量：UI 弹窗确认后暂存 keep_ctrl_attrs，供 auto_duplicate_edit 取用
+_keep_ctrl_attrs = None
+
+_sdk_cache = None
+
+def begin_pose_cache():
+    global _sdk_cache
+    _sdk_cache = {}
+
+def end_pose_cache():
+    global _sdk_cache
+    _sdk_cache = None
+
+@contextmanager
+def pose_cache():
+    u"""安全的 SDK 缓存上下文，异常时自动清理。"""
+    begin_pose_cache()
+    try:
+        yield
+    finally:
+        end_pose_cache()
+
+def set_keep_ctrl_attrs(value):
+    global _keep_ctrl_attrs
+    _keep_ctrl_attrs = value
+
+def get_keep_ctrl_attrs():
+    return _keep_ctrl_attrs
+
+
+def parse_base_name(node_name):
+    # 安全提取剔除 Namespace、层级路径及强加的业务前缀 Core Name
+    short_name = node_name.split("|")[-1].split(":")[-1]
+    if short_name.startswith("FCtrl"): return short_name[5:]
+    if short_name.startswith("M_FCtrl"): return short_name[7:]
+    if short_name.startswith("Ctrl"): return short_name[4:]
+    return short_name
+
+def __get_node_name(attr):
+    ctrl_name = attr.split(".", 1)[0]
+    return parse_base_name(ctrl_name)
 
 
 def get_target_name(attr, default, value):
@@ -10,33 +57,55 @@ def get_target_name(attr, default, value):
         suffix = "max"
     else:
         suffix = "min"
-    ctrl_name, attr_name = attr.split(".")
-    ctrl_name = ctrl_name.split("|")[-1].split(":")[-1]
+    # Safely split attr into ctrl_name and attr_name
+    parts = attr.split(".", 1)
+    ctrl_name = __get_node_name(parts[0])
+    attr_name = parts[1] if len(parts) > 1 else "" # Handle cases where attr might not have a dot
     return "_".join([ctrl_name, attr_name, suffix])
 
 
-def find_add_sdk_data():
+def find_add_sdk_data(ctrls=None):
     data = []
-    for ctrl in cmds.ls(sl=1, type="transform"):
+    if ctrls is None:
+        ctrls = cmds.ls(sl=1, type="transform")
+    else:
+        ctrls = [c for c in ctrls if cmds.objExists(c) and cmds.objectType(c) == "transform"]
+        
+    for ctrl in ctrls:
+        # ── TRS 属性：独立收集每一个有显著偏移的属性 ──
         for trs in "trs":
             for xyz in "xyz":
                 attr = ctrl + '.' + trs + xyz
-                value = cmds.getAttr(attr)
-                default = dict(t=0, r=0, s=1)[trs]
-                if abs(default-value) < 0.001:
+                try:
+                    value = cmds.getAttr(attr)
+                except Exception:
                     continue
-                target_name = get_target_name(attr, default, value)
-                data.append(dict(attr=attr, value=value, default_value=default, target_name=target_name))
+                default = dict(t=0, r=0, s=1)[trs]
+                delta = abs(default - value)
+                if delta > 0.001:
+                    target_name = get_target_name(attr, default, value)
+                    data.append(dict(attr=attr, value=value, default_value=default, target_name=target_name))
+
+        # ── 自定义属性：独立收集每一个有显著偏移的属性（不再赢家通吃）──
         for attr in cmds.listAttr(ctrl, ud=1, sn=1) or []:
-            node_attr = ctrl+"."+attr
-            if cmds.getAttr(node_attr, type=1) != "double":
+            node_attr = ctrl + "." + attr
+            try:
+                # 跳过锁定属性（锁定属性无法 setAttr，不能作为 SDK 驱动源）
+                if cmds.getAttr(node_attr, lock=True):
+                    continue
+                attr_type = cmds.getAttr(node_attr, type=1)
+                if attr_type not in _NUMERIC_ATTR_TYPES:
+                    continue
+                default_list = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+                default = default_list[0] if default_list else 0.0
+                value = cmds.getAttr(node_attr)
+            except Exception:
                 continue
-            default = cmds.addAttr(node_attr, q=1, dv=1)
-            value = cmds.getAttr(node_attr)
-            if abs(default - value) < 0.001:
-                continue
-            target_name = get_target_name(node_attr, default, value)
-            data.append(dict(attr=ctrl+"."+attr, value=value, default_value=default, target_name=target_name))
+            delta = abs(default - value)
+            if delta > 0.001:
+                target_name = get_target_name(node_attr, default, value)
+                data.append(dict(attr=node_attr, value=value, default_value=default, target_name=target_name))
+            
     return data
 
 
@@ -55,9 +124,11 @@ def exist_target(target_name):
 
 
 def check_swing_twist(attr):
-    ctrl, name = attr.split(".")
+    if "." not in attr:
+        return attr
+    ctrl, name = attr.split(".", 1)
     rotates = ["rx", "ry", "rz"]
-    if name not in ["rx", "ry", "rz"]:
+    if name not in rotates:
         return attr
     index = rotates.index(name)
     axis = [0, 0, 0, 0]
@@ -76,9 +147,41 @@ def check_swing_twist(attr):
     return attr.name
 
 
+def __set_sdk_threshold(target_name, new_value):
+    u"""将指定目标的 SDK 触发阈值（animCurve 中 weight=1 的 key）移到 new_value。
+    返回 True 表示修改成功，False 表示未找到或移动失败。"""
+    bridge = get_bridge()
+    uu_list = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
+    if not uu_list:
+        return False
+    uu = uu_list[0]
+    for i in range(cmds.keyframe(uu, q=True, keyframeCount=True)):
+        v = cmds.keyframe(uu, index=(i, i), q=True, vc=True)[0]
+        if abs(v - 1.0) < 0.001:
+            try:
+                cmds.keyframe(uu, edit=True, index=(i, i), absolute=True, floatChange=new_value)
+                return True
+            except RuntimeError:
+                return False
+    return False
+
+
 def add_sdk(attr, target_name, default_value, value):
     bridge = get_bridge()
     if exist_target(target_name):
+        data = get_base_sdk_data(target_name)
+        if not data: return
+        _, _, _, old_value = data
+        if abs(value - old_value) > 0.001:
+            try:
+                ctrl, ch_attr = attr.split('.', 1)
+                msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, ch_attr, old_value, value)
+            except Exception:
+                msg = u'%s\n%.3f ===》》》=== %.3f' % (attr, old_value, value)
+                
+            if logger.confirm(u'极值同步确认', msg, accept=u'确认更新', cancel=u'不更新'):
+                if __set_sdk_threshold(target_name, value):
+                    logger.hud(MSG.FACS_THRESHOLD_UPDATED % (target_name, value))
         return
     if not cmds.objExists(attr):
         return
@@ -88,13 +191,27 @@ def add_sdk(attr, target_name, default_value, value):
     cmds.setDrivenKeyframe(bridge + '.' + target_name, cd=attr, dv=value, v=1, itt="linear", ott="linear")
 
 
-def add_sdk_by_selected():
+def add_sdk_by_selected(ctrls=None):
     u"""
     对选择的控制器添加驱动
     :return:
     """
-    for kwargs in find_add_sdk_data():
+    added = []
+    for kwargs in find_add_sdk_data(ctrls):
         add_sdk(**kwargs)
+        added.append(kwargs["target_name"])
+    return added
+
+
+def add_sdk_by_explicit_targets(kwargs_list):
+    u"""
+    根据UI等处显式的传参，直接精确添加指定的所有驱动目标，跳过查找和猜测。
+    """
+    added = []
+    for kwargs in kwargs_list:
+        add_sdk(**kwargs)
+        added.append(kwargs["target_name"])
+    return added
 
 
 def add_comb(target_names):
@@ -106,17 +223,18 @@ def add_comb(target_names):
     bridge = get_bridge()
     for target_name in target_names:
         if not exist_target(target_name):
-            return cmds.warning("can not find " + target_name)
+            return logger.warning(MSG.NOT_FOUND_TARGET % target_name)
         if not cmds.listConnections(bridge, s=1, d=0, ):
-            return cmds.warning("can not find " + target_name + "inputs")
+            return logger.warning(MSG.NOT_FOUND_INPUT % target_name)
     cmds.addAttr(bridge, ln=comb_name, min=0, max=1, at="double", k=1)
     com = cmds.createNode("combinationShape", n=comb_name)
     cmds.connectAttr(com + ".outputWeight", bridge + '.' + comb_name)
     cmds.setAttr(com+'.combinationMethod', 1)
     for i, target_name in enumerate(target_names):
-        inputs = cmds.listConnections(bridge + '.' + target_name, s=1, d=0, p=1) or []
-        if inputs:
-            cmds.connectAttr(inputs[0], com+".inputWeight[%i]" % i)
+        inputs = cmds.listConnections(bridge + '.' + target_name, s=1, d=0, p=1)
+        cmds.connectAttr(inputs[0], com+".inputWeight[%i]" % i)
+    logger.hud(MSG.FACS_COMB_CREATED % comb_name)
+    return comb_name
 
 
 def target_to_base_ib(ib_name):
@@ -165,17 +283,20 @@ def add_ib(target_name):
     bridge = get_bridge()
     target_name, ib = target_to_base_ib(target_name)
     if ib != 60:
-        return cmds.warning("can not insert in-between")
+        return logger.warning(MSG.IB_INSERT_FAIL)
     if not exist_target(target_name):
-        return cmds.warning("can not find" + target_name)
+        return logger.warning(MSG.NOT_FOUND_TARGET % target_name)
     attr = bridge + '.' + target_name
     value = cmds.getAttr(attr)
     ib = int(round(value * 60))
     if ib == 60:
-        return cmds.warning("can not insert ib-between 60")
+        return logger.warning(MSG.IB_VALUE_ERROR % "60")
     if ib == 0:
-        return cmds.warning("can not insert ib-between 0")
-    add_ib_by_name(base_ib_to_target(target_name, ib))
+        return logger.warning(MSG.IB_VALUE_ERROR % "0")
+    ib_name = base_ib_to_target(target_name, ib)
+    add_ib_by_name(ib_name)
+    logger.hud(MSG.FACS_IB_CREATED % ib_name)
+    return ib_name
 
 
 def get_targets():
@@ -187,65 +308,244 @@ def get_targets():
 def rest_ctrl(ctrl):
     cmds.xform(ctrl, ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
 
+    # 扩展：揪出并重置控制器上的所有主要自定义驱动属性
+    custom_attrs = cmds.listAttr(ctrl, k=True, u=True) or []
+    restored_info = []
+    
+    for attr in custom_attrs:
+        plug = ctrl + "." + attr
+        # 忽略锁定的属性，防止在被锁定的大管家节点上报错
+        if cmds.getAttr(plug, lock=True):
+            continue
+            
+        try:
+            # 尝试查询官方默认值，查不到则视其为 0.0
+            default_array = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+            default_val = default_array[0] if default_array else 0.0
+            current_val = cmds.getAttr(plug)
+            
+            # 仅在实际发生偏移时还原，避免写入多余的脏节点事件
+            if abs(current_val - default_val) > 0.0001:
+                cmds.setAttr(plug, default_val)
+                restored_info.append("%s (%.3f -> %.3f)" % (attr, current_val, default_val))
+        except Exception:
+            pass
+
+
+
+
+def get_active_other_drivers(target_names):
+    u"""扫描当前场景中，活跃（值非零）且不属于 target_names 所指定目标驱动的控制器属性。
+    对 COMB 目标，组件驱动偏离了 SDK 阈值（用户手动改变了）时也会返回。
+    返回列表，每项为 dict: {ctrl_attr, display_label, current_value}
+    """
+    bridge = get_bridge()
+    # 先拿到目标自身用到的 ctrl_attr 和 SDK 阈值
+    own_ctrl_attrs = set()
+    # COMB 组件驱动的 SDK 阈值映射（ctrl_attr → threshold_value）
+    own_thresholds = {}
+    for tgt in target_names:
+        for base_tgt in get_base_targets([tgt]):
+            data = get_base_sdk_data(base_tgt)
+            if data:
+                ctrl, attr, _, threshold = data
+                ca = ctrl + "." + attr
+                own_ctrl_attrs.add(ca)
+                own_thresholds[ca] = threshold
+
+    is_comb = any("_COMB_" in tgt for tgt in target_names)
+
+    found = []
+    seen = set()
+    for base_tgt in get_base_targets(get_targets()):
+        if not exist_target(base_tgt):
+            continue
+        data = get_base_sdk_data(base_tgt)
+        if not data:
+            continue
+        ctrl, attr, default_value, _ = data
+        ctrl_attr = ctrl + "." + attr
+        if ctrl_attr in seen:
+            continue
+        # 判断此驱动是否为 COMB 目标的组件自身驱动
+        is_own_comb_driver = is_comb and ctrl_attr in own_ctrl_attrs
+        # 非 COMB 目标的自身驱动跳过
+        if ctrl_attr in own_ctrl_attrs and not is_own_comb_driver:
+            continue
+        seen.add(ctrl_attr)
+        try:
+            val = cmds.getAttr(ctrl_attr)
+            
+            if is_own_comb_driver:
+                # COMB 组件驱动：只有当前值偏离 SDK 阈值时才显示（用户手动改变了）
+                threshold = own_thresholds.get(ctrl_attr, default_value)
+                if abs(val - threshold) < 0.001:
+                    continue  # 处于 COMB 正常激活状态，不需要用户干预
+            else:
+                # 外部驱动：查询真实的物理默认值（解决死区偏移导致 default_value!=0 的弹窗误报）
+                true_default = 0.0
+                try:
+                    default_array = cmds.attributeQuery(attr, node=ctrl, listDefault=True)
+                    if default_array:
+                        true_default = default_array[0]
+                except Exception:
+                    pass
+                
+                # 值在物理默认值附近则不显示
+                if abs(val - true_default) < 0.001:
+                    continue
+
+            found.append(dict(
+                ctrl_attr=ctrl_attr,
+                display_label=u"%s  (当前=%.3f)" % (ctrl_attr, val),
+                current_value=val
+            ))
+        except Exception as _e:
+                    logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+    return found
+
 
 def get_base_targets(targets):
+    seen = set()
     base_targets = []
     for target in targets:
         comb_name, _ = target_to_base_ib(target)
         for target_name in comb_name.split("_COMB_"):
-            if target_name not in base_targets:
+            if target_name not in seen:
+                seen.add(target_name)
                 base_targets.append(target_name)
     return base_targets
 
 
 def get_base_sdk_data(target_name):
+    global _sdk_cache
+    if _sdk_cache is not None and target_name in _sdk_cache:
+        return _sdk_cache[target_name]
+        
     bridge = get_bridge()
-    uu = cmds.listConnections(bridge + '.' + target_name, s=1, d=0) or []
+    attr_path = bridge + '.' + target_name
+    if not cmds.objExists(attr_path):
+        return None
+    uu = cmds.listConnections(attr_path, s=1, d=0) or []
     if len(uu) != 1:
         return
     uu = uu[0]
-    attr = cmds.listConnections(uu, s=1, d=0, p=1) or []
-    if len(attr) != 1:
+    attr = cmds.listConnections(uu, s=1, d=0, p=1)
+    if not attr or len(attr) != 1:
         return
     attr = attr[0]
-    ctrl, attr = attr.split(".")
-    attr = cmds.attributeQuery(attr, sn=1, n=ctrl)
-    if attr in ["real_rx", "real_ry", "real_rz"]:
-        attr = attr[5:]
+    if "." not in attr:
+        return
+    ctrl, attr_name = attr.split(".", 1)
+    attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
+    if attr_name in ["real_rx", "real_ry", "real_rz"]:
+        attr_name = attr_name[5:]
     if cmds.nodeType(ctrl) == "unitConversion":
-        attr = cmds.listConnections(ctrl, s=1, d=0, p=1) or []
-        if len(attr) != 1:
+        # 穿透 unitConversion 节点，保留原始属性名作为回退
+        original_attr_name = attr_name
+        attr_query = cmds.listConnections(ctrl, s=1, d=0, p=1)
+        if not attr_query or len(attr_query) != 1:
             return
-        attr = attr[0]
-        ctrl, attr = attr.split(".")
-        attr = cmds.attributeQuery(attr, sn=1, n=ctrl)
-    if target_name[-4:] == "_max":
-        value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
-        default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
-    else:
-        value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
-        default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
-    return ctrl, attr, default_value, value
+        attr = attr_query[0]
+        if "." not in attr:
+            return
+        ctrl, attr_name = attr.split(".", 1)
+        try:
+            attr_name = cmds.attributeQuery(attr_name, sn=1, n=ctrl)
+        except Exception:
+            # 穿透后属性名查询失败（如 output 等内部名），回退使用穿透前的名称
+            attr_name = original_attr_name
+    
+    # Robustly find default value: Find the keyframe where the Driven Value (Target Weight) is 0.
+    # The animCurve maps Driver Value (Time) -> Driven Value (Value).
+    # We want the Time when Value is 0.
+    count = cmds.keyframe(uu, q=1, keyframeCount=1)
+    default_value = 0.0
+    value = 0.0
+    found_default = False
+    
+    times = cmds.keyframe(uu, q=1, fc=1) or []
+    values = cmds.keyframe(uu, q=1, vc=1) or []
+    for t, v in zip(times, values):
+        if abs(v) < 0.001: # Weight is 0 -> Default
+            default_value = t
+            found_default = True
+        elif abs(v - 1.0) < 0.001: # Weight is 1 -> Active
+            value = t
+    
+    # Fallback for legacy/manual setups if 0/1 logic isn't clean
+    if not found_default:
+        # Revert to index based guess if we couldn't find a clear 0 weight key
+        if target_name.endswith("_min"):
+             default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
+             value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
+        else:
+             # Default assumption (like _max)
+             default_value = cmds.keyframe(uu, floatChange=1, q=1, index=(0, 0))[0]
+             value = cmds.keyframe(uu, floatChange=1, q=1, index=(1, 1))[0]
+             
+    res = (ctrl, attr_name, default_value, value)
+    if _sdk_cache is not None:
+        _sdk_cache[target_name] = res
+    return res
 
 
-def reset_all():
+def reset_all(ctrls=None, exclude_ctrl_attrs=None):
+    u"""重置所有 Pose 驱动控制器。exclude_ctrl_attrs 为 set/list，其中的 ctrl.attr 将被跳过（即保留）。"""
+    bridge = get_bridge()
+    exclude = set(exclude_ctrl_attrs) if exclude_ctrl_attrs else set()
+    # 构建「有排除属性的控制器名」集合，避免 rest_ctrl 连带重置 exclude 属性
+    exclude_ctrl_set = {ea.split(".")[0] for ea in exclude}
+    # 记录已经被 rest_ctrl 整体重置过的控制器，避免重复调用
+    already_rest = set()
     for base_target in get_base_targets(get_targets()):
         if not exist_target(base_target):
             continue
-        sdk_data = get_base_sdk_data(base_target)
-        if sdk_data:
-            ctrl, attr, default_value, _ = sdk_data
-            rest_ctrl(ctrl)
-            cmds.setAttr(ctrl + "." + attr, default_value)
+        data = get_base_sdk_data(base_target)
+        if not data:
+            if not ctrls:
+                try:
+                    cmds.setAttr(bridge + "." + base_target, 0)
+                except Exception as _e:
+                    logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+            continue
+        ctrl, attr, default_value, _ = data
+        ctrl_attr = ctrl + "." + attr
+        if ctrls and ctrl not in ctrls:
+            continue
+        if ctrl_attr in exclude:
+            continue
+        try:
+            if not ctrls:
+                if ctrl in exclude_ctrl_set:
+                    # ★ 该控制器有被 exclude 的属性 → 只重置当前属性，不整体重置 Transform
+                    cmds.setAttr(ctrl + "." + attr, default_value)
+                else:
+                    # 安全：该控制器无 exclude 属性 → 可以整体重置 Transform
+                    if ctrl not in already_rest:
+                        rest_ctrl(ctrl)
+                        already_rest.add(ctrl)
+                    # rest_ctrl 后检查权重，必要时精确设置 default_value
+                    current_weight = cmds.getAttr(bridge + "." + base_target)
+                    if abs(current_weight) > 0.001:
+                        cmds.setAttr(ctrl + "." + attr, default_value)
+        except Exception as _e:
+                    logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
 
 
 def set_pose_by_target(target_name, ib):
     _, _ib = target_to_base_ib(target_name)
     for base_target in get_base_targets([target_name]):
-        sdk_data = get_base_sdk_data(base_target)
-        if sdk_data:
-            ctrl, attr, default_value, value = sdk_data
-            cmds.setAttr(ctrl + "." + attr, value * float(_ib) / 60.0 * float(ib) / 60.0)
+        data = get_base_sdk_data(base_target)
+        if not data:
+            continue
+        ctrl, attr, default_value, value = data
+        ratio = float(_ib)/60.0 * float(ib)/60.0
+        current_value = default_value + (value - default_value) * ratio
+        try:
+            cmds.setAttr(ctrl+"."+attr, current_value)
+        except Exception:
+            pass  # 跳过锁定/连接的属性
 
 
 def set_pose_by_targets(target_names, ib=60, reset_other=True):
@@ -273,7 +573,7 @@ def get_driver_attr(target_name):
 
 
 def get_selected_ctrls():
-    return [sel for sel in cmds.ls(type="transform", o=1) if bs.is_shape(sel, bs.Shape.nurbsCurve)]
+    return [sel for sel in cmds.ls(sl=1, type="transform") if bs.is_shape(sel, bs.Shape.nurbsCurve)]
 
 
 def run_joint_or_polygon(joint_fun, polygon_fun, *args, **kwargs):
@@ -282,37 +582,280 @@ def run_joint_or_polygon(joint_fun, polygon_fun, *args, **kwargs):
     if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
         polygon_fun(*args, **kwargs)
 
+def _create_bs_mesh_snapshot(bs_node, prefix=""):
+    u"""创建并分离出包含当前 outputGeometry[0] 状态的物理网格（无 SkinCluster）"""
+    import maya.cmds as cmds
+    tmp_transform = cmds.createNode("transform", name=f"{prefix}_{bs_node}_snap_transform")
+    tmp_shape = cmds.createNode("mesh", parent=tmp_transform, name=f"{prefix}_{bs_node}_snap_shape")
+    cmds.connectAttr(bs_node + ".outputGeometry[0]", tmp_shape + ".inMesh")
+    cmds.refresh()
+    cmds.disconnectAttr(bs_node + ".outputGeometry[0]", tmp_shape + ".inMesh")
+    return tmp_transform
+
 
 @keep_selected
-def edit_joint_target(target_name):
+def edit_joint_target(target_name, keep_ctrl_attrs=None):
+    u"""提取骨骼 Pose 并写入指定目标。
+    keep_ctrl_attrs: set/list，其中的 ctrl.attr 在 reset_all 时不会被归零，
+    使其形变贡献量保留在快照减数中，从而纳入最终的 additive 差值。
+    """
     if not exist_target(target_name):
         return
+        
+    exclude = set(keep_ctrl_attrs) if keep_ctrl_attrs else set()
+
+    base_targets = get_base_targets([target_name])
+
     joints = Joint.all()
     matrices = [joint.joint.xform(q=1, ws=1, m=1) for joint in joints]
-    Ctrl.reset_all()
-    set_pose_by_targets([target_name])
+    
+    # [BS Track] 1. 抓取当前界面纯 WYSIWYG 状态（此时任何控制器都还未被重置，最真实的界面快照）
+    bs_nodes = cmds.ls(type="blendShape") or []
+    active_bs_nodes = []
+    for bs_node in bs_nodes:
+        aliases = cmds.aliasAttr(bs_node, q=True) or []
+        has_active = False
+        for i in range(0, len(aliases), 2):
+            try:
+                if abs(cmds.getAttr(bs_node + "." + aliases[i])) > 0.0001:
+                    has_active = True
+                    break
+            except Exception:
+                continue
+        if has_active:
+            active_bs_nodes.append(bs_node)
+
+    wysiwyg_bs_meshes = {}
+    native_bs_meshes = {}
+    try:
+        for bs_node in active_bs_nodes:
+            wysiwyg_bs_meshes[bs_node] = _create_bs_mesh_snapshot(bs_node, prefix="wysiwyg")
+        # 从 "ctrl.attr" 提取纯节点名，用于跳过绑定控制器的 Transform 重置（支持去命名空间以保证强匹配）
+        exclude_ctrl_names = {parse_base_name(ca.split(".")[0]) for ca in exclude}
+    
+        # 重置未被「排除」的绑定控制器（捕获直接移动的控制器变换）
+        for ctrl in Ctrl.all():
+            if not ctrl.ctrl:
+                continue
+            short_name = parse_base_name(ctrl.ctrl.name)
+            if short_name not in exclude_ctrl_names:
+                ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    
+        # 重置未被「排除」的 Pose 驱动控制器（按精确 ctrl.attr 匹配）
+        reset_all(exclude_ctrl_attrs=exclude)
+    
+        # 【终极底层修正】强制将当前目标的所有底层驱动恢复到其被定义时的 SDK 阈值
+        for base_target in base_targets:
+            data = get_base_sdk_data(base_target)
+            if data:
+                ctrl, attr, default_value, threshold = data
+                ca = ctrl + "." + attr
+                try: cmds.setAttr(ca, threshold)
+                except Exception as _e:
+                    logger.error("MFace2 FACS Error (Sync): %s" % str(_e), exc=_e)
+    
+        cleaned_joints = 0
+        cleaned_bws = 0
+        
+        # [BS Track] 2. 抓取被推至阈值后的原生基底状态 (Native At Threshold)
+        for bs_node in active_bs_nodes:
+            native_bs_meshes[bs_node] = _create_bs_mesh_snapshot(bs_node, prefix="native")
+        
+        # [BS Track] 3. 计算最终注入的纯数据 BS 差分并使用 C++ API 直接注入目标内存
+        from .api_lib import bs_api
+        from maya.api import OpenMaya as om
+        from .bs import add_target, get_index
+        
+        for bs_node in active_bs_nodes:
+            w_mesh = wysiwyg_bs_meshes[bs_node]
+            n_mesh = native_bs_meshes[bs_node]
+            
+            # 验证是否有差值
+            sel = om.MSelectionList()
+            sel.add(w_mesh)
+            w_dag = sel.getDagPath(0)
+            w_dag.extendToShape()
+            w_pts = om.MFnMesh(w_dag).getPoints(om.MSpace.kObject)
+            sel.clear()
+            sel.add(n_mesh)
+            n_dag = sel.getDagPath(0)
+            n_dag.extendToShape()
+            n_pts = om.MFnMesh(n_dag).getPoints(om.MSpace.kObject)
+            
+            has_delta = False
+            for i in range(len(w_pts)):
+                if w_pts[i].distanceTo(n_pts[i]) > 0.0001:
+                    has_delta = True
+                    break
+                    
+            if has_delta:
+                # 确保目标通道存在
+                add_target(bs_node, target_name)
+                index = get_index(bs_node, target_name)
+                if index is not None:
+                    # 注入 Delta (wysiwyg - native)
+                    bs_api.edit_static_target(bs_node, index, w_mesh, n_mesh)
+    finally:
+        # 清理所有临时网格，确保即使发生异常也不残留垃圾
+        for w_mesh in wysiwyg_bs_meshes.values():
+            if cmds.objExists(w_mesh):
+                cmds.delete(w_mesh)
+        for n_mesh in native_bs_meshes.values():
+            if cmds.objExists(n_mesh):
+                cmds.delete(n_mesh)
+
     for joint, matrix in zip(joints, matrices):
-        joint.add_pose(Face()["Additive"][target_name], matrix)
+        # 1. 在写入前，提前抓取当前复位后的干净底座矩阵，计算运动差值
+        rest_m = joint.joint.xform(q=1, ws=1, m=1)
+        matrix_diff = sum([abs(a - b) for a, b in zip(matrix, rest_m)])
+        
+        # 2. 原版无毒、无损地注入驱动数据（不在此前杀菌以免破坏输出读值）
+        joint.add_pose(Face()["Additive"][target_name], matrix, rest_m)
+
+        # 3. [后置并靶向清查钩子] 仅在这根骨头【真实活动且被注入了差分数据后】，对其进行垃圾清理
+        # 这样既不会影响提取数据时的节点网络评价，也能精准剥除残留在有效骨架上的错位幽灵
+        if matrix_diff > 0.0001:
+            cleaned_joints += 1
+            for bw in joint.bws:
+                cleaned_bws += 1
+                bw.clean_orphans()
+                
 
 
-def edit_target(target_name):
-    run_joint_or_polygon(
-        edit_joint_target,
-        lambda x: bs.edit_connect_selected_target(get_driver_attr(x)),
-        target_name
-    )
 
+def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False):
+    if not exist_target(target_name):
+        return False, 0.0
+    
+    exclude = set(exclude_ctrl_attrs) if exclude_ctrl_attrs else set()
+    
+    combo, _ = target_to_base_ib(target_name)
+    if "_COMB_" in combo:
+        updated_any = False
+        vals = []
+        for base_tgt in get_base_targets([target_name]):
+            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude, prompt=prompt)
+            if upd: updated_any = True
+            vals.append(val)
+        avg_val = (sum(vals)/len(vals)) if vals else 0.0
+        if updated_any and not silent:
+            logger.hud(MSG.FACS_SYNC_DONE % target_name)
+        return updated_any, avg_val
+        
+    data = get_base_sdk_data(target_name)
+    if not data: return False, 0.0
+    ctrl, attr, default_value, old_value = data
+    
+    # 跳过被排除的驱动（用户在弹窗中取消勾选的），防止其 SDK 阈值被误改
+    ctrl_attr = ctrl + "." + attr
+    if ctrl_attr in exclude:
+        return False, old_value
+    
+    try:
+        value = cmds.getAttr(ctrl + "." + attr)
+    except Exception as _e:
+            logger.warning("MFace2 FACS Error (Update): %s" % str(_e))
+            return False, 0.0
+        
+    # Safeguard against cross-axis RuntimeError (Cannot move keys)
+    if (value - default_value) * (old_value - default_value) < -0.0001:
+        return False, old_value
+        
+    # 防止极值被更新为默认值（如0），这会导致 SDK 驱动区间失效 (0到0)
+    if abs(value - default_value) < 0.0001:
+        return False, old_value
+        
+    if abs(value - old_value) > 0.001:
+        if prompt:
+            msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
+            if not logger.confirm(MSG.TITLE_SYNC_CONFIRM, msg, accept=MSG.BTN_CONFIRM, cancel=MSG.BTN_CANCEL):
+                return False, old_value
+        if __set_sdk_threshold(target_name, value):
+            try:
+                cmds.setAttr(ctrl + "." + attr, value)
+            except Exception as _e:
+                logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+            if not silent:
+                logger.hud(MSG.FACS_THRESHOLD_HINT % (target_name, value))
+            return True, value
+        else:
+            return False, old_value
+    return False, value
+
+
+def resolve_target_crossings(targets):
+    resolved = []
+    messages = []
+    for target in targets:
+        combo, _ = target_to_base_ib(target)
+        if "_COMB_" in combo:
+            resolved.append(target)
+            continue
+            
+        data = get_base_sdk_data(target)
+        if not data:
+            resolved.append(target)
+            continue
+            
+        ctrl, attr, default_value, old_value = data
+        try: value = cmds.getAttr(ctrl + "." + attr)
+        except Exception: value = old_value
+        
+        # Zero-cross detection
+        if (value - default_value) * (old_value - default_value) < -0.0001:
+            new_target_name = get_target_name(ctrl + "." + attr, default_value, value)
+            if not exist_target(new_target_name):
+                add_sdk(ctrl + "." + attr, new_target_name, default_value, value)
+            resolved.append(new_target_name)
+            messages.append(MSG.FACS_THRESHOLD_HINT % (new_target_name, value))
+        else:
+            resolved.append(target)
+            
+    return resolved, messages
+
+def edit_target(target_name, keep_ctrl_attrs=None):
+    targets, msg = resolve_target_crossings([target_name])
+    if not targets: return
+    target_name = targets[0]
+        
+    edit_joint_target(target_name, keep_ctrl_attrs=keep_ctrl_attrs)
+    polygons = bs.get_selected_polygons()
+    if len(polygons) > 0:
+        bs.edit_connect_selected_target(get_driver_attr(target_name))
+        
+    updated, val = auto_update_threshold(target_name, silent=True)
+    if updated:
+        logger.hud(MSG.FACS_THRESHOLD_HINT % (target_name, val))
+    else:
+        logger.hud(MSG.FACS_MOD_NO_CHANGE % target_name)
+
+    return target_name
+
+
+def __force_update_threshold(target_name, value):
+    __set_sdk_threshold(target_name, value)
 
 def mirror_base_drive_target(target_name):
-    sdk_data = get_base_sdk_data(target_name)
-    if sdk_data:
-        ctrl, attr, default_value, value = get_base_sdk_data(target_name)
-        mirror_ctrl = Fmt.mirror_name(ctrl)
-        attr = mirror_ctrl + "." + attr
-        target_name = get_target_name(attr, default_value, value)
-        if not exist_target(target_name):
-            add_sdk(attr, target_name, default_value, value)
-    return target_name
+    ctrl, attr, default_value, value = get_base_sdk_data(target_name)
+    mirror_ctrl = Fmt.mirror_name(ctrl)
+    # 从目标名提取原始属性名（如 real_rz），而非 get_base_sdk_data 剥离后的 rz
+    # 目标名格式: parsedCtrl_attrName_min/max
+    # 但 ctrl 是 Maya 节点全名，目标名用的是 parse_base_name(ctrl) 后的缩写
+    parsed_ctrl = parse_base_name(ctrl)
+    ctrl_prefix = parsed_ctrl + "_"
+    if target_name.startswith(ctrl_prefix):
+        remainder = target_name[len(ctrl_prefix):]  # e.g. "real_rz_max" or "rz_min"
+        original_attr = "_".join(remainder.split("_")[:-1])  # e.g. "real_rz" or "rz"
+    else:
+        original_attr = attr
+    attr_full = mirror_ctrl + "." + original_attr
+    dst_target_name = get_target_name(attr_full, default_value, value)
+    if not exist_target(dst_target_name):
+        add_sdk(attr_full, dst_target_name, default_value, value)
+    else:
+        # 当被镜像的目标驱动已存在时，强制将其阈值横向跨越拉平对齐源侧，不再置之不理！
+        __force_update_threshold(dst_target_name, value)
+    return dst_target_name
 
 
 def mirror_drive_target(target_name):
@@ -342,6 +885,18 @@ def mirror_joint_targets(target_mirrors):
     for src, dst in target_mirrors:
         Joint.mirror_all_additive(src, dst)
 
+def auto_mirror_polygon_targets(target_mirrors):
+    # 自动查找场景中包含 src target 的 blendShape 节点并进行翻转，不再依赖当前用户选择
+    all_bs = cmds.ls(type="blendShape")
+    for bs_node in all_bs:
+        aliases = cmds.aliasAttr(bs_node, q=1) or []
+        alias_names = aliases[::2]
+        
+        for src, dst in target_mirrors:
+            if src in alias_names:
+                dst_attr = get_driver_attr(dst)
+                bs.connect_target(bs_node, dst_attr)
+                bs.mirror_target(bs_node, src, bs.get_target(dst_attr))
 
 def mirror_polygon_targets(target_mirrors):
     target_mirrors = [[src, get_driver_attr(dst)] for src, dst in target_mirrors]
@@ -350,13 +905,39 @@ def mirror_polygon_targets(target_mirrors):
 
 def mirror_targets(target_names):
     target_mirrors = mirror_drive_targets(target_names)
-    run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, target_mirrors)
+    
+    # 骨骼部分保留判断，因为有选择隔离功能(若选了骨骼只镜像选中的)
+    if cmds.ls(sl=1, type="joint") or get_selected_ctrls():
+        mirror_joint_targets(target_mirrors)
+    elif not cmds.ls(sl=1, o=1, type="mesh"):
+        # 如果什么都没选，默认全部执行
+        mirror_joint_targets(target_mirrors)
+        
+    # polygon部分：不再用 run_joint_or_polygon 判断，只要有能匹配上的BS就直接翻转
+    if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
+        mirror_polygon_targets(target_mirrors)
+    else:
+        auto_mirror_polygon_targets(target_mirrors)
+        
+    msgs = [u"从 %s 镜像至 -> %s" % (src, dst) for src, dst in target_mirrors]
+    logger.hud(MSG.FACS_MIRROR_DONE % "\n".join(msgs))
 
 
 def copy_flip_target(target_names):
     if len(target_names) != 2:
         return
-    run_joint_or_polygon(mirror_joint_targets, mirror_polygon_targets, [target_names])
+        
+    if cmds.ls(sl=1, type="joint") or get_selected_ctrls():
+        mirror_joint_targets([target_names])
+    elif not cmds.ls(sl=1, o=1, type="mesh"):
+        mirror_joint_targets([target_names])
+
+    if cmds.ls(sl=1, o=1, type="mesh") or bs.get_selected_polygons():
+        mirror_polygon_targets([target_names])
+    else:
+        auto_mirror_polygon_targets([target_names])
+        
+    logger.hud(MSG.FACS_FLIP_DONE % (target_names[0], target_names[1]))
 
 
 def delete_polygon_connect_targets(target_names):
@@ -376,7 +957,12 @@ def delete_drive_target(target_names):
     target_names = list(filter(exist_target, target_names))
     bridge = get_bridge()
     for target_name in target_names:
+        conns = cmds.listConnections(bridge + '.' + target_name, s=1, d=0)
         cmds.deleteAttr(bridge + '.' + target_name)
+        if conns:
+            for conn in conns:
+                if cmds.objExists(conn):
+                    cmds.delete(conn)
         update_ib(target_name)
 
 
@@ -411,6 +997,7 @@ def delete_selected_targets(target_names):
         lambda x: delete_joints_targets(Joint.selected(), x),
         bs.delete_selected_targets,
         target_names)
+    logger.hud(MSG.FACS_TARGET_DELETED % "\n".join(target_names), color="#FFFF00")
 
 
 def esc():
@@ -418,18 +1005,175 @@ def esc():
     Ctrl.reset_all()
 
 
-def auto_duplicate_edit(targets):
-    if len(targets) == 1 and (Joint.selected() or Ctrl.selected()):
-        edit_joint_target(targets[0])
-        return
+def restore_controllers():
+    ctrls = get_selected_ctrls()
+    if not ctrls:
+        esc()
+        logger.hud(MSG.FACS_RESET_ALL)
     else:
-        bs.auto_duplicate_edit(list(map(get_driver_attr, targets)), to_pose)
+        reset_all(ctrls)
+        for c in ctrls:
+            rest_ctrl(c)
+        logger.hud(MSG.FACS_RESET_SEL)
+
+
+def auto_duplicate_edit(targets):
+    """
+    两阶段雕刻工作流：
+    第一次调用 → 创建修型模型（进入编辑模式，按钮变红"结束修改"）
+    第二次调用 → 完成编辑，将雕刻差分注入目标 + 骨骼数据注入
+    """
+    targets = [t for t in targets if exist_target(t)]
+    if not targets:
+        return targets
+
+    if bs.is_on_duplicate_edit():
+        # ---- 第二阶段：结束修改 ----
+        # 骨骼注入（与 direct_inject_edit 一样的骨骼处理逻辑）
+        targets, cross_msgs = resolve_target_crossings(targets)
+
+        driver_states = {}
+        for target in targets:
+            data = get_base_sdk_data(target)
+            if data:
+                ctrl, attr, _, _ = data
+                try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
+                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+
+        full_ctrl_states = {}
+        for ctrl in Ctrl.all():
+            if ctrl.ctrl:
+                for attr in cmds.listAttr(ctrl.ctrl.name, k=True, scalar=True) or []:
+                    full_attr = ctrl.ctrl.name + "." + attr
+                    try: full_ctrl_states[full_attr] = cmds.getAttr(full_attr)
+                    except Exception as e: logger.debug("MFace2: Skip attr %s: %s" % (full_attr, e))
+
+        for target in targets:
+            for attr, val in full_ctrl_states.items():
+                try: cmds.setAttr(attr, val)
+                except Exception as e: logger.debug("MFace2: Restore attr %s failed: %s" % (attr, e))
+            edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
+
+        # BS 部分：完成 duplicate edit（计算雕刻差分并注入）
+        bs.finish_duplicate_edit(to_pose)
+
+        for attr, val in driver_states.items():
+            try: cmds.setAttr(attr, val)
+            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+
+        updated_msgs = []
+        for target in targets:
+            updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
+            if updated:
+                updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
+
+        if cross_msgs or updated_msgs:
+            logger.hud("\n".join(cross_msgs + updated_msgs))
+        else:
+            logger.hud(MSG.FACS_DIRECT_INJECT_DONE % "\n".join(targets))
+    else:
+        # ---- 第一阶段：创建修型模型 或 直接注入 ----
+        selected_polygons = bs.get_selected_polygons()
+        if selected_polygons:
+            # 选了模型 → 两阶段雕刻工作流（复制 mesh → 雕刻 → 结束修改）
+            attrs = [get_driver_attr(t) for t in targets]
+            bs.duplicate_edit_selected_polygons(attrs, to_pose)
+        else:
+            # 没选模型 → 直接注入骨骼/控制器数据（所见即所得）
+            return direct_inject_edit(targets)
+
+    return targets
+
+
+def direct_inject_edit(targets):
+    """
+    一键所见即所得：将当前的姿势（骨骼+BS）直接差分计算并注入目标驱动。
+    不进入雕刻模式，直接在内存中完成差分注入。
+    """
+    # 防御：如果此前意外卡在老版雕刻模式里，先退出
+    if bs.is_on_duplicate_edit():
+        try: bs.finish_duplicate_edit(lambda x: None)
+        except Exception as e: logger.warning("MFace2: Cleanup old edit failed: %s" % e)
+
+    targets, cross_msgs = resolve_target_crossings(targets)
+
+    # 1. 记录被驱动端的目标控制器状态（用于最后恢复它的初始值）
+    driver_states = {}
+    for target in targets:
+        data = get_base_sdk_data(target)
+        if data:
+            ctrl, attr, _, _ = data
+            try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
+            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+
+    # 1.5 记录当前所有的控制器属性（包括源控制器，仅用于多目标循环时防第一轮将其清零）
+    full_ctrl_states = {}
+    for ctrl in Ctrl.all():
+        if ctrl.ctrl:
+            # 必须加 scalar=True，否则会抓取到 translate 等复合属性，导致后续 setAttr 报错
+            for attr in cmds.listAttr(ctrl.ctrl.name, k=True, scalar=True) or []:
+                full_attr = ctrl.ctrl.name + "." + attr
+                try: full_ctrl_states[full_attr] = cmds.getAttr(full_attr)
+                except Exception as e: logger.debug("MFace2: Skip attr %s: %s" % (full_attr, e))
+
+    # 2. 核心注入逻辑：提取骨骼数据与纯数据 BS 内存差分注入（基于 snapshot）
+    for target in targets:
+        # 每次迭代前，确保用户捏的 WYSIWYG pose 被完整还原（防止多目标同时修改时，第二目标捕捉到 0）
+        for attr, val in full_ctrl_states.items():
+            try: cmds.setAttr(attr, val)
+            except Exception as e: logger.debug("MFace2: Restore attr %s failed: %s" % (attr, e))
+            
+        edit_joint_target(target, keep_ctrl_attrs=get_keep_ctrl_attrs())
+        
+    # 3. 注入完成后，仅还原【目标控制器】，允许其余的源控制器自然归零（也就是常说的“还原归位”）
+    for attr, val in driver_states.items():
+        try: cmds.setAttr(attr, val)
+        except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+        
+    # 4. 自动更新极限阈值（可能弹窗）
+    updated_msgs = []
+    for target in targets:
+        updated, val = auto_update_threshold(target, silent=True, exclude_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
+        if updated:
+            updated_msgs.append("[%s] —— 修改至 —— %.3f" % (target, val))
+            
+    if cross_msgs or updated_msgs:
+        logger.hud("\n".join(cross_msgs + updated_msgs))
+    else:
+        logger.hud(MSG.FACS_DIRECT_INJECT_DONE % "\n".join(targets))
+        
+    return targets
+
+
+def cancel_duplicate_edit(targets):
+    is_finishing = bs.is_on_duplicate_edit()
+    if is_finishing:
+        def clone_to_pose(t):
+            to_pose(t)
+        driver_states = {}
+        for target in targets:
+            data = get_base_sdk_data(target)
+            if data:
+                ctrl, attr, _, _ = data
+                try: driver_states[ctrl + "." + attr] = cmds.getAttr(ctrl + "." + attr)
+                except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+                
+        bs.cancel_duplicate_edit(clone_to_pose)
+        
+        for attr, val in driver_states.items():
+            try: cmds.setAttr(attr, val)
+            except Exception as _e: logger.warning("MFace2 FACS Error (Silent): %s" % str(_e))
+        logger.hud(MSG.FACS_CANCEL_EDIT, color="#FFFF00")
 
 
 def get_sdk_data():
     bridge = get_bridge()
     data = []
-    for attr in cmds.listAttr(bridge, ud=1):
+    attrs = cmds.listAttr(bridge, ud=1)
+    if attrs is None:
+        logger.debug(u"桥接节点 [Bridge Node] %s 上未检测到任何自定义属性，无可采集的 FACS SDK 驱动数据。", bridge)
+        return []
+    for attr in attrs:
         target_name = attr.split(".")[-1]
         if target_name[-4:-2] == "IB":
             data.append(dict(
@@ -443,17 +1187,18 @@ def get_sdk_data():
                 target_name=target_name
             ))
         else:
-            sdk_data = get_base_sdk_data(target_name)
-            if sdk_data:
-                ctrl, attr, default_value, value = sdk_data
-                data.append(dict(
-                    typ="base",
-                    ctrl=ctrl,
-                    attr=attr.split(".")[-1],
-                    default_value=default_value,
-                    value=value,
-                    target_name=target_name
-                ))
+            base_data = get_base_sdk_data(target_name)
+            if not base_data:
+                continue
+            ctrl, attr, default_value, value = base_data
+            data.append(dict(
+                typ="base",
+                ctrl=ctrl,
+                attr=attr.split(".")[-1],
+                default_value=default_value,
+                value=value,
+                target_name=target_name
+            ))
     return data
 
 
@@ -462,7 +1207,12 @@ def set_sdk_data(data):
         if row["typ"] == "base":
             ctrl_list = cmds.ls(row["ctrl"], type="transform")
             if len(ctrl_list) != 1:
-                continue
+                # 命名空间回退：用短名通配符查找
+                short_name = row["ctrl"].split("|")[-1].split(":")[-1]
+                ctrl_list = cmds.ls("*:" + short_name, type="transform") or cmds.ls(short_name, type="transform")
+                if len(ctrl_list) != 1:
+                    logger.warning(u"MFace2: 控制器 %s 未找到或不唯一（找到 %d 个），跳过" % (row["ctrl"], len(ctrl_list)))
+                    continue
             ctrl = ctrl_list[0]
             add_sdk(
                 attr=ctrl + '.' + row["attr"],

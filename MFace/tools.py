@@ -1,84 +1,267 @@
 import json
 from .rigs import rig
-from . import core
+from .core import *
 from . import facs
 from . import preset
 from . import fastPin
-from maya import cmds
+from . import setmgr
+from .logger import logger, MSG
 
 
 def undo(fun):
     def undo_fun(*args, **kwargs):
         cmds.undoInfo(openChunk=1)
-        fun(*args, **kwargs)
-        cmds.undoInfo(closeChunk=1)
-
+        try:
+            res = fun(*args, **kwargs)
+        finally:
+            cmds.undoInfo(closeChunk=1)
+        return res
     return undo_fun
 
 
+def build_and_snapshot(build_fn):
+    """undo 包裹 + 构建后刷新 Set。快照逻辑已下沉到 rig.py 逐模块处理。"""
+    def wrapped(*args, **kwargs):
+        cmds.undoInfo(openChunk=1)
+        try:
+            result = build_fn(*args, **kwargs)
+            setmgr.rebuild_sets()
+        finally:
+            cmds.undoInfo(closeChunk=1)
+        return result
+    return wrapped
+
+
 #  build
-create_fit = undo(rig.create_fit)
-build_selected = undo(rig.build_selected)
-build_all = undo(rig.build_all)
-delete_selected = undo(rig.delete_selected)
+create_fit     = undo(rig.create_fit)
+build_selected = build_and_snapshot(rig.build_selected)
+build_all      = build_and_snapshot(rig.build_all)
+def _delete_and_refresh():
+    rig.delete_selected()
+    setmgr.rebuild_sets()
+delete_selected = undo(_delete_and_refresh)
 
 
 # cluster
 def get_cluster_names():
-    return [cluster.name for cluster in core.Cluster.all()]
+    return [cluster.name for cluster in Cluster.all()]
 
 
 def load_cluster_filter():
-    return ",".join([cluster.name for cluster in core.Cluster.selected()])
+    return ",".join([cluster.name for cluster in Cluster.selected()])
 
 
 @undo
 def selected_cluster(names):
     cmds.select(cl=1)
     for name in names:
-        for node in [core.Ctrl(name).ctrl.name, "Cluster" + name]:
+        for node in [Ctrl(name).ctrl.name, "Cluster"+name]:
             if cmds.objExists(node):
                 cmds.select(node, add=1)
                 break
 
 
 def is_edit_cluster_weights():
-    return any([bool(joint.joint["weight"]) for joint in core.Joint.all()])
+    return any([bool(joint.joint["weight"]) for joint in Joint.all()])
 
 
 @undo
 def cluster_weight_apply():
     if is_edit_cluster_weights():
-        core.Cluster.finsh_edit_weights()
+        editing_clusters = set()
+        for wt in Weight.all():
+            attr = wt.weight.input()
+            if attr and attr.attr == "weight" and cmds.nodeType(attr.node) == "joint":
+                editing_clusters.add(wt.cluster.name)
+        
+        Cluster.finish_edit_weights()
+        if editing_clusters:
+            ctrl_names = []
+            for c_name in editing_clusters:
+                ctrl_node = Ctrl(c_name)
+                if ctrl_node and cmds.objExists(ctrl_node.ctrl.name):
+                    ctrl_names.append(ctrl_node.ctrl.name)
+            if ctrl_names:
+                cmds.select(ctrl_names)
+            return True, MSG.CLUSTER_EDIT_FINISH % ", ".join(editing_clusters)
+        return True, MSG.CLUSTER_EDIT_FINISH_GENERIC
     else:
-        clusters = core.Cluster.selected()
+        clusters = Cluster.selected()
         if len(clusters) != 1:
-            return
+            return False, MSG.CLUSTER_SELECT_UNIQUE
         cluster = clusters[0]
         cluster.edit_weights()
+        return True, MSG.CLUSTER_EDIT_START % cluster.name
 
 
 @undo
 def mirror_cluster_weights():
-    for cluster in core.Cluster.selected():
+    msgs = []
+    for cluster in Cluster.selected():
         cluster.mirror_weights()
+        if cluster.name.endswith(("_R", "_L")):
+            msgs.append(u"%s -> %s" % (cluster.name, Fmt.mirror_name(cluster.name)))
+        else:
+            msgs.append(MSG.CLUSTER_MIRROR_SELF % cluster.name)
+            
+    if msgs:
+        # 返璞归真：放弃任何 HTML 结构性排版标签！
+        # 经查，Maya 的 inViewMessage 计算外围灰色半透明背景条的高度和排版时，
+        # 如果遇到 <br> 或 <table> 会算错长宽。
+        # 必须使用原生的纯文本换行符 '\n' 拼接，它才能正确算出屏幕居中的边界并拉伸背景。
+        display_text = u"\n".join(msgs)
+        logger.hud(MSG.TOOL_BW_CLEAN_LIST % display_text)
 
 
 def save_cluster_weights(path):
     with open(path, "w") as fp:
-        json.dump({cluster.name: cluster.get_weight_data() for cluster in core.Cluster.selected()}, fp)
+        json.dump({cluster.name: cluster.get_weight_data() for cluster in Cluster.selected()}, fp)
 
 
 @undo
 def load_cluster_weights(path):
     with open(path, "r") as fp:
-        core.Cluster.load_weight_data(json.load(fp))
+        Cluster.load_weight_data(json.load(fp))
 
 
-ctrl_mirror_selected_matrix = undo(core.Ctrl.mirror_selected_matrix)
-ctrl_edit_selected_matrix = undo(core.Ctrl.edit_selected_matrix)
-ctrl_delete_selected = undo(core.Ctrl.delete_selected)
+ctrl_mirror_selected_matrix = undo(Ctrl.mirror_selected_matrix)
+ctrl_edit_selected_matrix = undo(Ctrl.edit_selected_matrix)
+def _ctrl_delete_and_refresh():
+    Ctrl.delete_selected()
+    setmgr.rebuild_sets()
+ctrl_delete_selected = undo(_ctrl_delete_and_refresh)
 
+def __match_selected_rotation():
+    import maya.cmds as cmds
+    from .core import Face, Fmt, Ctrl, Joint
+    from maya.api.OpenMaya import MMatrix, MTransformationMatrix
+    
+    # 拿到有序选择列表 (os=True 保留选择顺序，最后一个为 Target)
+    sel = cmds.ls(os=True, type="transform")
+    
+    fmt = Face().ctrl_fmt()
+    valid_sel = []
+    
+    for name in sel:
+        core_rml = Fmt.restore_core_rml(fmt, name)
+        if core_rml:
+            valid_sel.append((name, core_rml))
+            
+    if len(valid_sel) < 2:
+        return logger.warning(MSG.TOOL_ORIENT_HINT)
+        
+    target_node, target_core = valid_sel[-1]
+    
+    # 取目标骨骼/Output 的世界矩阵（旋转来源）
+    tgt_joint = Joint(target_core)
+    tgt_ctrl = Ctrl(target_core)
+    if tgt_joint.joint:
+        tgt_matrix = MMatrix(tgt_joint.joint.xform(q=1, ws=1, m=1))
+    elif tgt_ctrl.output:
+        tgt_matrix = MMatrix(tgt_ctrl.output.xform(q=1, ws=1, m=1))
+    else:
+        return
+    
+    # 提取目标的旋转四元数（纯旋转，不含缩放/位移）
+    tgt_rot_q = MTransformationMatrix(tgt_matrix).rotation(asQuaternion=True)
+    
+    for node_name, core_name in valid_sel[:-1]:
+        ctrl = Ctrl(core_name)
+        joint = Joint(core_name)
+        
+        # 取源骨骼/Output 的当前世界矩阵
+        if joint.joint:
+            src_matrix = MMatrix(joint.joint.xform(q=1, ws=1, m=1))
+        elif ctrl.output:
+            src_matrix = MMatrix(ctrl.output.xform(q=1, ws=1, m=1))
+        else:
+            continue
+        
+        # 构造新矩阵：目标旋转 + 源位移
+        src_xform = MTransformationMatrix(src_matrix)
+        src_pos = src_xform.translation(4)  # kWorld = 4
+        src_scale = src_xform.scale(4)
+        
+        new_xform = MTransformationMatrix()
+        new_xform.setScale(src_scale, 4)
+        new_xform.setRotation(tgt_rot_q)
+        new_xform.setTranslation(src_pos, 4)
+        
+        ctrl.edit_matrix(list(new_xform.asMatrix()))
+        
+    logger.hud(MSG.TOOL_MATCH_ROT_DONE % (len(valid_sel)-1, target_node))
+
+ctrl_match_selected_rotation = undo(__match_selected_rotation)
+
+def __clear_all_bw_orphans():
+    import maya.cmds as cmds
+    from .nodes import BlendWeighted
+    from .logger import logger
+    
+    bws = cmds.ls(type="blendWeighted")
+    if not bws:
+        return
+    
+    print(u"\n" + "="*50)
+    print(u"[清理废弃权重] 扫描全场 %d 个 blendWeighted 节点..." % len(bws))
+    
+    cleaned_total = 0
+    for node in bws:
+        try:
+            bw = BlendWeighted(node)
+            ins_before = set(cmds.getAttr(node + ".input", mi=True) or [])
+            bw.clean_orphans()
+            ins_after = set(cmds.getAttr(node + ".input", mi=True) or [])
+            removed = sorted(ins_before - ins_after)
+            if removed:
+                cleaned_total += len(removed)
+                print(u"  [✔] %s: 清除索引 %s (共 %d 个)" % (node, removed, len(removed)))
+        except Exception:
+            pass
+            
+    print(u"-"*50)
+    if cleaned_total > 0:
+        print(u"  总计清除 %d 个废弃幽灵属性。" % cleaned_total)
+        logger.hud(MSG.CLEAN_BW_DONE % cleaned_total)
+    else:
+        print(u"  全场景无废弃属性。")
+        logger.hud(MSG.CLEAN_BW_EMPTY)
+    print("="*50 + u"\n")
+
+clear_all_bw_orphans = undo(__clear_all_bw_orphans)
+
+def __hard_refresh_blend_weighted():
+    import maya.cmds as cmds
+    from .logger import logger
+    
+    bws = cmds.ls(type="blendWeighted")
+    if not bws:
+        return
+        
+    print(u"\n" + "="*50)
+    print(u"[深度刷新] 扫描全场 %d 个 blendWeighted 节点..." % len(bws))
+    
+    refreshed_count = 0
+    for bw in bws:
+        if cmds.attributeQuery('default', node=bw, exists=True):
+            try:
+                val = cmds.getAttr(bw + ".default")
+                cmds.setAttr(bw + ".default", val + 1.0)
+                cmds.dgdirty(bw)
+                cmds.setAttr(bw + ".default", val)
+                refreshed_count += 1
+            except Exception:
+                pass
+                
+    print(u"-"*50)
+    if refreshed_count > 0:
+        print(u"  总计深度刷新 %d 个包含 default 属性的叠加节点。" % refreshed_count)
+        logger.hud(MSG.REFRESH_BW_DONE % refreshed_count)
+    else:
+        logger.hud(MSG.REFRESH_BW_EMPTY)
+    print("="*50 + u"\n")
+
+hard_refresh_blend_weighted = undo(__hard_refresh_blend_weighted)
 
 def default_scene_json():
     path = cmds.file(q=1, sn=1)
@@ -89,41 +272,13 @@ def default_scene_json():
 
 
 def get_face_pose_filter():
-    return ",".join(cmds.ls(sl=1, type="transform"))
-
-
-@undo
-def reorganize_joint_hierarchy():
-    joint_group = 'MFaceJoints'
-    head_joint = 'Head_M'
-    if cmds.objExists(joint_group) and cmds.objExists(head_joint):
-        joint_list = cmds.listRelatives(joint_group, c=1, type='joint') or []
-        if not cmds.objExists(f'{joint_group}.joints'):
-            cmds.addAttr(joint_group, ln='joints', dt='string')
-        if joint_list:
-            cmds.setAttr(f'{joint_group}.joints', json.dumps(joint_list), type='string')
-            for joint in joint_list:
-                parent = cmds.listRelatives(joint, p=1)
-                if parent and parent[0].split('|')[-1] != head_joint:
-                    cmds.parent(joint, head_joint)
-    else:
-        cmds.warning("请先确认 MFaceJoints 和 Head_M 同时存在！")
-
-
-@undo
-def restore_joint_hierarchy():
-    joint_group = 'MFaceJoints'
-    if cmds.objExists(f'{joint_group}.joints'):
-        joint_list = json.loads(cmds.getAttr(f'{joint_group}.joints'))
-        for joint in joint_list:
-            parent = cmds.listRelatives(joint, p=1)
-            if parent and parent[0].split('|')[-1] != joint_group:
-                cmds.parent(joint, joint_group)
+    return ",".join(cmds.ls(sl=1, type="transform") or [])
 
 
 # face poses
 get_targets = facs.get_targets
 add_sdk_by_selected = undo(facs.add_sdk_by_selected)
+add_sdk_by_explicit_targets = undo(facs.add_sdk_by_explicit_targets)
 add_comb = undo(facs.add_comb)
 add_ib = undo(facs.add_ib)
 set_pose_by_targets = undo(facs.set_pose_by_targets)
@@ -133,7 +288,10 @@ delete_targets = undo(facs.delete_targets)
 copy_flip_target = undo(facs.copy_flip_target)
 delete_selected_targets = undo(facs.delete_selected_targets)
 esc = undo(facs.esc)
+restore_controllers = undo(facs.restore_controllers)
 auto_duplicate_edit = undo(facs.auto_duplicate_edit)
+direct_inject_edit = undo(facs.direct_inject_edit)
+cancel_duplicate_edit = undo(facs.cancel_duplicate_edit)
 is_on_duplicate_edit = facs.bs.is_on_duplicate_edit
 save_face_pose_data = undo(facs.save_face_pose_data)
 load_face_pose_data = undo(facs.load_face_pose_data)
@@ -178,47 +336,9 @@ delete_preset_skin_weights = undo(preset.delete_preset_skin_weights)
 @undo
 def ctrl_follow_to_selected_polygon():
     polygon = fastPin.get_selected_polygon()
-    pins = core.Ctrl.add_pins()
-    # fastPin.create_pins(polygon, pins)
-    pin_nodes = core.create_uv_pins(polygon, pins)
-    return pin_nodes
-
-
-@undo
-def ctrl_follow_to_selected_point():
-    judge = False
-    sels = cmds.ls(sl=True)
-    vtx = ''
-    pin_node = ''
-    follow_node = ''
-    pin_con = ''
-    if len(sels) == 2:
-        ctrs = [x for x in cmds.ls(sl=True, typ='transform') if x.startswith('FCtrl')]
-        if len(ctrs) == 1:
-            ctrl = ctrs[0]
-            pin_node = ctrl.replace('FCtrl', 'Pin')
-            follow_node = ctrl.replace('FCtrl', 'Follow')
-            pin_con = '%s_point' % follow_node
-            if cmds.objExists(pin_node) and cmds.objExists(pin_con) and cmds.objExists(follow_node):
-                points = [x for x in sels if x not in ctrs and '.vtx[' in x]
-                if len(points) == 1:
-                    judge = True
-                    vtx = points[0]
-                else:
-                    print(u'请选择一个控制器和一个模型点再执行此命令！')
-            else:
-                print(u'请先执行”跟随模型“操作，并确保你选中的控制器属于可跟随模型的控制！')
-        else:
-            print(u'请选择一个控制器和一个模型点再执行此命令！')
-    else:
-        print(u'请选择一个控制器和一个模型点再执行此命令！')
-    if judge:
-        loc = cmds.spaceLocator()[0]
-        pos = cmds.xform(vtx, q=True, ws=True, t=True)
-        cmds.xform(loc, ws=True, t=pos)
-        mesh = vtx.split('.')[0]
-        cmds.delete(pin_con)
-        core.create_uv_pin(mesh, pin_node, loc)
-        pin_con = cmds.pointConstraint(pin_node, follow_node, mo=True, n=pin_con)
-        cmds.parent(pin_con, 'MFacePins')
-        cmds.delete(loc)
+    if not polygon:
+        logger.warning(MSG.SELECT_TARGET_FIRST)
+        return
+    pins = Ctrl.add_pins()
+    fastPin.create_pins(polygon, pins)
+    logger.hud(MSG.TOOL_FOLLOW_DONE)

@@ -1,0 +1,78 @@
+{
+    "Eye_L": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Eye",
+        "pre": "Eye",
+        "name": "Eye",
+        "rml": "L"
+    },
+    "Jaw_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "zip": true,
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Lip",
+        "pre": "Jaw",
+        "name": "Jaw",
+        "rml": "M"
+    },
+    "Nose_M": {
+        "kwargs": [
+            [
+                {
+                    "suf": "Aim"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ],
+            [
+                {
+                    "suf": "Roll"
+                },
+                {
+                    "lockInfluenceWeights": false
+                }
+            ]
+        ],
+        "fit": "roll",
+        "rig": "Nose",
+        "pre": "Nose",
+        "name": "Nose",
+        "rml": "M"
+    }
+}

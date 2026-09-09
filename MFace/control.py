@@ -8,11 +8,7 @@ from maya import cmds
 from maya.api.OpenMaya import *
 
 
-def api_ls(*names):
-    selection_list = MSelectionList()
-    for name in names:
-        selection_list.add(name)
-    return selection_list
+from .shared import api_ls
 
 
 class Color(object):
@@ -94,18 +90,31 @@ class Control(object):
         return [shape for shape in shapes if cmds.nodeType(shape) == "nurbsCurve"]
 
     def set_color(self, color):
-        # 设置颜色
+        # 设置颜色（支持索引色和 RGB 色）
         for shape_name in self.get_shape_names():
-            cmds.setAttr(shape_name+'.overrideEnabled', True)
-            cmds.setAttr(shape_name+'.overrideColor', color)
+            cmds.setAttr(shape_name + '.overrideEnabled', True)
+            if isinstance(color, dict) and "rgb" in color:
+                cmds.setAttr(shape_name + '.overrideRGBColors', True)
+                cmds.setAttr(shape_name + '.overrideColorR', color["rgb"][0])
+                cmds.setAttr(shape_name + '.overrideColorG', color["rgb"][1])
+                cmds.setAttr(shape_name + '.overrideColorB', color["rgb"][2])
+            elif color is not None:
+                cmds.setAttr(shape_name + '.overrideRGBColors', False)
+                cmds.setAttr(shape_name + '.overrideColor', color)
         return self
 
     def get_color(self):
-        # 获取颜色
+        # 获取颜色（支持索引色和 RGB 色）
         for shape_name in self.get_shape_names():
-            # 如果overrideEnabled设置为True, 返回颜色
-            if cmds.getAttr(shape_name+'.overrideEnabled'):
-                return cmds.getAttr(shape_name + '.overrideColor')
+            if cmds.getAttr(shape_name + '.overrideEnabled'):
+                use_rgb = cmds.getAttr(shape_name + '.overrideRGBColors')
+                if use_rgb:
+                    r = cmds.getAttr(shape_name + '.overrideColorR')
+                    g = cmds.getAttr(shape_name + '.overrideColorG')
+                    b = cmds.getAttr(shape_name + '.overrideColorB')
+                    return {"rgb": [r, g, b]}
+                else:
+                    return cmds.getAttr(shape_name + '.overrideColor')
 
     def set_shape(self, shape):
         # 删除原有的shape
@@ -132,19 +141,35 @@ class Control(object):
             cmds.parent(cmds.listRelatives(curve, s=1, f=1), self.get_transform(), s=1, add=1)
             # 删除曲线
             cmds.delete(curve)
-        # 对曲线形态进行重命名
-        for shape_name in self.get_shape_names():
+        # 对曲线形态进行重命名，并恢复线宽
+        shape_names = self.get_shape_names()
+        for i, shape_name in enumerate(shape_names):
             cmds.rename(shape_name, self.get_name()+"Shape")
+        # 恢复线宽
+        for i, data in enumerate(shape):
+            lw = data.get("lineWidth")
+            if lw is not None:
+                renamed_shapes = self.get_shape_names()
+                if i < len(renamed_shapes):
+                    cmds.setAttr(renamed_shapes[i] + ".lineWidth", lw)
         return self
 
     def get_shape(self):
-        # 获取所有形态数据
-        return [dict(
-            points=cmds.xform(shape + ".cv[*]", q=1, t=1, ws=0),  # 局部顶点坐标
-            periodic=cmds.getAttr(shape + ".form") == 2,  # 是否闭合
-            degree=cmds.getAttr(shape + ".degree"),  # 次数
-            knot=list(MFnNurbsCurve(api_ls(shape).getDagPath(0)).knots()),  # 结点
-        ) for shape in self.get_shape_names()]
+        # 获取所有形态数据（含线宽）
+        result = []
+        for shape in self.get_shape_names():
+            data = dict(
+                points=cmds.xform(shape + ".cv[*]", q=1, t=1, ws=0),  # 局部顶点坐标
+                periodic=cmds.getAttr(shape + ".form") == 2,  # 是否闭合
+                degree=cmds.getAttr(shape + ".degree"),  # 次数
+                knot=list(MFnNurbsCurve(api_ls(shape).getDagPath(0)).knots()),  # 结点
+            )
+            # 线宽（非默认值 -1.0 时才保存）
+            lw = cmds.getAttr(shape + ".lineWidth")
+            if lw != -1.0:
+                data["lineWidth"] = lw
+            result.append(data)
+        return result
 
     def edit_shape_by_copy_ctrl(self, callback):
         # callback 回调函数, 用来修改copy_ctrl的位移,旋转,缩放

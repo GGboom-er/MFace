@@ -6,7 +6,7 @@ from .joint import rig_joint
 class Brow(RigSystem):
     fit_configs = dict(Joint=dict(pre="Brow", fit="joint", names=["", "A", "B", "C"], rml="M"),
                        Surface=dict(pre="Brow", fit="surface", names=["", "A", "B", "C"], rml="RL"))
-    fit_kwargs = [(dict(suf="Surface"), dict(main=True, cluster=3, joint=5, degree=2)),
+    fit_kwargs = [(dict(suf="Surface"), dict(main=True, cluster=3, joint=5, degree=2, sample="param")),
                   (dict(suf="Joint"), dict(cluster=True))]
     singleton = False
 

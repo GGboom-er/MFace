@@ -1,14 +1,18 @@
 # coding:utf-8
 import re
 
-from .node import *
+from .nodes import *
 from .control import Control, Color
 from maya.api.OpenMaya import *
 from maya import cmds
 
 
 def filter_pres(names, pres):
-    names = [name for name in names if all([cmds.objExists(pre + name) for pre in pres])]
+    if not isinstance(names, list):
+        names = [] if names is None else [names]
+    if not isinstance(pres, list):
+        pres = [] if pres is None else [pres]
+    names = [name for name in names if name and all([cmds.objExists(pre+name) for pre in pres])]
     return sorted(set(names), key=names.index)
 
 
@@ -17,7 +21,6 @@ class Fmt(object):
     def __init__(self, **info):
         self.data = info
         self.data.setdefault("ud", "")
-        self.data.setdefault("merge_ud", False)
         self.data.setdefault("merge_ud", False)
         self.data.setdefault("m", "")
         if self.data.get("rml") == "M":
@@ -31,7 +34,7 @@ class Fmt(object):
     @staticmethod
     def restore_core_rml(fmt, name):
         # 将自定义的命名规范 转化成 默认命名规范{core}_{rml}
-        regx = "^" + fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)") + "$"
+        regx = "^"+fmt.format(core="(?P<core>.+)", rml="(?P<rml>R|M|L)")+"$"
         match = re.match(regx, name)
         if not match:
             return
@@ -41,7 +44,7 @@ class Fmt(object):
     def selected_restore_names(fmt, typ):
         filter_name = fmt.format(core="*", rml="*")
         names = cmds.ls(filter_name, sl=1, type=typ)
-        return [Fmt.restore_core_rml(fmt, name) for name in names]
+        return [name for name in [Fmt.restore_core_rml(fmt, name) for name in names] if name is not None]
 
     def get_name(self, fmt, **kwargs):
         # 临时更新data属性，生成
@@ -90,7 +93,7 @@ class Fmt(object):
         return m_rml
 
     def update_ud(self):
-        uds = [self.data["ud"]] * self.data["count"]
+        uds = [self.data["ud"]]*self.data["count"]
         if not uds:
             return uds
         if self.data["merge_ud"]:
@@ -126,7 +129,13 @@ class Fmt(object):
         elif name.endswith("_L"):
             return name[:-1] + "R"
         else:
-            return name
+            parts = name.split('_')
+            for i, p in enumerate(parts):
+                if p == 'L':
+                    parts[i] = 'R'
+                elif p == 'R':
+                    parts[i] = 'L'
+            return '_'.join(parts)
 
 
 class Face(Hierarchy):
@@ -136,19 +145,39 @@ class Face(Hierarchy):
         Hierarchy.__init__(self, "MFace@s")
 
     def get(self):
-        self.build("Fit", "Joint", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
+        if cmds.objExists("Head_M"):
+            self.build("Fit", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
+        else:
+            self.build("Fit", "Joint", "Additive", "Cluster", "Rig", "Ctrl", "Constraint")
         self.add_radius()
         self.add_ctrl_fmt()
         self.add_joint_fmt()
+
+        joints_grp = "MFaceJoints"
+        head_grp = "Head_M"
+        if cmds.objExists(joints_grp) and cmds.objExists(head_grp):
+            parents = cmds.listRelatives(joints_grp, p=1) or []
+            if head_grp not in parents:
+                try:
+                    cmds.parent(joints_grp, head_grp)
+                except Exception:
+                    pass
+
         return self
 
     def add_joint_fmt(self):
+        # Ensure 'Fit' node exists
+        if not self["Fit"]:
+             return
         if self["Fit"]["joint_fmt"]:
             return
         self["Fit"]["joint_fmt"].add(dt="string")
-        self["Fit"]["joint_fmt"].set("{core}Jnt_{rml}", type="string")
+        self["Fit"]["joint_fmt"].set("{core}_{rml}", type="string")
 
     def add_ctrl_fmt(self):
+        # Ensure 'Fit' node exists
+        if not self["Fit"]:
+             return
         if self["Fit"]["ctrl_fmt"]:
             return
         self["Fit"]["ctrl_fmt"].add(dt="string")
@@ -165,11 +194,11 @@ class Face(Hierarchy):
 
     def ctrl_fmt(self):
         self.add_ctrl_fmt()
-        return self["Fit"]["ctrl_fmt"].get()
+        return self["Fit"]["ctrl_fmt"].get() or "FCtrl{core}_{rml}"
 
     def joint_fmt(self):
         self.add_joint_fmt()
-        return self["Fit"]["joint_fmt"].get()
+        return self["Fit"]["joint_fmt"].get() or "{core}_{rml}"
 
 
 class Ctrl(Hierarchy):
@@ -182,10 +211,8 @@ class Ctrl(Hierarchy):
         self.mirror, self.flip = self["Mirror"], self["Flip"]
         self.ctrl = Node(Fmt.fmt_name(Face().ctrl_fmt(), name))
         self.nodes["FCtrl"] = self.ctrl
+        self.anim = self["Anim"]                              # 动画组节点：纯 transform，无 Shape
         self.output = self["NoFlip"] if self.is_flip() else self.ctrl
-
-    def get_ctrl_name(self):
-        pass
 
     def __bool__(self):
         return all([self.ctrl, self.follow])
@@ -207,9 +234,9 @@ class Ctrl(Hierarchy):
 
     def get(self):
         Face.build_callable(self)
-        self.build(("Follow", "FCtrl"))
+        self.build(("Follow", "Anim", "FCtrl"))
         if self.is_follow():
-            self.build(("Follow", "Inverse", "FCtrl"))
+            self.build(("Follow", "Inverse", "Anim", "FCtrl"))
         parent = "Inverse" if self.is_follow() else "Follow"
         if self.is_flip():
             self.build((parent, "NoFlip"))
@@ -221,10 +248,10 @@ class Ctrl(Hierarchy):
         elif self.follow_translate:
             exp.mul3(self.output["t"], [-1, -1, -1]).connect(self.inverse["t"])
         if self.is_flip():
-            names = (parent, "Mirror", "Flip", "FCtrl") if self.is_left() else (parent, "Flip", "FCtrl")
+            names = (parent, "Mirror", "Flip", "Anim", "FCtrl") if self.is_left() else (parent, "Flip", "Anim", "FCtrl")
             self.build(names)
             sm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-            matrices = [sm, self.ctrl["matrix"], self.flip["matrix"]]
+            matrices = [sm, self.ctrl["matrix"], self.anim["matrix"], self.flip["matrix"]]
             if self.is_dn():
                 sm[5] = -1
                 self.flip["sy"] = -1
@@ -238,47 +265,77 @@ class Ctrl(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
-        self.follow.xform(m=matrix)
+        self.follow.xform(ws=1, m=matrix)
         self.follow["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
         if self.is_left():
-            self.mirror.xform(ws=0, m=list(MMatrix(matrix).inverse()))
+            local = _strip_scale_from_matrix(self.follow.xform(q=1, m=1))
+            self.mirror.xform(ws=0, m=list(MMatrix(local).inverse()))
             self.mirror["sx"] = -1
-            matrix = matrix[:]
+            local = local[:]
             for i in range(4):
-                matrix[i * 4 + 0] *= -1
-                matrix[0 * 4 + i] *= -1
-            self.flip.xform(ws=0, m=matrix)
+                local[i * 4 + 0] *= -1
+                local[0 * 4 + i] *= -1
+            self.flip.xform(ws=0, m=local)
         if self.is_dn():
             self.flip["sy"] = -1
         return self
 
     def edit_matrix(self, matrix):
+        joint = Joint(self.name)
+        self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        old_world = list(cmds.getAttr(joint.joint.name + ".worldMatrix[0]")) if joint.joint else None
         self.set_matrix(matrix)
         self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
-        joint = Joint(self.name)
-        if joint:
-            joint.set_matrix(matrix)
+        if joint.joint:
+            joint.set_matrix(matrix, old_world=old_world)
         cluster = Cluster(self.name)
-        if cluster:
+        if cluster.cluster:
             cluster.set_matrix(matrix)
         self.reset_constraint_offset()
 
     def reset_constraint_offset(self):
-        constraints = self.follow["tx"].connects(s=1, d=0)
-        if not constraints:
-            return
-        con = constraints[0]
-        if cmds.objectType(con) == "pointConstraint":
-            cmds.dgdirty(con)
-            now_point = self.follow.xform(q=1, t=1, ws=1)
-            bind_point = self.follow["bindPreMatrix"].get()[12:15]
-            old_offset = cmds.getAttr(con + ".offset")[0]
-            new_offset = [o + b - n for n, b, o in zip(now_point, bind_point, old_offset)]
-            cmds.setAttr(con + ".offset", *new_offset)
+        # 1. Point Constraint
+        pt_cons = self.follow["tx"].connects(s=1, d=0)
+        if pt_cons:
+            con = pt_cons[0]
+            if cmds.objectType(con) == "pointConstraint":
+                bind_point = self.follow["bindPreMatrix"].get()[12:15]
+                # 清零 offset 获取约束目标的纯世界坐标
+                cmds.setAttr(con + ".offset", 0, 0, 0)
+                cmds.dgdirty(con)
+                target_ws = self.follow.xform(q=1, t=1, ws=1)
+                # 世界空间增量
+                dx = bind_point[0] - target_ws[0]
+                dy = bind_point[1] - target_ws[1]
+                dz = bind_point[2] - target_ws[2]
+                # 通过父级逆矩阵精确转换到约束偏移的局部空间
+                parent = cmds.listRelatives(self.follow.name, parent=True)
+                if parent:
+                    m = cmds.getAttr(parent[0] + ".worldInverseMatrix[0]")
+                    new_offset = [
+                        m[0]*dx + m[4]*dy + m[8]*dz,
+                        m[1]*dx + m[5]*dy + m[9]*dz,
+                        m[2]*dx + m[6]*dy + m[10]*dz,
+                    ]
+                else:
+                    new_offset = [dx, dy, dz]
+                cmds.setAttr(con + ".offset", *new_offset)
+
+        # 2. Orient Constraint
+        or_cons = self.follow["rx"].connects(s=1, d=0)
+        if or_cons:
+            con = or_cons[0]
+            if cmds.objectType(con) == "orientConstraint":
+                bind_m = self.follow["bindPreMatrix"].get()
+                # 因为上面点约束查询 xform 可能触发了 DG 更新，把旋转拉扯回了错误状态
+                # 所以我们必须先把它掰回正确的预设世界矩阵
+                self.follow.xform(ws=1, m=bind_m)
+                targets = cmds.orientConstraint(con, q=1, tl=1)
+                if targets:
+                    cmds.orientConstraint(targets, self.follow.name, e=1, mo=1)
 
     def add_pin(self):
-        print(self.name, '*' * 50)
-        pin = Node(name="Pin" + self.name, parent="MFacePins").get()
+        pin = Node(name="Pin"+self.name, parent="MFacePins").get()
         pin.xform(ws=1, m=self.follow["bindPreMatrix"].get())
         Cons.point(pin, self.follow, mo=0)
         pin["inheritsTransform"] = False
@@ -288,20 +345,21 @@ class Ctrl(Hierarchy):
     def add_pins(cls):
         Face().build("Pin")
         unfollows = set()
-        for rig in cmds.ls("MFaceRigs|RigFk*") or []:
-            for attr in cmds.listAttr(rig, ud=1):
-                if not cmds.getAttr(rig + "." + attr, type=1) == "bool":
-                    continue
-                if not attr.startswith("Ctrl"):
-                    continue
-                unfollows.add(attr[len("Ctrl"):])
+
+        # for rig in cmds.ls("MFaceRigs|RigFk*") or []:
+        #     for attr in cmds.listAttr(rig, ud=1):
+        #         if not cmds.getAttr(rig+"."+attr, type=1) == "bool":
+        #             continue
+        #         if not attr.startswith("Ctrl"):
+        #             continue
+        #         unfollows.add(attr[len("Ctrl"):])
 
         def is_follow(_ctrl):
             if _ctrl.name in unfollows:
                 return False
-            if _ctrl.name.startswith('Tongue') or _ctrl.name.startswith('Tooth'):
-                return False
             if not _ctrl["Inverse"]:
+                return False
+            if _ctrl.get_typ() in ["fk", "eye_fk"]:
                 return False
             return True
 
@@ -311,41 +369,49 @@ class Ctrl(Hierarchy):
     def edit_selected_matrix(cls):
         for ctrl in cls.selected():
             joint = Joint(ctrl.name)
-            cluster = Cluster(ctrl.name)
-            if joint:
+            if joint.joint:
                 matrix = joint.joint.xform(q=1, ws=1, m=1)
-            elif cluster:
-                matrix = cluster.cluster.xform(q=1, ws=1, m=1)
-            elif ctrl:
-                matrix = list(MMatrix(ctrl.output.xform(q=1, ws=1, m=0)) * MMatrix(ctrl.follow["bindPreMatrix"]))
+            elif ctrl.output:
+                matrix = ctrl.output.xform(q=1, ws=1, m=1)
             else:
                 continue
             ctrl.edit_matrix(matrix)
 
     @classmethod
     def mirror_selected_matrix(cls):
+        """将选中控制器的位置、朝向和 shape 一次性镜像到对侧控制器。
+        执行顺序：先镜像矩阵（重建 Mirror sx=-1 层级），再直接拷贝 shape。
+        """
         for ctrl in cls.selected():
             mirror_ctrl = Ctrl(Fmt.mirror_name(ctrl.name))
             if mirror_ctrl.name == ctrl.name:
                 continue
+            # 1. 镜像位置和朝向
             matrix = ctrl.output.xform(q=1, ws=1, m=1)
             for i in range(4):
                 matrix[i * 4 + 0] *= -1
                 matrix[0 * 4 + i] *= -1
             mirror_ctrl.edit_matrix(matrix)
+            # 2. 拷贝 shape（Mirror sx=-1 已处理视觉翻转，直接拷贝即可）
+            src = Control(t=ctrl.ctrl.name)
+            shape_data = src.get_shape()
+            if not shape_data:
+                continue
+            dst = Control(t=mirror_ctrl.ctrl.name)
+            Control(t=mirror_ctrl.ctrl.name, s=shape_data, c=dst.get_color(), ou=dst.get_outputs())
 
     @staticmethod
     def delete_selected():
         names = list(set(sum([[sel.name for sel in cls.selected()] for cls in [Ctrl, Cluster, Joint]], [])))
         for name in names:
             joint = Joint(name)
-            if joint:
+            if joint.joint:
                 joint.delete()
             cluster = Cluster(name)
-            if cluster:
+            if cluster.cluster:
                 cluster.delete()
             ctrl = Ctrl(name)
-            if ctrl:
+            if ctrl.ctrl:
                 ctrl.delete()
 
     def reset_matrix(self):
@@ -354,17 +420,22 @@ class Ctrl(Hierarchy):
 
     @classmethod
     def all(cls):
-        return [cls(name) for name in Hierarchy.ls(Face()["Ctrl"].name, ["Follow"])]
+        return [ctrl for ctrl in (cls(name) for name in Hierarchy.ls(Face()["Ctrl"].name, ["Follow"])) if ctrl]
 
     @classmethod
     def selected(cls):
         names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         return [cls(name) for name in filter_pres(names, ["Follow"])]
 
+    def reset(self):
+        if self.ctrl:
+            self.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        return self
+
     @classmethod
     def reset_all(cls):
         for ctrl in cls.all():
-            ctrl.ctrl.xform(ws=0, m=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+            ctrl.reset()
 
     def control(self, **kwargs):
         radius = Face().radius()
@@ -379,12 +450,9 @@ class Ctrl(Hierarchy):
         return self
 
     def follow_joint(self, src):
-        try:
-            Cons.point(src, self.follow)
-            if self.follow_rotate:
-                Cons.orient(src, self.follow)
-        except:
-            pass
+        Cons.point(src, self.follow)
+        if self.follow_rotate:
+            Cons.orient(src, self.follow)
         return self
 
     def follow_joints(self, joints, weights):
@@ -395,6 +463,19 @@ class Ctrl(Hierarchy):
         wal = Cons.point(names, self.follow)
         for w, attr in zip(weights, wal):
             attr.set(w)
+
+    def get_typ(self):
+        self.follow["typ"].add(dt="string")
+        return self.follow["typ"].get()
+
+    def set_typ(self, typ):
+        self.follow["typ"].add(dt="string")
+        return self.follow["typ"].set(typ)
+
+    @staticmethod
+    def set_all_typ(ctrls, typ):
+        for ctrl in ctrls:
+            ctrl.set_typ(typ)
 
     @staticmethod
     def add_ctrl(name, matrix, follow_translate, follow_rotate, **kwargs):
@@ -452,14 +533,28 @@ class Ctrl(Hierarchy):
             return ctrl
 
 
+def _strip_scale_from_matrix(m):
+    """从 4x4 list 矩阵中剥离缩放，返回纯旋转+位移的干净矩阵。
+    归一化前三列（旋转列向量），避免父级缩放污染 BlendWeighted 通道值。"""
+    m = list(m)
+    for col in range(3):  # x, y, z 旋转列
+        off = col * 4
+        length = (m[off] ** 2 + m[off + 1] ** 2 + m[off + 2] ** 2) ** 0.5
+        if length > 1e-8:
+            m[off] /= length
+            m[off + 1] /= length
+            m[off + 2] /= length
+    return m
+
+
 class Joint(Hierarchy):
 
     def __init__(self, name):
         Hierarchy.__init__(self, name, Face()["Additive"])
-        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), Face()["Joint"].name, "joint").get()
+        joint_parent = "Head_M" if cmds.objExists("Head_M") else Face()["Joint"].name
+        self.joint = Node(Fmt.fmt_name(Face().joint_fmt(), name), joint_parent, "joint")
         self.additive, self.port = self["Additive"], self["Port"]
-        self.bws = [BlendWeighted(pxy + xyz + self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in
-                    "XYZ"]
+        self.bws = [BlendWeighted(pxy+xyz+self.name) for pxy in ["Point", "YAxis", "ZAxis", "Scale"] for xyz in "XYZ"]
 
     def get(self):
         Face.build_callable(self)
@@ -468,7 +563,6 @@ class Joint(Hierarchy):
         for bw, v in zip(self.bws, values):
             bw.get()
             bw.get().set_default(v)
-        self.bws[0].output.cnt(self.additive["translateX"])
         self.bws[0].output.cnt(self.additive["translateX"])
         self.bws[1].output.cnt(self.additive["translateY"])
         self.bws[2].output.cnt(self.additive["translateZ"])
@@ -483,38 +577,74 @@ class Joint(Hierarchy):
         self.bws[11].output.cnt(self.joint["scaleZ"])
         return self
 
-    def set_matrix(self, matrix):
-        for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
-            self.bws[i].set_default(matrix[j])
+    def set_matrix(self, matrix, local_matrix=None, reskin=True, old_world=None):
+        if local_matrix is None:
+            root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+        # 剥离缩放：归一化旋转列向量，避免父级缩放污染 BlendWeighted 通道值
+        clean_local = _strip_scale_from_matrix(local_matrix)
+        if self.bws[0]:
+            for i, j in enumerate([12, 13, 14, 4, 5, 6, 8, 9, 10]):
+                input_sum = cmds.getAttr(self.bws[i].name + ".output") - self.bws[i].get_default()
+                self.bws[i].set_default(clean_local[j] - input_sum)
         self.additive["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-        self.re_skin()
+        if reskin:
+            self.re_skin(old_world)
         return self
 
-    def re_skin(self):
+
+    def re_skin(self, old_world=None):
         for attr in self.joint["worldMatrix[0]"].connects(s=0, d=1, p=1):
             attr = Attr.from_name(attr)
             if cmds.objectType(attr.node) != "skinCluster":
                 continue
-            inverse = list(MMatrix(self.additive["bindPreMatrix"].get()).inverse())
-            attr.get_node()["bindPreMatrix"][attr.index()].set(inverse)
+            if old_world is not None:
+                old_bpm = MMatrix(attr.get_node()["bindPreMatrix"][attr.index()].get())
+                actual_world = MMatrix(cmds.getAttr(self.joint.name + ".worldMatrix[0]"))
+                new_bpm = list(old_bpm * MMatrix(old_world) * actual_world.inverse())
+                attr.get_node()["bindPreMatrix"][attr.index()].set(new_bpm)
+            else:
+                existing_bpm = attr.get_node()["bindPreMatrix"][attr.index()].get()
+                if existing_bpm is None:
+                    new_bpm = list(MMatrix(self.additive["bindPreMatrix"].get()).inverse())
+                    attr.get_node()["bindPreMatrix"][attr.index()].set(new_bpm)
 
-    def add_pose(self, weight, matrix):
-        x, y, z, p = [matrix[i: i + 3] for i in range(0, 16, 4)]
-        s = [sum([v ** 2 for v in xyz]) ** 2 for xyz in [x, y, z]]
-        values = [matrix[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
-        for bw, value in zip(self.bws, values):
-            bw.add_pose(weight, value)
+    def add_pose(self, weight, matrix, rest_matrix=None):
+        if not self.bws[0]:
+            return
+        root_ws_inv = list(MMatrix(cmds.xform(self.root.name, q=1, ws=1, m=1)).inverse())
+        local_matrix = list(MMatrix(matrix) * MMatrix(root_ws_inv))
+        x, y, z, p = [local_matrix[i: i + 3] for i in range(0, 16, 4)]
+        s = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [x, y, z]]
+        # 剥离缩放后提取旋转值，与 set_matrix 保持一致
+        clean_local = _strip_scale_from_matrix(local_matrix)
+        values = [clean_local[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + s
+        
+        rest_values = [None] * len(values)
+        if rest_matrix:
+            local_rest = list(MMatrix(rest_matrix) * MMatrix(root_ws_inv))
+            xr, yr, zr, pr = [local_rest[i: i + 3] for i in range(0, 16, 4)]
+            sr = [sum([v ** 2 for v in xyz]) ** 0.5 for xyz in [xr, yr, zr]]
+            clean_rest = _strip_scale_from_matrix(local_rest)
+            rest_values = [clean_rest[i] for i in [12, 13, 14, 4, 5, 6, 8, 9, 10]] + sr
+            
+        for bw, value, rest_val in zip(self.bws, values, rest_values):
+            bw.add_pose(weight, value, rest_val)
 
     def get_additive(self, name):
+        if not self.bws[0]:
+            return [0] * 12
         return [bw.get_additive(name) for bw in self.bws]
 
     def set_additive(self, weight, values):
+        if not self.bws[0]:
+            return
         for bw, value in zip(self.bws, values):
             bw.set_additive(weight, value)
 
     def get_weights(self):
         weights = []
-        pre = "_W_" + self.name
+        pre = "_W_"+self.name
         for attr in Cluster.weight_names():
             if not attr.endswith(pre):
                 continue
@@ -527,12 +657,13 @@ class Joint(Hierarchy):
         delete_nodes([bw.name for bw in self.bws])
         matrix = self.additive["bindPreMatrix"].get()
         Hierarchy.delete(self)
-        if self.joint and matrix:
-            self.joint.xform(ws=1, m=matrix)
+        if self.joint:
+            if matrix is not None:
+                self.joint.xform(ws=1, m=matrix)
             self.joint["v"] = 0
             cons = cmds.listConnections(self.joint.name, s=0, d=1) or []
-            cons = cmds.ls(cons, typ=["orientConstraint", "parentConstraint"]) or []
-            cons = [con for con in cons if str.endswith("point", "orient")]
+            cons = cmds.ls(cons, typ=["orientConstraint", "parentConstraint", "pointConstraint"]) or []
+            cons = [con for con in cons if con.endswith("point") or con.endswith("orient")]
             delete_nodes(cons)
 
     @staticmethod
@@ -541,13 +672,13 @@ class Joint(Hierarchy):
 
     @classmethod
     def all(cls):
-        return [cls(name) for name in Hierarchy.ls(Face()["Additive"].name, ["Additive", "Port"])]
+        return [joint for joint in (cls(name) for name in Hierarchy.ls(Face()["Additive"].name, ["Additive", "Port"])) if joint.joint]
 
     @classmethod
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         joint_names = Fmt.selected_restore_names(Face().joint_fmt(), "joint")
-        names = filter_pres(ctrl_names + joint_names, ["Additive", "Port"])
+        names = filter_pres(ctrl_names+joint_names, ["Additive", "Port"])
         return [cls(name) for name in names]
 
     @classmethod
@@ -584,24 +715,75 @@ class Joint(Hierarchy):
         else:
             cls.set_joints_additive(dst, cls.flip_additive(cls.get_joints_additive(src)))
 
-    @staticmethod
-    def flip_additive(data):
+    @classmethod
+    def flip_additive(cls, data):
+        from maya.api import OpenMaya as om
         mirror_data = {}
         for name, value in data.items():
-            mirror_value = list(value)
-            for i in [0, 3, 6]:
-                mirror_value[i] *= -1
-            mirror_data[Fmt.mirror_name(name)] = mirror_value
+            if name.endswith("_M"):
+                j_node = cls(name)
+                default_vals = [b.default.get() for b in j_node.bws]
+                target_vals = [d + a for d, a in zip(default_vals, value)]
+                t_base = om.MVector(default_vals[0:3])
+                y_base = om.MVector(default_vals[3:6])
+                z_base = om.MVector(default_vals[6:9])
+                t_pose = om.MVector(target_vals[0:3])
+                y_pose = om.MVector(target_vals[3:6])
+                z_pose = om.MVector(target_vals[6:9])
+                def get_rot_mat(y_vec, z_vec):
+                    y_n = y_vec.normal()
+                    z_n = z_vec.normal()
+                    x_n = y_n ^ z_n
+                    return om.MMatrix([
+                        x_n.x, x_n.y, x_n.z, 0,
+                        y_n.x, y_n.y, y_n.z, 0,
+                        z_n.x, z_n.y, z_n.z, 0,
+                        0.0, 0.0, 0.0, 1.0
+                    ])
+                r_base = get_rot_mat(y_base, z_base)
+                r_pose = get_rot_mat(y_pose, z_pose)
+                
+                # 平移：相对世界 YZ 平面的位移镜像
+                delta_t = t_pose - t_base
+                t_sym = t_base + om.MVector(-delta_t.x, delta_t.y, delta_t.z)
+                
+                # 旋转：提取世界空间中的旋转增量
+                delta_r_world = r_base.inverse() * r_pose
+                
+                # 对世界变化量进行镜面反射
+                S_x = om.MMatrix([-1,0,0,0,  0,1,0,0,  0,0,1,0,  0,0,0,1])
+                delta_r_world_sym = S_x * delta_r_world * S_x
+                
+                # 基于同样的基础姿势，应用镜像后的变化量，保证自身朝向基础不被错误倒转
+                r_sym = r_base * delta_r_world_sym
+                
+                m_sym_list = list(r_sym)
+                sy = target_vals[10]
+                sz = target_vals[11]
+                sym_vals = [
+                    t_sym.x, t_sym.y, t_sym.z,
+                    m_sym_list[4]*sy, m_sym_list[5]*sy, m_sym_list[6]*sy,
+                    m_sym_list[8]*sz, m_sym_list[9]*sz, m_sym_list[10]*sz,
+                    target_vals[9], target_vals[10], target_vals[11]
+                ]
+                
+                mirror_value = [s - d for s, d in zip(sym_vals, default_vals)]
+                mirror_data[name] = mirror_value
+            else:
+                mirror_value = list(value)
+                for i in [0, 3, 6]:
+                    mirror_value[i] *= -1
+                mirror_data[Fmt.mirror_name(name)] = mirror_value
         return mirror_data
 
-    @staticmethod
-    def mirror_additive(data):
+    @classmethod
+    def mirror_additive(cls, data):
         mirror_data = dict(data)
         for name, value in data.items():
             if not name.endswith("_L"):
                 continue
             mirror_value = list(value)
-            for i in range(0, 3, 6):
+            for i in [0, 3, 6]:  # 位移X + Y轴X + Z轴X：YZ平面镜像(右前方右转→左前方左转)
                 mirror_value[i] *= -1
             mirror_data[Fmt.mirror_name(name)] = mirror_value
         return mirror_data
@@ -619,7 +801,7 @@ class Weight(Hierarchy):
     def get(self):
         exp = self.exp()
         self.weight.add(min=0, max=1, at="double", k=1)
-        defaults = [[self.joint.bws[i + j].default for j in range(3)] for i in range(0, 9, 3)]
+        defaults = [[self.joint.bws[i+j].default for j in range(3)] for i in range(0, 9, 3)]
         pxy = [exp.p_mul_mat(defaults[0], self.cluster.transform),
                exp.v_mul_mat(defaults[1], self.cluster.transform),
                exp.v_mul_mat(defaults[2], self.cluster.transform)]
@@ -630,10 +812,15 @@ class Weight(Hierarchy):
 
     def set(self, weight):
         if weight < 0.00001:
+            if not self.weight:
+                return
             self.delete()
         else:
-            self.get()
-            self.weight.set(weight)
+            if self.weight:
+                self.weight.set(weight)
+            else:
+                self.get()
+                self.weight.set(weight)
 
     def value(self):
         if self.weight:
@@ -660,6 +847,8 @@ class Cluster(Hierarchy):
 
     @staticmethod
     def weight_names():
+        if not cmds.objExists("MFaceClusters"):
+            return []
         return cmds.listAttr("MFaceClusters", ud=1) or []
 
     def get(self):
@@ -672,12 +861,23 @@ class Cluster(Hierarchy):
         return self
 
     def set_matrix(self, matrix):
-        self.pre["bindPreMatrix"].add(dt="matrix").set(matrix, typ="matrix")
-        self.pre.xform(m=matrix, ws=0)
+        # bindPreMatrix 通过 decomposeMatrix 间接驱动 Pre 的 local translate/rotate（A 类）
+        # 需存相对于 Pre 父级的局部矩阵，而非世界矩阵，否则缩放下通道值偏移
+        parent = cmds.listRelatives(self.pre.name, parent=True)
+        if parent:
+            parent_ws_inv = list(MMatrix(cmds.xform(parent[0], q=1, ws=1, m=1)).inverse())
+            local_matrix = list(MMatrix(matrix) * MMatrix(parent_ws_inv))
+        else:
+            local_matrix = matrix
+        # 剥离缩放：避免父级缩放泄露到 decomposeMatrix 驱动的通道值
+        local_matrix = _strip_scale_from_matrix(local_matrix)
+        self.pre["bindPreMatrix"].add(dt="matrix").set(local_matrix, typ="matrix")
+        # 同时用 xform(ws=1) 设 Pre 位置（B 类无 DeMat 驱动时直接生效）
+        self.pre.xform(ws=1, m=matrix)
         return self
 
     def parent_to(self, other):
-        exp = Exp(self.name + "ParentLink")
+        exp = Exp(self.name+"ParentLink")
         t, r = exp.de_mat(exp.mul_mat(self.pre["bindPreMatrix"], other.transform))
         self.pre["t"] = t
         self.pre["r"] = r
@@ -691,7 +891,7 @@ class Cluster(Hierarchy):
 
     def get_weights(self):
         weights = []
-        pre = self.name + "_W_"
+        pre = self.name+"_W_"
         for attr in Cluster.weight_names():
             if not attr.startswith(pre):
                 continue
@@ -714,7 +914,7 @@ class Cluster(Hierarchy):
             joint.joint["weight"].connect(weight.weight)
 
     @staticmethod
-    def finsh_edit_weights():
+    def finish_edit_weights():
         for wt in Weight.all():
             attr = wt.weight.input()
             if not attr:
@@ -729,15 +929,35 @@ class Cluster(Hierarchy):
         for joint in Joint.all():
             joint.joint["weight"].delete()
 
+    @staticmethod
+    def cancel_edit_weights():
+        for wt in Weight.all():
+            attr = wt.weight.input()
+            if not attr:
+                continue
+            if attr.attr != "weight":
+                continue
+            if cmds.nodeType(attr.node) != "joint":
+                continue
+            orig_value = cmds.attributeQuery("weight", node=attr.node, listDefault=True)[0]
+            wt.weight.disconnect()
+            wt.weight.set(orig_value)
+        for joint in Joint.all():
+            if cmds.objExists(joint.joint.name + ".weight"):
+                joint.joint["weight"].delete()
+
     def get_weight_data(self):
         return {joint.name: self.weight(joint).value() for joint in Joint.all()}
 
     def set_weight_data(self, data):
         for name, value in data.items():
             joint = Joint(name)
-            if not joint:
+            if not joint.joint:
                 continue
-            self.weight(joint).set(value)
+            try:
+                self.weight(joint).set(value)
+            except Exception:
+                pass
 
     @staticmethod
     def flip_weight_data(data):
@@ -765,7 +985,7 @@ class Cluster(Hierarchy):
     def selected(cls):
         ctrl_names = Fmt.selected_restore_names(Face().ctrl_fmt(), "transform")
         cluster_names = [name[7:] for name in cmds.ls("Cluster*", sl=1, type="transform")]
-        names = filter_pres(cluster_names + ctrl_names, ["Pre"])
+        names = filter_pres(cluster_names+ctrl_names, ["Pre"])
         return [cls(name) for name in names]
 
     def cache_distances(self):
@@ -783,103 +1003,7 @@ class Cluster(Hierarchy):
         for name, row in data.items():
             cluster = cls(name)
             if cluster:
-                cluster.set_weight_data(row)
-
-
-def correct_tongue_joint_axis(root):
-    children = cmds.listRelatives(root, c=True, typ='transform')
-    if children:
-        cmds.parent(children, w=True)
-        cmds.delete(cmds.aimConstraint(children[0], root, offset=[0, 0, 0], aimVector=[1, 0, 0], upVector=[0, 1, 0],
-                                       worldUpType='scene', skip=['y', 'z']))
-        cmds.makeIdentity(root, r=True, a=True)
-        cmds.parent(children, root)
-        for child in children:
-            correct_tongue_joint_axis(child)
-    else:
-        par_node = cmds.listRelatives(root, p=True)[0]
-        cmds.delete(cmds.orientConstraint(par_node, root, o=[0, 0, 0]))
-
-
-def get_uv_parameter(mesh, obj):
-    u, v = 0, 0
-    meshes = cmds.listRelatives(mesh, s=True, ni=True, typ='mesh')
-    if meshes:
-        loc = cmds.spaceLocator()
-        loc_shape = cmds.listRelatives(loc, s=True)[0]
-        cmds.delete(cmds.pointConstraint(obj, loc, o=[0, 0, 0]))
-        node = cmds.createNode('closestPointOnMesh')
-        cmds.connectAttr(f'{meshes[0]}.worldMesh[0]', f'{node}.inMesh', f=True)
-        cmds.connectAttr(f'{loc_shape}.worldPosition[0]', f'{node}.inPosition', f=True)
-        u = cmds.getAttr(f'{node}.parameterU')
-        v = cmds.getAttr(f'{node}.parameterV')
-        cmds.delete(loc, node)
-    return u, v
-
-
-def check_uv_pin(mesh):
-    pin_node = f"{mesh}_UVPin"
-    if not cmds.objExists(pin_node):
-        uv_sets = cmds.polyUVSet(mesh, query=True, allUVSets=True)
-        if uv_sets:
-            meshes = cmds.listRelatives(mesh, s=True, ni=True, typ='mesh')
-            all_meshes = cmds.listRelatives(mesh, s=True, ni=False, typ='mesh')
-            pre_meshes = [x for x in all_meshes if x not in meshes]
-            if pre_meshes:
-                pre_mesh = pre_meshes[0]
-            else:
-                new_mesh = cmds.duplicate(mesh)
-                pre_mesh = cmds.listRelatives(new_mesh, s=True, ni=True, typ='mesh')[0]
-                cmds.parent(pre_mesh, mesh, s=True, r=True)
-                cmds.setAttr(f'{pre_mesh}.intermediateObject', 1)
-                pre_mesh = cmds.rename(pre_mesh, f'{meshes[0]}Orig')
-                cmds.delete(new_mesh)
-            pin_node = cmds.createNode('uvPin', n=pin_node)
-            cmds.connectAttr(f'{meshes[0]}.worldMesh[0]', f'{pin_node}.deformedGeometry', f=True)
-            cmds.connectAttr(f'{pre_mesh}.outMesh', f'{pin_node}.originalGeometry', f=True)
-            cmds.setAttr(f'{pin_node}.normalAxis', 0)
-            cmds.setAttr(f'{pin_node}.tangentAxis', 1)
-            cmds.setAttr(f'{pin_node}.uvSetName', uv_sets[0], typ='string')
-            cmds.setAttr(f'{pin_node}.normalizedIsoParms', 1)
-    return pin_node
-
-
-def create_uv_pin(mesh, obj, loc=None):
-    loc = loc or obj
-    pin_node = check_uv_pin(mesh)
-    offset = [0, 0, 0]
-    # if obj!=loc:
-    #     base_pos = cmds.xform(loc, q=True, ws=True, t=True)
-    #     target_pos = cmds.xform(obj, q=True, ws=True, t=True)
-    #     offset = [y - x for x, y in zip(target_pos, base_pos)]
-    if pin_node:
-        u, v = get_uv_parameter(mesh, loc)
-
-        pre_cons = cmds.listConnections(f'{obj}.offsetParentMatrix', s=True, d=False, type='uvPin', p=True)
-        judge = False
-        index = 0
-        if pre_cons:
-            if pre_cons[0].split('.')[0] == pin_node:
-                index = int(pre_cons[0].split('[')[-1].split(']')[0])
-                judge = True
-        if not judge:
-            values = cmds.ls(f'{pin_node}.coordinate[*]')
-            if values:
-                index = int(values[-1].split('[')[-1].split(']')[0]) + 1
-        cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateU', u)
-        cmds.setAttr(f'{pin_node}.coordinate[{index}].coordinateV', v)
-        if not judge:
-            cmds.connectAttr(f'{pin_node}.outputMatrix[{index}]', f'{obj}.offsetParentMatrix', f=True)
-        cmds.setAttr(f'{obj}.t', *offset, typ='double3')
-        cmds.setAttr(f'{obj}.r', 0, 0, 0, typ='double3')
-    return pin_node
-
-
-def create_uv_pins(mesh, pins):
-    pin_nodes = []
-    for pin in pins:
-        if pin not in ['PinEye_L', 'PinEye_R']:
-            pin_nodes.append(create_uv_pin(mesh, pin))
-        else:
-            cmds.setAttr(f'{pin}.inheritsTransform', True)
-    return pin_nodes
+                try:
+                    cluster.set_weight_data(row)
+                except Exception:
+                    pass

@@ -39,26 +39,28 @@ class FitCreateTool(QDialog):
                     q_add(
                         QHBoxLayout(),
                         q_button(u"冻结变换", tools.ctrl_edit_selected_matrix),
-                        q_button(u"镜像位置", tools.ctrl_mirror_selected_matrix),
+                        q_button(u"镜像", tools.ctrl_mirror_selected_matrix),
+                    ),
+                    q_add(
+                        QHBoxLayout(),
+                        q_button(u"匹配旋转", tools.ctrl_match_selected_rotation),
+                        q_button(u"清理废弃权重", tools.clear_all_bw_orphans),
                     ),
                     q_add(
                         QHBoxLayout(),
                         q_button(u"跟随模型", tools.ctrl_follow_to_selected_polygon),
                         q_button(u"删除选择", tools.ctrl_delete_selected),
                     ),
-                    q_button(u"控制器 --> 模型点", tools.ctrl_follow_to_selected_point),
+                    q_add(
+                        QHBoxLayout(),
+                        q_button(u"深度刷新缓存", tools.hard_refresh_blend_weighted),
+                    ),
                 ),
                 q_box(
                     u"预设",
                     QVBoxLayout(),
                     q_button(u"创建预设按钮", tools.update_button_objects),
                     q_button(u"保存预设", self.savePreset.emit),
-                ),
-                q_box(
-                    u"整理骨骼层级",
-                    QHBoxLayout(),
-                    q_button(u"整理层级", tools.reorganize_joint_hierarchy),
-                    q_button(u"还原层级", tools.restore_joint_hierarchy),
                 ),
             )
         )
@@ -95,10 +97,13 @@ class FitCreateTool(QDialog):
         pre = config["pre"]
         names = [pre+name for name in config["names"]]
         comp = QCompleter(names)
-        comp.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
-        self.name.setCompleter(comp)
-        self.name.setValidator(QRegularExpressionValidator(QRegularExpression("^{pre}.+$".format(pre=pre))))
+        if hasattr(QCompleter, 'UnfilteredPopupCompletion'):
+             comp.setCompletionMode(QCompleter.UnfilteredPopupCompletion)
+        else:
+             comp.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
 
+        self.name.setCompleter(comp)
+        self.name.setValidator(QRegExpValidator(QRegExp("^{pre}.+$".format(pre=pre))))
         self.name.setPlaceholderText(pre)
         self.name.setText(names[0])
         if old_pre and old_name.startswith(old_pre):
@@ -119,5 +124,6 @@ window = None
 
 def show():
     global window
-    window = FitCreateTool()
+    if window is None:
+        window = FitCreateTool()
     window.showNormal()

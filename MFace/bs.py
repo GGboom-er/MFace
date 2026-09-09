@@ -5,37 +5,8 @@ import os
 from maya import cmds
 from maya.api.OpenMaya import *
 from .api_lib import bs_api
-
-
-class Shape(object):
-    mesh = "mesh"
-    nurbsSurface = "nurbsSurface"
-    nurbsCurve = "nurbsCurve"
-
-
-def is_shape(polygon_name, typ="mesh"):
-    # 判断物体是否存在
-    if not cmds.objExists(polygon_name):
-        return False
-    # 判断类型是否为transform
-    if cmds.objectType(polygon_name) != "transform":
-        return False
-    # 判断是否有形节点
-    shapes = cmds.listRelatives(polygon_name, s=1, f=1)
-    if not shapes:
-        return False
-    # 判断形节点类型是否时typ
-    if cmds.objectType(shapes[0]) != typ:
-        return False
-    return True
-
-
-def find_bs(polygon):
-    # 查找 模型 blend shape
-    shapes = set(cmds.listRelatives(polygon, s=1, f=1))
-    for bs in cmds.ls(cmds.listHistory(polygon), type="blendShape"):
-        if cmds.ls(cmds.blendShape(bs, q=1, g=1), l=1)[0] in shapes:
-            return bs
+from .logger import logger, MSG
+from .shared import Shape, is_shape, find_bs
 
 
 def rebuild_target(bs_name, target_name):
@@ -68,11 +39,10 @@ def get_orig(polygon):
 
 
 def get_index(node, alias_name):
-    print (node, alias_name)
     if node is None:
         return
     parent_attr = cmds.attributeQuery(alias_name, node=node, ln=1)
-    parent_name = "{node}{parent_attr}".format(**locals())
+    parent_name = "{node}.{parent_attr}".format(**locals()).replace("..", ".")
     elem_names = cmds.listAttr(parent_name, m=1)
     elem_indexes = cmds.getAttr(parent_name, mi=1)
     if alias_name in elem_names:
@@ -91,7 +61,8 @@ def check_bs(fun):
 
 @check_bs
 def get_bs_attr(bs, target):
-    return bs + "." + target
+    attr = bs + "." + target
+    return attr.replace("..", ".")
 
 
 def check_target(fun):
@@ -233,12 +204,19 @@ def delete_connect_targets(attr):
 
 
 class LEditTargetJob(object):
+    _BACKUP = {}
 
     def __init__(self, src, dst, target):
         self.del_job()
         self.bs = get_bs(dst)
         self.index = get_index(self.bs, target)
         self.src = src
+        bs_api.cache_target_points(self.bs, [self.index])
+        
+        self.__class__._BACKUP[self.src] = {
+            "bs": self.bs,
+            "index": self.index
+        }
         bs_api.cache_target(self.bs, self.index, dst, get_orig(dst))
         cmds.scriptJob(attributeChange=[cmds.listRelatives(src, s=1)[0] + ".outMesh", self])
 
@@ -254,7 +232,7 @@ class LEditTargetJob(object):
     @classmethod
     def del_job(cls):
         for job in cmds.scriptJob(listJobs=True):
-            if repr(cls.__name__) in job:
+            if cls.__name__ in job:
                 cmds.scriptJob(kill=int(job.split(":")[0]))
 
 
@@ -263,23 +241,61 @@ def finish_duplicate_edit(set_pose_by_target):
     root = "|lush_duplicate_edit"
     if not cmds.objExists(root):
         return
-    for target_group in cmds.listRelatives(root):
+    for target_group in cmds.listRelatives(root) or []:
         if target_group[:5] != "edit_":
             continue
         target = target_group[5:]
         set_pose_by_target(target)
-        for src in cmds.listRelatives(target_group):
+        for src in cmds.listRelatives(target_group, fullPath=True) or []:
             if not is_shape(src):
                 continue
-            dst = src[len(target)+1:]
-            if not is_shape(dst):
+            short_src = src.split("|")[-1]
+            if not short_src.startswith(target + "_"):
                 continue
-            uu = cmds.ls(cmds.listConnections(dst+".v", s=1, d=0), type=["animCurveUU", "blendWeighted"])
+            dst = short_src[len(target)+1:]
+            if not cmds.objExists(dst):
+                continue
+            uu = cmds.listConnections(dst+".v", s=1, d=0)
             if uu:
-                cmds.delete(uu)
+                to_delete = [n for n in uu if cmds.objectType(n).startswith("animCurve") or cmds.objectType(n) == "blendWeighted"]
+                if to_delete:
+                    cmds.delete(to_delete)
             cmds.setAttr(dst+".v", True)
             edit_target(src, dst, target)
     cmds.delete(root)
+    LEditTargetJob._BACKUP.clear()
+
+
+def cancel_duplicate_edit(set_pose_by_target):
+    LEditTargetJob.del_job()
+    root = "|lush_duplicate_edit"
+    if not cmds.objExists(root):
+        return
+    for target_group in cmds.listRelatives(root) or []:
+        if target_group[:5] != "edit_":
+            continue
+        target = target_group[5:]
+        set_pose_by_target(target)
+        for src in cmds.listRelatives(target_group, fullPath=True) or []:
+            if not is_shape(src):
+                continue
+            short_src = src.split("|")[-1]
+            if not short_src.startswith(target + "_"):
+                continue
+            dst = short_src[len(target)+1:]
+            if not cmds.objExists(dst):
+                continue
+            uu = cmds.listConnections(dst+".v", s=1, d=0)
+            if uu:
+                to_delete = [n for n in uu if cmds.objectType(n).startswith("animCurve") or cmds.objectType(n) == "blendWeighted"]
+                if to_delete:
+                    cmds.delete(to_delete)
+            backup = LEditTargetJob._BACKUP.get(src) or LEditTargetJob._BACKUP.get(short_src)
+            if backup:
+                bs_api.load_cache_target_points(backup["bs"], [backup["index"]], [])
+            cmds.setAttr(dst+".v", True)
+    cmds.delete(root)
+    LEditTargetJob._BACKUP.clear()
 
 
 def wireframe_planes():
@@ -346,8 +362,9 @@ def duplicate_edit_selected_polygons(attrs, set_pose_by_target):
         target = get_target(attr)
         set_pose_by_target(target)
         for polygon in polygons:
-            duplicate_polygon(attr, polygon)
-    duplicate_edit_polygon(attrs[0], polygons[0])
+            dup = duplicate_polygon(attr, polygon)
+            LEditTargetJob(dup, polygon, target)
+    wireframe_planes()
 
 
 def is_on_duplicate_edit():
@@ -405,6 +422,9 @@ def load_targets(polygons, path):
 def get_selected_bs_data(targets, path):
     path = path.replace(".json", ".cbs")
     polygons = get_selected_polygons()
+    if not polygons:
+        logger.warning(MSG.BS_EXPORT_EMPTY_WARN)
+        return []
     data = get_connect_data(polygons, targets)
     export_targets(polygons, targets, path)
     return data
@@ -435,7 +455,7 @@ def set_selected_bs_data(data, path):
 def load_selected_bs_data(path):
     if not os.path.isfile(path):
         return
-    with open(path, "w") as fp:
+    with open(path, "r") as fp:
         data = json.load(fp)
     set_selected_bs_data(data, path)
 
