@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.claude/
+.gemini/
+scratch/
+debug*.json
+debug*.txt
+lid_joints.txt
+uplid_joints.txt
+*_rigMaster_*.json
