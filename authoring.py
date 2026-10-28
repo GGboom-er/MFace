@@ -52,7 +52,8 @@ def _reset_controls(exclude):
     facs.reset_all(exclude_ctrl_attrs=exclude)
 
 
-def capture(target, keep_ctrl_attrs=None, prompt=False):
+def capture(target, keep_ctrl_attrs=None, prompt=False, endpoint_on_refusal=False,
+            endpoint_results=None, require_endpoint_placement=False, endpoint_guard=None):
     """Freeze before any reset/key change; solve both outputs at the same sample."""
     from . import facs
     inputs = read_inputs([target])
@@ -64,25 +65,51 @@ def capture(target, keep_ctrl_attrs=None, prompt=False):
     try:
         for node in _active_shapes():
             meshes[node] = facs._create_bs_mesh_snapshot(node, prefix="wysiwyg")
+        refused = set()
         if prompt:
-            facs.auto_update_threshold(target, silent=True, exclude_ctrl_attrs=exclude, prompt=True)
+            facs.auto_update_threshold(target, silent=True, exclude_ctrl_attrs=exclude, prompt=True,
+                                       on_refusal=refused.add)
+        endpoint = endpoint_on_refusal and target == effective and target in refused
+        endpoint_info = None
+        if endpoint and (meshes or require_endpoint_placement):
+            ctrl, attr, _, peak = facs.get_base_sdk_data(target)
+            plug = ctrl + "." + attr
+            if not cmds.getAttr(plug, settable=True):
+                raise RuntimeError("Cannot sample the existing endpoint: control is locked or connected: " + plug)
+            endpoint_info = {"target": target, "plug": plug, "peak": peak}
+        if endpoint:
+            if endpoint_guard is not None:
+                endpoint_guard(target)
+            if endpoint_results is not None:
+                endpoint_results.append(endpoint_info)
         _reset_controls(exclude)
         restore_inputs(inputs)
         weight = cmds.getAttr(facs.get_driver_attr(effective))
+        # Only an explicit rejection of this ordinary target uses the captured
+        # pose as the existing endpoint. Samples and combination children retain
+        # the current-input authoring behaviour.
+        solve_weight = 1.0 if endpoint else weight
         for joint, matrix in zip(joints, desired):
             baseline = joint.joint.xform(query=True,worldSpace=True,matrix=True)
-            joint.add_pose(Face()["Additive"][effective], matrix, baseline, sample_weight=weight)
-        # Bones are already at the captured pose. Do not bake their change again into BS.
-        for node, mesh in meshes.items():
-            baseline = facs._create_bs_mesh_snapshot(node, prefix="native", exclude_target=effective)
-            try:
-                if bs.get_index(node,effective) is None and not _different(mesh,baseline):
-                    continue
-                bs.connect_target(node, facs.get_driver_attr(effective))
-                index = bs.get_index(node, effective)
-                bs.edit_static_target(node, index, mesh, baseline, sample_weight=weight)
-            finally:
-                cmds.delete(baseline)
+            joint.add_pose(Face()["Additive"][effective], matrix, baseline, sample_weight=solve_weight)
+        # Compare BS against the solved bones at the same weight as the output
+        # being authored, otherwise the changed bone contribution is baked twice.
+        try:
+            if endpoint and meshes:
+                cmds.setAttr(endpoint_info["plug"], endpoint_info["peak"])
+            for node, mesh in meshes.items():
+                baseline = facs._create_bs_mesh_snapshot(node, prefix="native", exclude_target=effective)
+                try:
+                    if bs.get_index(node,effective) is None and not _different(mesh,baseline):
+                        continue
+                    bs.connect_target(node, facs.get_driver_attr(effective))
+                    index = bs.get_index(node, effective)
+                    bs.edit_static_target(node, index, mesh, baseline, sample_weight=solve_weight)
+                finally:
+                    cmds.delete(baseline)
+        finally:
+            if endpoint and meshes:
+                restore_inputs(inputs)
     finally:
         for mesh in meshes.values():
             if cmds.objExists(mesh):
@@ -90,14 +117,17 @@ def capture(target, keep_ctrl_attrs=None, prompt=False):
     return effective
 
 
-def apply(targets, keep_ctrl_attrs=None, prompt=True):
+def apply(targets, keep_ctrl_attrs=None, prompt=True, endpoint_on_refusal=False,
+          endpoint_results=None, require_endpoint_placement=False, endpoint_guard=None):
     """Edit one author: a list supplied by callers uses its last item."""
     from . import facs
     selected = cmds.ls(selection=True, long=True) or []
     try:
         targets, messages = facs.resolve_target_crossings(list(targets)[-1:])
         for target in targets:
-            capture(target, keep_ctrl_attrs=keep_ctrl_attrs, prompt=prompt)
+            capture(target, keep_ctrl_attrs=keep_ctrl_attrs, prompt=prompt,
+                    endpoint_on_refusal=endpoint_on_refusal, endpoint_results=endpoint_results,
+                    require_endpoint_placement=require_endpoint_placement, endpoint_guard=endpoint_guard)
         if messages:
             facs.logger.hud("\n".join(messages))
         return targets

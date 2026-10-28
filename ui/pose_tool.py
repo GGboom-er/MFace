@@ -206,11 +206,10 @@ class FacePoseTool(QDialog):
         self._slider_undo_open = False
         
     def _throttled_set_slider_pose(self, value):
-        # Debounce the slider execution to prevent stack overflow on heavy rigs
-        if self._slider_timer is not None:
-            self.killTimer(self._slider_timer)
+        # Coalesce changes until the next update without postponing it.
         self._slider_val_cache = value
-        self._slider_timer = self.startTimer(15) # 15ms debounce (~60fps)
+        if self._slider_timer is None:
+            self._slider_timer = self.startTimer(15)
 
     def timerEvent(self, event):
         if event.timerId() == self._slider_timer:

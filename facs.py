@@ -597,7 +597,7 @@ def edit_joint_target(target_name, keep_ctrl_attrs=None):
 
 
 
-def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False):
+def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, prompt=False, on_refusal=None):
     if not exist_target(target_name):
         return False, 0.0
 
@@ -613,7 +613,8 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
         updated_any = False
         vals = []
         for base_tgt in row["target_names"]:
-            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude, prompt=prompt)
+            upd, val = auto_update_threshold(base_tgt, silent=True, exclude_ctrl_attrs=exclude,
+                                             prompt=prompt, on_refusal=on_refusal)
             if upd: updated_any = True
             vals.append(val)
         avg_val = (sum(vals)/len(vals)) if vals else 0.0
@@ -648,6 +649,8 @@ def auto_update_threshold(target_name, silent=False, exclude_ctrl_attrs=None, pr
         if prompt:
             msg = u'%s --- %s ---\n%.3f ===》》》=== %.3f' % (ctrl, attr, old_value, value)
             if not logger.confirm(MSG.TITLE_SYNC_CONFIRM, msg, accept=MSG.BTN_CONFIRM, cancel=MSG.BTN_CANCEL):
+                if on_refusal is not None:
+                    on_refusal(target_name)
                 return False, old_value
         if __set_sdk_threshold(target_name, value):
             try:
@@ -946,17 +949,40 @@ def restore_controllers():
 def auto_duplicate_edit(targets, polygons=None):
     from . import authoring, sampling, duplicate_edit
     if bs.is_on_duplicate_edit():
+        from . import drives
         data = duplicate_edit._read()
         targets = data["targets"]
-        authoring.restore_inputs(data.get("inputs", {}))
-        authoring.apply(targets, keep_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
-        bs.finish_duplicate_edit(lambda target: None)
-        authoring.restore_inputs(data.get("inputs", {}))
+        endpoints = []
+        target = targets[-1] if targets else None
+        snapshot = None
+        if (target and drives.describe(target)["typ"] == "base"
+                and target_to_base_ib(target)[1] == 60):
+            snapshot = duplicate_edit.snapshot_endpoint_state(target, data)
+        try:
+            try:
+                authoring.restore_inputs(data.get("inputs", {}))
+                authoring.apply(targets, keep_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True,
+                                endpoint_on_refusal=True, endpoint_results=endpoints,
+                                require_endpoint_placement=True,
+                                endpoint_guard=(lambda name: duplicate_edit.validate_endpoint_state(snapshot, name))
+                                if snapshot is not None else None)
+                if endpoints:
+                    endpoint = endpoints[-1]
+                    cmds.setAttr(endpoint["plug"], endpoint["peak"])
+                    bs.finish_duplicate_edit(lambda target: None, sample_weight=1.0)
+                else:
+                    bs.finish_duplicate_edit(lambda target: None)
+            finally:
+                authoring.restore_inputs(data.get("inputs", {}))
+        except Exception:
+            if endpoints and snapshot is not None:
+                duplicate_edit.restore_endpoint_state(snapshot)
+            raise
         return targets
     targets = [t for t in targets if exist_target(t)][-1:]
     selected = bs.get_selected_polygons() if polygons is None else polygons
     if not selected:
-        return direct_inject_edit(targets)
+        return direct_inject_edit(targets, endpoint_on_refusal=True)
     values = authoring.read_inputs(targets)
     previous = sampling.private_targets()
     attrs = [get_driver_attr(sampling.resolve(t, authoring.read_inputs([t]))) for t in targets]
@@ -968,11 +994,12 @@ def auto_duplicate_edit(targets, polygons=None):
     return targets
 
 
-def direct_inject_edit(targets):
+def direct_inject_edit(targets, endpoint_on_refusal=False):
     from . import authoring
     if bs.is_on_duplicate_edit():
         raise RuntimeError("Finish or cancel the current model edit first.")
-    result = authoring.apply(targets, keep_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True)
+    result = authoring.apply(targets, keep_ctrl_attrs=get_keep_ctrl_attrs(), prompt=True,
+                             endpoint_on_refusal=endpoint_on_refusal)
     logger.hud(MSG.FACS_DIRECT_INJECT_DONE % "\\n".join(result))
     return result
 

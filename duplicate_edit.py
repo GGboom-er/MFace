@@ -75,6 +75,126 @@ def _restore_target(item):
     cmds.setAttr(stem + ".inputComponentsTarget", len(components), *components, type="componentList")
 
 
+def _alias_rows(node, names):
+    aliases = cmds.aliasAttr(node, query=True) or []
+    mapping = dict(zip(aliases[::2], aliases[1::2]))
+    rows = {}
+    for name in names:
+        slot = mapping.get(name)
+        if slot is not None:
+            plug = node + "." + slot
+            rows[name] = {"slot": slot, "value": cmds.getAttr(plug),
+                          "source": cmds.connectionInfo(plug, sourceFromDestination=True)}
+    return rows
+
+
+def _restore_alias_rows(node, names, rows):
+    current = _alias_rows(node, names)
+    for name, row in current.items():
+        if name not in rows or row["slot"] != rows[name]["slot"]:
+            plug = node + "." + row["slot"]
+            cmds.aliasAttr(plug, remove=True)
+            cmds.removeMultiInstance(plug, b=True)
+    current = _alias_rows(node, names)
+    for name, row in rows.items():
+        plug = node + "." + row["slot"]
+        if name not in current:
+            # Original slots belonged to this target; no other slot is touched.
+            aliases = cmds.aliasAttr(node, query=True) or []
+            occupied = dict(zip(aliases[1::2], aliases[::2])).get(row["slot"])
+            if occupied and occupied != name:
+                raise RuntimeError("Cannot restore an occupied author slot: " + plug)
+            cmds.setAttr(plug, row["value"])
+            cmds.aliasAttr(name, plug)
+        source = cmds.connectionInfo(plug, sourceFromDestination=True)
+        if source != row["source"]:
+            if source:
+                cmds.disconnectAttr(source, plug)
+            if row["source"]:
+                cmds.connectAttr(row["source"], plug)
+        if not row["source"]:
+            cmds.setAttr(plug, row["value"])
+
+
+def snapshot_endpoint_state(target, data):
+    """Read exactly the author, BS and control data an endpoint commit may edit."""
+    from . import facs
+    from .core import Joint, Ctrl
+    aliases = [target + "W", target + "V"]
+    nodes = {bw.name for joint in Joint.all() if joint.bws[0]
+             for bw in joint.bws if bw}
+    authors = {node: _alias_rows(node, aliases) for node in nodes}
+    special = [node for node in nodes if cmds.objExists(node + "." + target + "WW")]
+    # Input restoration may activate a previously inactive, unselected BS before
+    # authoring scans the scene, so record every existing BS target for rollback.
+    active = set(cmds.ls(type="blendShape") or [])
+    active.update(_node(item["bs"]) for item in data["items"])
+    shapes = {}
+    for node in active:
+        index = bs.get_index(node, target)
+        if index is None:
+            shapes[node] = None
+        else:
+            plug = node + "." + target
+            shapes[node] = {"index": index, "target": _snapshot_target(node, index),
+                            "source": cmds.connectionInfo(plug, sourceFromDestination=True),
+                            "weight": cmds.getAttr(plug)}
+    ctrl_nodes = {ctrl.ctrl.name for ctrl in Ctrl.all() if ctrl.ctrl}
+    driver_attrs = {}
+    for name in facs.get_base_targets(facs.get_targets()):
+        row = facs.get_base_sdk_data(name)
+        if row:
+            ctrl_nodes.add(row[0])
+            driver_attrs.setdefault(row[0], set()).add(row[1])
+    channels = {}
+    for node in ctrl_nodes:
+        attrs = set((cmds.listAttr(node, keyable=True, userDefined=True) or []) +
+                    ["tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz",
+                     "shearXY", "shearXZ", "shearYZ"])
+        attrs.update(driver_attrs.get(node, ()))
+        for attr in attrs:
+            plug = node + "." + attr
+            if cmds.objExists(plug) and cmds.getAttr(plug, settable=True):
+                value = cmds.getAttr(plug)
+                if isinstance(value, (int, float, bool)):
+                    channels[plug] = value
+    return {"target": target, "aliases": aliases, "authors": authors,
+            "shapes": shapes, "channels": channels, "special": special}
+
+
+def validate_endpoint_state(snapshot, target):
+    if snapshot["target"] != target:
+        raise RuntimeError("Cannot safely restore a changed edit target: " + target)
+    if snapshot["special"]:
+        raise RuntimeError("Cannot safely restore legacy author weight attributes: " + ", ".join(snapshot["special"]))
+
+
+def restore_endpoint_state(snapshot):
+    target = snapshot["target"]
+    for node, rows in snapshot["authors"].items():
+        _restore_alias_rows(node, snapshot["aliases"], rows)
+    for node, row in snapshot["shapes"].items():
+        index = bs.get_index(node, target)
+        if row is None:
+            if index is not None:
+                bs.delete_target(node, target)
+            continue
+        if index != row["index"]:
+            raise RuntimeError("Cannot restore changed BS target index: " + node + "." + target)
+        _restore_target({"bs": _uuid(node), "index": index, "original": row["target"]})
+        plug = node + "." + target
+        source = cmds.connectionInfo(plug, sourceFromDestination=True)
+        if source != row["source"]:
+            if source:
+                cmds.disconnectAttr(source, plug)
+            if row["source"]:
+                cmds.connectAttr(row["source"], plug)
+        if not row["source"]:
+            cmds.setAttr(plug, row["weight"])
+    for plug, value in snapshot["channels"].items():
+        cmds.setAttr(plug, value)
+
+
 def _connect_visibility(data, polygon, duplicate, driver):
     identity = _uuid(polygon)
     record = data["visibility"].get(identity)
@@ -187,13 +307,19 @@ def _cleanup(data):
     cmds.delete(_ROOT)
 
 
-def finish_duplicate_edit(set_pose_by_target):
+def finish_duplicate_edit(set_pose_by_target, sample_weight=None):
     data = _read()
     if not data:
         return
     LEditTargetJob.del_job()
-    for item in data["items"]:
-        bs.edit_target(_node(item["copy"]), _node(item["destination"]), item["target"])
+    try:
+        for item in data["items"]:
+            bs.edit_target(_node(item["copy"]), _node(item["destination"]), item["target"],
+                           sample_weight=sample_weight)
+    except Exception:
+        # Keep the still-open edit session interactive if final solving fails.
+        restore_duplicate_edit_jobs()
+        raise
     _cleanup(data)
 
 

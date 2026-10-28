@@ -95,14 +95,16 @@ def mirror_target(bs, src, dst):
     add_target(bs, dst)
     dst_id = get_index(bs, dst)
     symmetric_cache = {key: cmds.symmetricModelling(q=1, **{key: True}) for key in ["s", "t", "ax", "a"]}
-    if src_id != dst_id:
-        cmds.blendShape(bs, e=1, rtd=[0, dst_id])
-        cmds.blendShape(bs, e=1, cd=[0, src_id, dst_id])
-        cmds.blendShape(bs, e=1, ft=[0, dst_id], sa="X", ss=1)
-    else:
-        cmds.blendShape(bs, e=1, md=0, mt=[0, dst_id], sa="X", ss=1)
-    for key, value in symmetric_cache.items():
-        cmds.symmetricModelling(**{key: value})
+    try:
+        if src_id != dst_id:
+            cmds.blendShape(bs, e=1, rtd=[0, dst_id])
+            cmds.blendShape(bs, e=1, cd=[0, src_id, dst_id])
+            cmds.blendShape(bs, e=1, ft=[0, dst_id], sa="X", ss=1)
+        else:
+            cmds.blendShape(bs, e=1, md=0, mt=[0, dst_id], sa="X", ss=1)
+    finally:
+        for key in ("t", "ax", "a", "s"):
+            cmds.symmetricModelling(**{key: symmetric_cache[key]})
 
 
 def _solve_target(node, index, solve, sample_weight):
